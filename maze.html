@@ -7,9 +7,9 @@
     </head>
     <body>
         <div id="settings" class="flex-y">
-            <h1>Maze Generator</h1>
+            <h1 class="my-4">Maze Generator</h1>
             <p class="text-info">Choose a width and height and then click the <strong>Generate Maze</strong> button to generate a maze.</p>
-            <div class="flex-x">
+            <div class="flex-x my-3">
                 <div class="flex-y-no-wrap">
                     <label for="width">Maze Width</label>
                     <input type="number" id="width" name="width" step="1" value="24"/>
@@ -19,9 +19,9 @@
                     <input type="number" id="height" name="height" step="1" value="20"/>
                 </div>
             </div>
-            <button id="generateButton" type="button" class="button-primary">Generate Maze!</button>
+            <button id="generateButton" type="button" class="button-primary my-3">Generate Maze!</button>
             <p class="text-info">You may save your current settings and reload them later, or reset to the default settings.</p>
-            <div class="button-group">
+            <div class="button-group my-3">
                 <button id="saveSettings" type="button">Save Current Settings</button>
                 <button id="loadSettings" type="button">Load Saved Settings</button>
                 <button id="resetButton" type="button">Reset to Defaults</button>
