@@ -205,10 +205,9 @@ body {
     margin-right: 2rem; 
 }
 
-
-
 #settings {
     max-width: 512px;
+    padding: .25em;
     margin: auto;
 }
 

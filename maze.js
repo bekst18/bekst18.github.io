@@ -18,7 +18,6 @@ function init() {
     generateButton.addEventListener("click", evt => {
         const settings = getSettings();
         const success = generateMaze(settings);
-
         if (success) {
             settingsDiv.hidden = true;
             resultsDiv.hidden = false;
