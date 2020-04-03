@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Maze Generator</title>
+        <link rel="stylesheet" type="text/css" href="maze.css">
+    </head>
+    <body>
+        <div id="settings">
+            <h1>Maze Generator</h1>
+            <p class="info">Choose settings below, then click the <strong>Generate Maze</strong> button and I will generate a maze.</p>
+            <div id="form">
+                <label for="width">Maze Size:</label>
+                <input type="number" id="width" name="width" step="1" value="16"/> x <input type="number" id="height" name="height" step="1" value="16"/><br/><br/>
+                <button id="generateButton" type="button">Generate Maze!</button>
+                <button id="saveSettings" type="button">Save Current Settings</button>
+                <button id="loadSettings" type="button">Load Saved Settings</button>
+                <button id="resetButton" type="button">Reset to Defaults</button>
+            </div>
+            <div id="errorMessage"></div>
+        </div>
+        <div id="results" hidden>
+            <div id="maze">
+            </div>
+            <button id="returnToSettings" class="no-print" type="button">Return To Settings</button>
+        </div>
+        <script src="maze.js"></script>
+    </body>
+</html>

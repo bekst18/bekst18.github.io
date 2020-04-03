@@ -1,0 +1,84 @@
+button {
+    font-size: 1em;
+    padding: .25em;
+    border-radius: .5em;
+}
+
+#letterGrid {
+    display: flex;
+}
+
+body {
+    line-height: 1.5em;
+}
+
+#width {
+    width: 3em;
+}
+
+#height {
+    width: 3em;
+}
+
+h1 {
+    text-align: center;
+}
+
+.word-list {
+    margin: auto;
+    border-radius: 1em;
+    margin: .5em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    font-weight: bold;
+}
+
+.word {
+    padding: .25em;
+    margin: .25em;
+    background-color: lightblue;
+    border: 1px solid lightblue;
+    border-radius: .25em;
+    cursor: pointer;
+}
+
+#letterTable {
+    border: 2px solid lightblue;
+    border-radius: 1em;
+    padding: 1em;
+    margin-top: 1em;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+#letterTable td {
+    width: 1.1em;
+    height: 1.1em;
+    text-align: center;
+}
+
+#errorMessage {
+    color: red;
+    font-size: 1.5em;
+    margin: .5em;
+}
+
+#settingsForm {
+    display: flex;
+    flex-flow: column;
+    margin: auto;
+    padding: .5em;
+}
+
+.form-group {
+    display: flex;
+    margin: .5em;
+}
+
+@media print {
+    .no-print {
+        display: none;
+    }
+}
