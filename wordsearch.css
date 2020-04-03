@@ -1,5 +1,11 @@
-html {
+h1, html, body, div {
     box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    height: 100%;
 }
 
 button, input, select, textarea {
@@ -93,6 +99,7 @@ button.button-append {
 
 .button-group button {
     border-radius: 0;
+    border-color: darkgray;
 }
 
 .checkbox-group {
@@ -127,16 +134,19 @@ input[type=checkbox] {
 }
 
 #settings {
-    max-width: 64em;
+    max-width: 960px;
     margin: auto;
+}
+
+#settingsForm {
+    max-width: 640px;
+    margin: auto;
+    padding: .5em;
+    border-radius: .25em;
 }
 
 #letterGrid {
     display: flex;
-}
-
-body {
-    line-height: 1.5em;
 }
 
 h1 {

@@ -9,46 +9,54 @@
         <div id="settings">
             <h1>Wordsearch Maker</h1>
             <div id="settingsWordList" class="word-list"></div>
-            <div class="flex-y">
-                <p class="text-info"><strong>Step 1: </strong>Add words by typing them in the add word text box and clicking the <strong>+</strong> button or pressing enter.</p>
-                <label for="word">Add Word</label>
-                <div class="flex-x-no-wrap">
-                    <input type="text" id="word" name="word"/>
-                    <button type="button" id="addWord" class="button-primary button-append">+</button>
+            <div id="settingsForm">
+                <div class="flex-y">
+                    <p class="text-info"><strong>Step 1: </strong>Add words by typing them in the add word text box and clicking the <strong>+</strong> button or pressing enter.</p>
+                    <label for="word">Add Word</label>
+                    <div class="flex-x-no-wrap">
+                        <input type="text" id="word" name="word"/>
+                        <button type="button" id="addWord" class="button-primary button-append">+</button>
+                    </div>
                 </div>
+                <div class="flex-y">
+                    <p class="text-info"><strong>Step 2: </strong>Choose a grid size - larger grids will be harder to solve but less tightly packed with words.</p>
+                    <div class="flex-x">
+                        <div class="flex-y-no-wrap">
+                            <label for="width">Grid Width</label>
+                            <input type="number" id="width" name="width" step="1" value="24"/>
+                        </div>
+                        <div class="flex-y-no-wrap">
+                            <label for="width">Grid Height</label>
+                            <input type="number" id="height" name="height" step="1" value="20"/>
+                        </div>
+                    </div>
+                </div>
+                <div class="checkbox-group">
+                    <p class="info"><strong>Step 3:</strong> Choose the orientations you wish words to be placed with.
+                    At least one must be chosen.</p>
+                    <div class="checkbox-label">
+                        <div><input id="horizontal" type="checkbox" /></div><label for="horizontal">Horizontal</label>
+                    </div>
+                    <div class="checkbox-label">
+                        <div><input id="vertical" type="checkbox" /></div><label for="vertical">Vertical</label>
+                    </div>
+                    <div class="checkbox-label">
+                        <div><input id="diagonal" type="checkbox" /></div><label for="diagonal">Diagonal</label>
+                    </div>
+                    <div class="checkbox-label">
+                        <div><input id="reverse" type="checkbox" /></div><label for="reverse">Reverse</label>
+                    </div>
+                </div>
+                <p class="text-info"><strong>Step 4:</strong> Click the <strong>Generate Word Search</strong> button to generate your word search.</p>
+                <button id="generateButton" type="button" class="button-primary">Generate Word Search!</button>
+                <p class="text-info">You may save your current settings and reload them later, or reset to the default settings.</p>
+                <div class="button-group">
+                    <button id="saveSettings" type="button">Save Current Settings</button>
+                    <button id="loadSettings" type="button">Load Saved Settings</button>
+                    <button id="resetButton" type="button">Reset to Defaults</button>
+                </div>
+                <div id="errorMessage"></div>
             </div>
-            <div class="flex-y">
-                <p class="text-info"><strong>Step 2: </strong>Choose a grid size - larger grids will be harder to solve but less tightly packed with words.</p>
-                <label for="width">Grid Size</label>
-                <div class="flex-x-no-wrap">
-                    <input type="number" id="width" name="width" step="1" value="24"/>&nbsp;x&nbsp;<input type="number" id="height" name="height" step="1" value="20"/>
-                </div>
-            </div>
-            <div class="checkbox-group">
-                <p class="info"><strong>Step 3:</strong> Choose the orientations you wish words to be placed with.
-                At least one must be chosen.</p>
-                <div class="checkbox-label">
-                    <div><input id="horizontal" type="checkbox" /></div><label for="horizontal">Horizontal</label>
-                </div>
-                <div class="checkbox-label">
-                    <div><input id="vertical" type="checkbox" /></div><label for="vertical">Vertical</label>
-                </div>
-                <div class="checkbox-label">
-                    <div><input id="diagonal" type="checkbox" /></div><label for="diagonal">Diagonal</label>
-                </div>
-                <div class="checkbox-label">
-                    <div><input id="reverse" type="checkbox" /></div><label for="reverse">Reverse</label>
-                </div>
-            </div>
-            <p class="text-info"><strong>Step 4:</strong> Click the <strong>Generate Word Search</strong> button to generate your word search.</p>
-            <button id="generateButton" type="button" class="button-primary">Generate Word Search!</button>
-            <p class="text-info">You may save your current settings and reload them later, or reset to the default settings.</p>
-            <div class="button-group">
-                <button id="saveSettings" type="button">Save Current Settings</button>
-                <button id="loadSettings" type="button">Load Saved Settings</button>
-                <button id="resetButton" type="button">Reset to Defaults</button>
-            </div>
-            <div id="errorMessage"></div>
         </div>
         <div id="results" hidden>
             <div id="resultsWordList" class="word-list">
