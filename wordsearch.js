@@ -387,27 +387,11 @@ function placeWord(grid, word, placement) {
 }
 
 function fillRandomCharacters(grid, words) {
-    let chars = "ABCDEFGHIJKLMNPQRSTUVWXYZ";
+    // generate character list from words
 
-    if (words.some(w => /\d/.test(w))) {
-        chars += "0123456789";
-    }
-
-    if (words.some(w => /-/.test(w))) {
-        chars += "-";
-    }
-
-    if (words.some(w => /\./.test(w))) {
-        chars += ".";
-    }
-
-    if (words.some(w => /\s/.test(w))) {
-        chars += " ";
-    }
-
-    if (words.some(w => /'/.test(w))) {
-        chars += "'";
-    }
+    // get a flat list of all letters in all words
+    const chars = [];
+    words.forEach(w => w.split("").forEach(ch => chars.push(ch)));
 
     for (let i = 0; i < grid.height; ++i) {
         for (let j = 0; j < grid.width; ++j) {
