@@ -4,6 +4,7 @@ init();
 function init() {
     const wordInput = document.getElementById("word");
     const settingsWordList = document.getElementById("settingsWordList");
+    const addWordButton = document.getElementById("addWord");
     const generateButton = document.getElementById("generateButton");
     const saveSettingsButton = document.getElementById("saveSettings");
     const loadSettingsButton = document.getElementById("loadSettings");
@@ -34,6 +35,16 @@ function init() {
         wordInput.value = "";
     });
 
+    addWordButton.addEventListener("click", (evt) => {
+        if (!wordInput.value) {
+            return;
+        }
+
+        addWord(settingsWordList, wordInput.value);
+        wordInput.value = "";
+        wordInput.focus();
+    });
+
     generateButton.addEventListener("click", evt => {
         const settings = getSettings();
         const success = generateWordSearch(settings);
@@ -52,8 +63,8 @@ function init() {
     loadSettingsButton.addEventListener("click", loadSettings);
 
     resetButton.addEventListener("click", (evt) => {
-        widthInput.value = 32;
-        heightInput.value = 32;
+        widthInput.value = 24;
+        heightInput.value = 20;
 
         var wordDivs = settingsWordList.querySelectorAll("#settingsWordList .word");
         for (const div of wordDivs) {

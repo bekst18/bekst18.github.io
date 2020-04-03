@@ -1,0 +1,49 @@
+button {
+    font-size: 1.2em;
+    padding: .5em;
+    border-radius: 1em;
+}
+
+#letterGrid {
+    display: flex;
+}
+
+body {
+    line-height: 1.5em;
+}
+
+#width {
+    width: 3em;
+}
+
+#height  {
+    width: 3em;
+}
+
+#errorMessage {
+    color: red;
+    font-size: 1.5em;
+    margin: .5em;
+}
+
+#maze {
+    margin: auto;
+    display: grid;
+    min-height: 10.5in;
+    height: 1.5in;
+    width: 8in;
+}
+
+.start-cell {
+    background-color: lightgreen;
+}
+
+.goal-cell {
+    background-color: lightblue;
+}
+
+@media print {
+    .no-print {
+        display: none;
+    }
+}

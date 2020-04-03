@@ -1,7 +1,134 @@
+html {
+    box-sizing: border-box;
+}
+
+button, input, select, textarea {
+    font-family: inherit;
+    font-size: 100%;
+}
+
+input, textarea, select {
+    padding: 0;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+button, input, select, textarea {
+    width: 100%;
+}
+
+input[type=text],input[type=number],textarea {
+    padding: .125em;
+    border-radius: .25em;
+}
+
 button {
     font-size: 1em;
     padding: .25em;
-    border-radius: .5em;
+    border-radius: .25em;
+    background-color: lightgray;
+    border: solid 1px lightgray;
+    cursor: pointer;
+}
+
+button.button-primary {
+    color: white;
+    background-color: royalblue;
+    border: solid 1px royalblue;
+}
+
+input[type=text],input[type=number],textarea + .button-append {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+button.button-append {
+    width: auto;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    margin-left: -1px;
+}
+
+.flex-x {
+    display: flex;
+    flex-flow: row wrap;
+}
+
+.form-group {
+    display: flex;
+    flex-flow: row wrap;
+    margin-top: .25rem;
+    margin-bottom: .25rem;
+}
+
+.flex-x-no-wrap {
+    display: flex;
+    flex-flow: row nowrap;
+}
+
+.flex-y {
+    display: flex;
+    flex-flow: column wrap;
+}
+
+.flex-y-no-wrap {
+    display: flex;
+    flex-flow: column nowrap;
+}
+
+.button-group {
+    display: flex;
+    flex-flow: row nowrap;
+}
+
+.button-group button:first-child {
+    border-top-left-radius: .25em;
+    border-bottom-left-radius: .25em;
+}
+
+.button-group button:last-child {
+    border-top-right-radius: .25em;
+    border-bottom-right-radius: .25em;
+}
+
+.button-group button {
+    border-radius: 0;
+}
+
+.checkbox-group {
+    display: flex;
+    flex-flow: row wrap;
+}
+
+.checkbox-label {
+    display: flex;
+    flex-flow: row;
+}
+
+.checkbox-label {
+    margin: .5em;
+}
+
+.checkbox-label input {
+    margin-right: .125em;
+}
+
+input[type=checkbox] {
+    width: 1em;
+    height: .75em;
+}
+
+.checkbox-group input{
+    flex: 0;
+}
+
+.checkbox-group label {
+    flex: 0;
+}
+
+#settings {
+    max-width: 64em;
+    margin: auto;
 }
 
 #letterGrid {
@@ -12,21 +139,12 @@ body {
     line-height: 1.5em;
 }
 
-#width {
-    width: 3em;
-}
-
-#height {
-    width: 3em;
-}
-
 h1 {
     text-align: center;
 }
 
 .word-list {
     margin: auto;
-    border-radius: 1em;
     margin: .5em;
     display: flex;
     align-items: center;
@@ -47,33 +165,19 @@ h1 {
 #letterTable {
     border: 2px solid lightblue;
     border-radius: 1em;
-    padding: 1em;
-    margin-top: 1em;
+    padding: .5em;
+    margin-top: .5em;
     margin-left: auto;
     margin-right: auto;
 }
 
 #letterTable td {
-    width: 1.1em;
-    height: 1.1em;
     text-align: center;
 }
 
 #errorMessage {
     color: red;
     font-size: 1.5em;
-    margin: .5em;
-}
-
-#settingsForm {
-    display: flex;
-    flex-flow: column;
-    margin: auto;
-    padding: .5em;
-}
-
-.form-group {
-    display: flex;
     margin: .5em;
 }
 
