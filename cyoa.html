@@ -1,28 +1,36 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <title>Maze Generator</title>
-        <link rel="stylesheet" type="text/css" href="maze.css">
+        <title>CYOA Engine</title>
+        <link rel="stylesheet" type="text/css" href="shared.css">
+        <link rel="stylesheet" type="text/css" href="cyoa.css">
     </head>
     <body>
-        <div id="settings">
-            <h1>Maze Generator</h1>
-            <p class="info">Choose settings below, then click the <strong>Generate Maze</strong> button and I will generate a maze.</p>
-            <div id="form">
-                <label for="width">Maze Size:</label>
-                <input type="number" id="width" name="width" step="1" value="16"/> x <input type="number" id="height" name="height" step="1" value="16"/><br/><br/>
-                <button id="generateButton" type="button">Generate Maze!</button>
-                <button id="saveSettings" type="button">Save Current Settings</button>
-                <button id="loadSettings" type="button">Load Saved Settings</button>
-                <button id="resetButton" type="button">Reset to Defaults</button>
+        <div id="loadUi" class="m-auto">
+            <h1>CYOA Engine</h1>
+            <p class="info">Drag a file into the designated area, or choose a file using the <strong>Choose File</strong> button.</p>
+            <div id="fileDropBox"><div>Drag a file here</div></div>
+            <input id="fileInput" type="file" accept="*.json,application/json" class="m-2" hidden/>    
+            <button id="fileButton" class="button-primary my-2">Select a File</button>
+            <p class="info">You load from a url by entering the url below and clicking on the <strong>Load</strong> button.</p>
+            <div class="flex-x-no-wrap">
+                <input id="urlInput" type="url" />
+                <button id="urlButton" class="button-primary button-append">Load</button>
             </div>
-            <div id="errorMessage"></div>
+            <div id="errors">
+            </div> 
         </div>
-        <div id="results" hidden>
-            <div id="maze">
+        <div id="playUi" hidden>
+            <h1 id="moduleTitle"></h1>
+            <h2 id="passageTitle"></h2>
+            <p id="passageDesc"></p>
+            <div id="choices">
+
             </div>
-            <button id="returnToSettings" class="no-print" type="button">Return To Settings</button>
         </div>
-        <script src="maze.js"></script>
+        <script type="module" src="cyoa.js"></script>
+        <template id="choiceTemplate">
+            <div class="choice"></div>
+        </template>
     </body>
 </html>

@@ -1,45 +1,35 @@
-button {
-    font-size: 1.2em;
-    padding: .5em;
-    border-radius: 1em;
+#loadUi {
+    max-width: 512px;
 }
 
-#letterGrid {
+html, body {
+    height: 100%;
+}
+
+#fileDropBox {
+    width: 100%;
+    height: 8em;
+    border: dashed .25em royalblue;
+    border-radius: .25em;
     display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
-body {
-    line-height: 1.5em;
-}
-
-#width {
-    width: 3em;
-}
-
-#height  {
-    width: 3em;
-}
-
-#errorMessage {
-    color: red;
-    font-size: 1.5em;
-    margin: .5em;
-}
-
-#maze {
+#playUi {
+    max-width: 512px;
     margin: auto;
-    display: grid;
-    min-height: 10.5in;
-    height: 1.5in;
-    width: 8in;
-}
-
-.start-cell {
-    background-color: lightgreen;
-}
-
-.goal-cell {
     background-color: lightblue;
+    padding: 1em;
+    border-bottom-left-radius: .5em;
+    border-bottom-right-radius: .5em;
+}
+
+.choice {
+    margin: .35em;
+    font-weight: bold;
+    color: royalblue;
+    cursor: pointer;
 }
 
 @media print {
