@@ -74,6 +74,8 @@ function initLoadUi() {
 
 function initPlayUi() {
     const choices = util.byId("choices")
+    const tryAgain = util.byId("tryAgain")
+
     util.delegate(choices, "click", ".choice", (ev) => {
         if (!state.currentModule) {
             return
@@ -81,16 +83,33 @@ function initPlayUi() {
 
         handleChoice(state.currentModule, ev.target as HTMLDivElement)
     })
+
+    tryAgain.addEventListener("click", () => {
+        if (!state.currentModule) {
+            return
+        }
+
+        loadModule(state.currentModule)
+    })
 }
 
 function loadFromString(json: string) {
-    const module = <Module>(JSON.parse(json))
-    if (!validateModule(module)) {
-        return
-    }
+    try {
+        const module = <Module>(JSON.parse(json))
+        if (!validateModule(module)) {
+            return
+        }
 
-    // module is valid - proceed
-    loadModule(module)
+        // module is valid - proceed
+        loadModule(module)
+    }
+    catch (x) {
+        if (!(x instanceof Error)) {
+            throw x
+        }
+
+        appendErrorMessage(x.message)
+    }
 }
 
 function onDragEnterOver(ev: DragEvent) {
@@ -168,6 +187,16 @@ function loadPassage(passage: Passage) {
         choiceDiv.dataset.passageId = choice.passageId
         choiceDiv.textContent = choice.desc
         choicesDiv.appendChild(fragment)
+    }
+
+    const tryAgain = util.byId("tryAgain")
+    const end = util.byId("end")
+    if (passage.choices.length == 0) {
+        end.hidden = false
+        tryAgain.hidden = false
+    } else {
+        end.hidden = true
+        tryAgain.hidden = true
     }
 }
 

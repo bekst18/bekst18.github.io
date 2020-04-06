@@ -25,11 +25,18 @@ html, body {
     border-bottom-right-radius: .5em;
 }
 
-.choice {
+#tryAgain, .choice {
     margin: .35em;
     font-weight: bold;
     color: royalblue;
     cursor: pointer;
+}
+
+#end {
+    font-weight: bold;
+    text-align: center;
+    font-size: x-large;
+    color: red;
 }
 
 @media print {
