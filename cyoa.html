@@ -1,39 +1,43 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta name="viewport" content="width=device-width">
-        <title>CYOA Engine</title>
-        <link rel="stylesheet" type="text/css" href="shared.css">
-        <link rel="stylesheet" type="text/css" href="cyoa.css">
-    </head>
-    <body>
-        <div id="loadUi" class="m-auto">
-            <h1>CYOA Engine</h1>
-            <p class="info">Drag a file into the designated area, or choose a file using the <strong>Choose File</strong> button.</p>
-            <div id="fileDropBox"><div>Drag a file here</div></div>
-            <input id="fileInput" type="file" accept="*.json,application/json" class="m-2" hidden/>    
-            <button id="fileButton" class="button-primary my-2">Select a File</button>
-            <p class="info">You load from a url by entering the url below and clicking on the <strong>Load</strong> button.</p>
-            <div class="flex-x-no-wrap">
-                <input id="urlInput" type="url" />
-                <button id="urlButton" class="button-primary button-append">Load</button>
-            </div>
-            <div id="errors">
-            </div> 
+<head>
+    <meta name="viewport" content="width=device-width">
+    <title>CYOA Engine</title>
+    <link rel="stylesheet" type="text/css" href="shared.css">
+    <link rel="stylesheet" type="text/css" href="cyoa.css">
+</head>
+<body>
+    <div id="loadUi" class="m-auto">
+        <h1>CYOA Engine</h1>
+        <p class="info">Drag a file into the designated area, or choose a file using the <strong>Choose File</strong>
+            button.</p>
+        <div id="fileDropBox">
+            <div>Drag a file here</div>
         </div>
-        <div id="playUi" hidden>
-            <h1 id="moduleTitle"></h1>
-            <h2 id="passageTitle"></h2>
-            <p id="passageDesc"></p>
-            <div id="tryAgain" hidden>Try Again!</div>
-            <div id="choices">
+        <input id="fileInput" type="file" accept="*.json,application/json" class="m-2" hidden />
+        <button id="fileButton" class="button-primary my-2">Select a File</button>
+        <p class="info">You load from a url by entering the url below and clicking on the <strong>Load</strong> button.
+        </p>
+        <div class="flex-x-no-wrap">
+            <input id="urlInput" type="url" />
+            <button id="urlButton" class="button-primary button-append">Load</button>
+        </div>
+        <div id="errors">
+        </div>
+    </div>
+    <div id="playUi" hidden>
+        <h1 id="moduleTitle"></h1>
+        <h2 id="passageTitle"></h2>
+        <p id="passageDesc"></p>
+        <div id="tryAgain" hidden>Try Again!</div>
+        <div id="choices">
 
-            </div>
-            <div id="end" hidden>The End</div>
         </div>
-        <script type="module" src="cyoa.js"></script>
-        <template id="choiceTemplate">
-            <div class="choice"></div>
-        </template>
-    </body>
+        <div id="end" hidden>The End</div>
+    </div>
+    <script type="module" src="cyoa.js"></script>
+    <template id="choiceTemplate">
+        <div class="choice"></div>
+    </template>
+</body>
 </html>

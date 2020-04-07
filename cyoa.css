@@ -28,8 +28,13 @@ html, body {
 #tryAgain, .choice {
     margin: .35em;
     font-weight: bold;
-    color: royalblue;
+    color: darkblue;
     cursor: pointer;
+    font-size: large;
+    background-color: white;
+    padding: .5em;
+    margin: .5em;
+    border-radius: .25em;
 }
 
 #end {
