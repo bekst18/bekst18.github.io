@@ -1,31 +1,35 @@
-import * as util from "./util.js"
+import * as util from "../util.js"
 
 init()
 
 interface Module {
     title: string
-    desc: string
-    passages: Passage[]
+    description: string
+    passages: Record<string, Passage>
 }
 
 interface Passage {
-    id: string
     title: string
-    desc: string
+    body: string
     choices: Choice[]
 }
 
 interface Choice {
-    desc: string
+    body: string
+    transition: string
     passageId: string
 }
 
 interface State {
     currentModule: null | Module
+    currentPassage: null | Passage
+    currentChoice: null | Choice
 }
 
 const state: State = {
-    currentModule: null
+    currentModule: null,
+    currentPassage: null,
+    currentChoice: null
 }
 
 function init() {
@@ -69,19 +73,26 @@ function initLoadUi() {
     })
 
     // for now - debug current game
-    loadFromUrl("cyoa.json")
+    loadFromUrl("ana.cyoa.json")
 }
 
 function initPlayUi() {
     const choices = util.byId("choices")
     const tryAgain = util.byId("tryAgain")
+    const nextPassage  = util.byId("nextPassage")
 
     util.delegate(choices, "click", ".choice", (ev) => {
         if (!state.currentModule) {
             return
         }
 
-        handleChoice(state.currentModule, ev.target as HTMLDivElement)
+        if (!state.currentPassage) {
+            return
+        }
+
+        const choiceIdx = util.getElementIndex(ev.target as Element)
+        const choice = state.currentPassage.choices[choiceIdx]
+        handleChoice(state.currentModule, choice)
     })
 
     tryAgain.addEventListener("click", () => {
@@ -91,25 +102,35 @@ function initPlayUi() {
 
         loadModule(state.currentModule)
     })
-}
 
-function loadFromString(json: string) {
-    try {
-        const module = <Module>(JSON.parse(json))
-        if (!validateModule(module)) {
+    nextPassage.addEventListener("click", () => {
+        const passageId = state?.currentChoice?.passageId
+        if (!passageId) {
             return
         }
 
-        // module is valid - proceed
-        loadModule(module)
-    }
-    catch (x) {
-        if (!(x instanceof Error)) {
-            throw x
+        const passage = state.currentModule?.passages[passageId]
+        if (!passage) {
+            return
         }
 
-        appendErrorMessage(x.message)
+        loadPassage(passage)
+    })
+}
+
+function loadFromString(json: string) {
+    const module = util.tryf(() => <Module>(JSON.parse(json)))
+    if (module instanceof Error) {
+        appendErrorMessage(module.message)
+        return
     }
+
+    if (!validateModule(module)) {
+        return
+    }
+
+    // module is valid - proceed
+    loadModule(module)
 }
 
 function onDragEnterOver(ev: DragEvent) {
@@ -129,19 +150,19 @@ function onFileDrop(ev: DragEvent) {
 }
 
 async function loadFromUrl(url: string) {
-    try {
-        const response = await fetch(url)
-        const json = await response.text()
-        loadFromString(json)
+    const response = await util.tryf(() => fetch(url))
+    if (response instanceof Error) {
+        appendErrorMessage(response.message)
+        return
+    }
 
+    if (response.status != 200) {
+        appendErrorMessage(`Could not load ${url}, unsuccessful response: ${response.status} - ${response.statusText}.`)
+        return
     }
-    catch (x) {
-        if (x instanceof Error) {
-            appendErrorMessage(x.message)
-        } else {
-            appendErrorMessage(x)
-        }
-    }
+
+    const json = await response.text()
+    loadFromString(json)
 }
 
 async function processFiles(files: FileList) {
@@ -166,31 +187,32 @@ function loadModule(module: Module) {
     moduleTitle.textContent = module.title
 
     // load initial passage
-    const intro = module.passages[0]
+    const intro = module.passages["intro"]
     loadPassage(intro)
 }
 
 function loadPassage(passage: Passage) {
-    console.log(passage)
     const passageTitle = util.byId("passageTitle")
-    const passageDesc = util.byId("passageDesc")
+    const passageBody = util.byId("passageBody")
     const choicesDiv = util.byId("choices")
     util.removeAllChildren(choicesDiv)
 
     passageTitle.textContent = passage.title
-    passageDesc.textContent = passage.desc
+    passageBody.textContent = passage.body
 
     const template = util.byId("choiceTemplate") as HTMLTemplateElement
     for (const choice of passage.choices) {
         const fragment = template.content.cloneNode(true) as DocumentFragment
         const choiceDiv = util.bySelector(fragment, ".choice") as HTMLElement
-        choiceDiv.dataset.passageId = choice.passageId
-        choiceDiv.textContent = choice.desc
+        choiceDiv.textContent = choice.body
         choicesDiv.appendChild(fragment)
     }
 
     const tryAgain = util.byId("tryAgain")
     const end = util.byId("end")
+    const nextPassage = util.byId("nextPassage")
+
+    nextPassage.hidden = true
     if (passage.choices.length == 0) {
         end.hidden = false
         tryAgain.hidden = false
@@ -198,6 +220,34 @@ function loadPassage(passage: Passage) {
         end.hidden = true
         tryAgain.hidden = true
     }
+
+    state.currentPassage = passage
+}
+
+function loadTransition(choice: Choice) {
+    const passageTitle = util.byId("passageTitle")
+    const passageBody = util.byId("passageBody")
+    const choicesDiv = util.byId("choices")
+    util.removeAllChildren(choicesDiv)
+
+    passageTitle.textContent = ""
+    passageBody.textContent = choice.transition
+
+    const tryAgain = util.byId("tryAgain")
+    const end = util.byId("end")
+    const nextPassage = util.byId("nextPassage")
+
+    if (choice.passageId) {
+        nextPassage.hidden = false
+        end.hidden = true
+        tryAgain.hidden = true
+    } else {
+        end.hidden = false
+        tryAgain.hidden = false
+        nextPassage.hidden = true
+    }
+
+    state.currentChoice = choice
 }
 
 function clearErrorMessages() {
@@ -218,8 +268,8 @@ function validateModule(module: Module): boolean {
         return false
     }
 
-    if (!module.desc) {
-        appendErrorMessage("Module desc is required.")
+    if (!module.description) {
+        appendErrorMessage("Module description is required.")
         return false
     }
 
@@ -228,44 +278,54 @@ function validateModule(module: Module): boolean {
         return false
     }
 
-    for (const passage of module.passages) {
-        validatePassage(module, passage)
+    const passages = Object.values(module.passages)
+    let valid = true
+    for (const passage of passages) {
+        const passageValid = validatePassage(module, passage)
+        valid = valid && passageValid
     }
 
-    return true
+    return valid
 }
 
-function validatePassage(module: Module, passage: Passage) {
-    passage.id = (passage.id ?? "").toUpperCase().trim()
-
-    if (!passage.desc) {
-        appendErrorMessage("Each passage must have a description.")
+function validatePassage(module: Module, passage: Passage): boolean {
+    let valid = true
+    if (!passage.body) {
+        appendErrorMessage("Each passage must have a body.")
+        valid = false
     }
 
     passage.choices = passage.choices ?? []
     for (const choice of passage.choices) {
-        validateChoice(module, choice)
+        const choiceValid = validateChoice(module, choice)
+        valid = valid && choiceValid
     }
+
+    return valid
 }
 
-function validateChoice(module: Module, choice: Choice) {
-    if (!choice.desc) {
-        appendErrorMessage("Each choice must have a description.")
+function validateChoice(module: Module, choice: Choice): boolean {
+    let valid = true
+    if (!choice.body) {
+        appendErrorMessage("Each choice must have a body.")
+        valid = false
     }
 
-    if (!choice.passageId) {
-        appendErrorMessage("Each choice must have a passageId.")
-    } else if (!findPassageById(module, choice.passageId)) {
-        appendErrorMessage(`Could not passage with id of ${choice.passageId}`)
+    if (!choice.passageId && !choice.transition) {
+        appendErrorMessage("Each choice must have either a passageId or a transition.")
+        valid = false
     }
-}
 
-function findPassageById(module: Module, id: string): (Passage | undefined) {
-    id = id.toUpperCase().trim()
-    return module.passages.find(p => p.id.toUpperCase() == id)
+    if (choice.passageId && !(choice.passageId in module.passages)) {
+        appendErrorMessage(`Could not find passage with id of ${choice.passageId}`)
+        valid = false
+    }
+
+    return valid
 }
 
 function appendErrorMessage(error: string) {
+    console.log(error)
     const errorsDiv = util.byId("errors");
     const div = document.createElement("div");
     div.classList.add("error-message")
@@ -273,15 +333,20 @@ function appendErrorMessage(error: string) {
     errorsDiv.appendChild(div)
 }
 
-function handleChoice(module: Module, choice: HTMLDivElement) {
-    const passageId = choice.dataset.passageId
-    if (!passageId) {
-        throw Error(`Missing passage for choice: ${choice.textContent}`)
+function handleChoice(module: Module, choice: Choice) {
+    if (choice.transition) {
+        loadTransition(choice)
+        return
     }
 
-    const passage = findPassageById(module, passageId)
+    const passageId = choice.passageId
+    if (!passageId) {
+        throw Error(`No transition or passageId for choice: ${choice.body}`)
+    }
+
+    const passage = module.passages[passageId]
     if (!passage) {
-        throw Error(`Missing passage for choice: ${choice.textContent} with id ${passageId}`)
+        throw Error(`Missing passage for choice: ${choice.body} with id ${passageId}`)
     }
 
     loadPassage(passage)

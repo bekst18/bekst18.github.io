@@ -1,0 +1,27 @@
+{
+    "$schema": "./cyoa.schema.json",
+    "title": "Test Adventure",
+    "description": "First CYOA Pilot Module",
+    "passages": {
+        "intro": {
+            "title": "Intro",
+            "body": "You are taking a walk in the woods one day when you notice a strange hole in the ground you never noticed before. As you approach the hole, the ground suddenly gives way and you fall into the now enlarged hole. After falling a long way, you land in some extremely cold water and panic takes hold as you as the cold water sweeps you away.",
+            "choices": [
+                {
+                    "body": "Try to hold onto something",
+                    "transition": "You gasp for breath as you frantically try to find anything to hold onto. The last thing you remember is the feeling of unbearable cold before everything goes black.",
+                    "passageId": "awake"
+                },
+                {
+                    "body": "Close your eyes and accept your fate",
+                    "transition": "As you close your eyes, then water seems to become even more unbearably cold and you quickly and peacefully lose consciousness"
+                }
+            ]
+        },
+        "awake": {
+            "title": "Awake at Last",
+            "body": "Suddenly, you snap awake. You notice that you are soaking wet, and encased in a layer of ice.",
+            "choices": []
+        }
+    }
+}

@@ -1,0 +1,71 @@
+{
+    "$schema": "https://json-schema.org/draft/2019-09/schema",
+    "$id": "http://www.krasneski.com/cyoa/cyoa.schema.json",
+    "title": "Module",
+    "description": "A CYOA module",
+    "type": "object",
+    "properties": {
+        "title": {
+            "description": "The title of a module",
+            "type": "string"
+        },
+        "description": {
+            "description": "Description of a module",
+            "type": "string"
+        },
+        "passages": {
+            "description": "The passages contained by the module",
+            "type": "object",
+            "additionalProperties": {
+                "type": "object",
+                "properties": {
+                    "title": {
+                        "description": "The title of a passage",
+                        "type": "string"
+                    },
+                    "body": {
+                        "description": "The textual body of the passage to be displayed to the reader",
+                        "type": "string"
+                    },
+                    "choices": {
+                        "description": "The choices to be displayed in the passage",
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "body": {
+                                    "description": "The textual body of the choice that will be displayed to the reader",
+                                    "type": "string"
+                                },
+                                "transition": {
+                                    "description": "A textual transition that will be displayed to the reader before next passage is displayed.",
+                                    "type": "string"
+                                },
+                                "passageId": {
+                                    "description": "The id of the next passage to be displayed.",
+                                    "type": "string"
+                                },
+                                "required": [
+                                    "body"
+                                ],
+                                "additionalProperties": "false"
+                            }
+                        }
+                    },
+                    "required": [
+                        "title",
+                        "body",
+                        "choices"
+                    ],
+                    "additionalProperties": "false"
+                }
+            }
+        }
+    },
+    "required": [
+        "title",
+        "description",
+        "passages"
+    ],
+    "additionalProperties": "false"
+}
