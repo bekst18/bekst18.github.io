@@ -233,7 +233,7 @@ function processImage() {
 
     determineRegions(imageData.width, imageData.height, cells)
     drawBorders(imageData.width, imageData.height, cells)
-    fillInterior(imageData.width, imageData.height, cells)
+    // fillInterior(imageData.width, imageData.height, cells)
 
     // replace with palette colors
     for (let i = 0; i < cells.length; ++i) {
