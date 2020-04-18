@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width">
+    <title>Color-By-Number Maker</title>
+    <link rel="stylesheet" type="text/css" href="../shared.css">
+    <link rel="stylesheet" type="text/css" href="cbn.css">
+</head>
+<body>
+    <div id="loadUi" class="m-auto">
+        <h1>Color-By-Number Maker</h1>
+        <p class="text-info">Drag a file here to make into a color-by-number.</p>
+        <div id="fileDropBox">
+            <div>Drag an image file here</div>
+        </div>
+        <input id="fileInput" type="file" accept="image/*" class="m-2" hidden />
+        <p class="text-info">OR select a file by clicking the button.</p>
+        <button id="fileButton" class="button-primary my-2">Select a File</button>
+        <div id="acquireImage" class="flex-y">
+            <p class="text-info">OR acquire an image using a camera.</p>
+            <div class="button-group">
+                <button id="frontCameraButton" class="button-primary my-2">Front</button>
+                <button id="rearCameraButton" class="button-primary my-2">Rear</button>
+                <button id="stopCameraButton" class="button-primary my-2">Stop</button>
+            </div>
+            <video id="camera" class="m-auto" hidden></video>
+            <button id="captureImageButton" class="button-primary my-2" hidden>Capture</button>
+        </div>
+        <div id="errors">
+        </div>
+    </div>
+    <div id="playUi" hidden>
+        <canvas id="canvas"></canvas>
+        <button id="returnButton" class="button-primary my-2">Choose a Different Image</button>
+    </div>
+    <script type="module" src="cbn.js"></script>
+</body>
+</html>

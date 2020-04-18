@@ -1,0 +1,46 @@
+#loadUi {
+    max-width: 512px;
+    padding: 1em;
+}
+
+html, body {
+    height: 100%;
+}
+
+#fileDropBox {
+    width: 100%;
+    height: 8em;
+    border: dashed .25em royalblue;
+    border-radius: .25em;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: grab;
+}
+
+#camera {
+}
+
+#playUi {
+    width: 100%;
+    height: 100%;
+}
+
+#canvas {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+    margin-top: 1em;
+    width: 90%;
+    height: 90%;
+}
+
+#canvasContainer {
+    justify-content: center;
+    align-items: center;
+    margin: 1em;
+}
+
+#canvas {
+    box-sizing: border-box;
+}
