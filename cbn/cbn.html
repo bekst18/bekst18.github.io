@@ -16,15 +16,15 @@
         <input id="fileInput" type="file" accept="image/*" class="m-2" hidden />
         <p class="text-info">OR select a file by clicking the button.</p>
         <button id="fileButton" class="button-primary my-2">Select a File</button>
-        <div id="acquireImage" class="flex-y">
-            <p class="text-info">OR acquire an image using a camera.</p>
+        <p class="text-info">OR acquire an image using a camera.</p>
+        <button id="useCameraButton" class="button-primary my-2">Use Camera</button>
+        <div id="acquireImage" hidden>
+            <video id="camera"></video>
             <div class="button-group">
-                <button id="frontCameraButton" class="button-primary my-2">Front</button>
-                <button id="rearCameraButton" class="button-primary my-2">Rear</button>
-                <button id="stopCameraButton" class="button-primary my-2">Stop</button>
+                <button id="captureImageButton" class="button-primary my-2">Capture</button>
+                <button id="flipCameraButton" class="button-primary my-2">Flip</button>
+                <button id="stopCameraButton" class="button-primary my-2">Close</button>
             </div>
-            <video id="camera" class="m-auto" hidden></video>
-            <button id="captureImageButton" class="button-primary my-2" hidden>Capture</button>
         </div>
         <div id="errors">
         </div>

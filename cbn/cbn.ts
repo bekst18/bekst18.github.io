@@ -1,17 +1,21 @@
 import * as util from "../util.js"
 
-const camera = util.byId("camera") as HTMLVideoElement
-const canvas = util.byId("canvas") as HTMLCanvasElement
-
-interface PaletteEntry {
-    name: string
-    color: number[]
-}
-
 interface Cell {
     color: number
     region: number
+    border: boolean
 }
+
+enum CameraMode {
+    None,
+    User,
+    Environment,
+}
+
+const camera = util.byId("camera") as HTMLVideoElement
+let cameraMode = CameraMode.None
+const canvas = util.byId("canvas") as HTMLCanvasElement
+const acquireImageDiv = util.byId("acquireImage") as HTMLDivElement
 
 const ctx = canvas.getContext("2d") as CanvasRenderingContext2D
 if (!ctx) {
@@ -24,12 +28,12 @@ const playUi = util.byId("playUi") as HTMLDivElement
 
 init()
 
-function init() {
+async function init() {
     const fileDropBox = util.byId("fileDropBox") as HTMLDivElement
     const fileInput = util.byId("fileInput") as HTMLInputElement
     const fileButton = util.byId("fileButton") as HTMLButtonElement
-    const frontCameraButton = util.byId("frontCameraButton") as HTMLButtonElement
-    const rearCameraButton = util.byId("rearCameraButton") as HTMLButtonElement
+    const useCameraButton = util.byId("useCameraButton") as HTMLButtonElement
+    const flipCameraButton = util.byId("flipCameraButton") as HTMLButtonElement
     const stopCameraButton = util.byId("stopCameraButton") as HTMLButtonElement
     const returnButton = util.byId("returnButton") as HTMLButtonElement
 
@@ -50,14 +54,14 @@ function init() {
         processFile(file)
     })
 
-    frontCameraButton.addEventListener("click", acquireImageFront)
-    rearCameraButton.addEventListener("click", acquireImageRear)
+    useCameraButton.addEventListener("click", useCamera)
+    flipCameraButton.addEventListener("click", flipCamera)
     stopCameraButton.addEventListener("click", stopCamera)
     captureImageButton.addEventListener("click", captureImage)
     returnButton.addEventListener("click", showLoadUi)
 
     // TODO: temporary for testing purposes - remove this
-    // loadFromUrl("olts.jpg")
+    // loadFromUrl("mario.jpg")
 }
 
 function onDragEnterOver(ev: DragEvent) {
@@ -112,21 +116,37 @@ function throwErrorMessage(error: string) {
     throw new Error(error)
 }
 
-async function acquireImageFront() {
-    camera.hidden = false
+async function useCamera() {
+    acquireImageDiv.hidden = false
+    const dialogWidth = acquireImageDiv.clientWidth
+    const dialogHeight = acquireImageDiv.clientHeight
     const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: camera.clientWidth, height: camera.clientHeight, facingMode: "user" },
+        video: { width: {max: dialogWidth}, height: {max: dialogHeight}, facingMode: "user" },
         audio: false
     })
 
+    cameraMode = CameraMode.User
     camera.srcObject = stream
     camera.addEventListener("loadedmetadata", onCameraLoad)
 }
 
-async function acquireImageRear() {
-    camera.hidden = false
+async function flipCamera() {
+    if (!camera.srcObject) {
+        return
+    }
+
+    const src = camera.srcObject as MediaStream
+    const tracks = src.getTracks()
+    for (const track of tracks) {
+        track.stop()
+    }
+
+    cameraMode = cameraMode == CameraMode.User ? CameraMode.Environment : CameraMode.User
+    const facingMode = cameraMode == CameraMode.User ? "user" : "environment"
+
+    // get current facing mode
     const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: camera.clientWidth, height: camera.clientHeight, facingMode: "environment" },
+        video: { width: camera.clientWidth, height: camera.clientHeight, facingMode: facingMode },
         audio: false
     })
 
@@ -135,11 +155,10 @@ async function acquireImageRear() {
 }
 
 function onCameraLoad() {
-    camera.hidden = false
+    console.log(camera.clientWidth, camera.clientHeight, camera.width, camera.height, camera.videoWidth, camera.videoHeight)
+    acquireImageDiv.hidden = false
     camera.play()
-    captureImageButton.hidden = false
-    camera.width = camera.videoWidth
-    camera.height = camera.videoHeight
+    
 }
 
 function stopCamera() {
@@ -153,8 +172,8 @@ function stopCamera() {
         track.stop()
     }
 
-    camera.hidden = true
-    captureImageButton.hidden = true
+    cameraMode = CameraMode.None
+    acquireImageDiv.hidden = true
 }
 
 function captureImage() {
@@ -174,10 +193,20 @@ function captureImage() {
 }
 
 function showPlayUi(img: CanvasImageSource, width: number, height: number) {
+    // maintain aspect ratio!
+    const vw = document.documentElement.clientWidth
+    const vh = document.documentElement.clientHeight
+
+    if (vw < vh) {
+        canvas.width = vw
+        canvas.height = vw * height / width
+    } else {
+        canvas.height = vh
+        canvas.width = vh * width / height
+    }
+
     loadUi.hidden = true
     playUi.hidden = false
-    canvas.width = canvas.clientWidth
-    canvas.height = canvas.clientHeight
 
     ctx.drawImage(img, 0, 0, canvas.clientWidth, canvas.clientHeight)
     processImage()
@@ -189,65 +218,58 @@ function showLoadUi() {
 }
 
 function processImage() {
+    // get (flat) image data from canvas
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    const data = imageData.data
-    const size = data.length
 
-    const palette: PaletteEntry[] = [
-        { name: "black", color: [0, 0, 0] },
-        { name: "white", color: [255, 255, 255] },
-        { name: "red", color: [255, 0, 0] },
-        { name: "green", color: [0, 255, 0] },
-        { name: "blue", color: [0, 0, 255] },
-        { name: "pink", color: [255, 192, 203] },
-        { name: "orange", color: [255, 165, 0] },
-        { name: "yellow", color: [255, 255, 0] },
-        { name: "purple", color: [127, 0, 127] },
-        { name: "magenta", color: [255, 0, 255] },
-        { name: "brown", color: [165, 42, 42] },
-        { name: "gray", color: [127, 127, 127] }
-    ]
+    // convert to xyz colors and choose palette
+    const data = imageData2RGBArray(imageData.data).map(rgb2xyz)
+    const palette = choosePaletteHistogram(data, 9, 3)
 
-    // create a "cell" for each pixel
-    const cells: Cell[] = []
-    const maxDist = 255 * 255 + 255 * 255 + 255 * 255
-    for (let i = 0; i < size; i += 4) {
-        const r = data[i]
-        const g = data[i + 1]
-        const b = data[i + 2]
-
+    const maxDist = Infinity
+    const cells = data.map(xyz => {
         // find nearest color in palette
         let paletteIndex: number = -1
         let minDist = maxDist
         for (let i = 0; i < palette.length; ++i) {
-            const color = palette[i].color
-            const dist = calcDist(r, g, b, color[0], color[1], color[2])
+            const dist = calcDistSq(xyz, palette[i])
             if (dist < minDist) {
                 minDist = dist
                 paletteIndex = i
             }
         }
 
-        cells.push({ color: paletteIndex, region: -1 })
-    }
+        return { color: paletteIndex, region: -1, border: false }
+    })
 
-    determineRegions(imageData.width, imageData.height, cells)
-    drawBorders(imageData.width, imageData.height, cells)
-    // fillInterior(imageData.width, imageData.height, cells)
+    findRegions(imageData.width, imageData.height, cells)
+    findBorders(imageData.width, imageData.height, cells)
 
     // replace with palette colors
+    // const paletteRGB = palette.map(xyz2rgb)
+
+    // testing only - draw mapped colors
+    // for (let i = 0; i < cells.length; ++i) {
+    //     const cell = cells[i]
+    //     const color = paletteRGB[cell.color]
+    //     imageData.data[i * 4] = color[0]
+    //     imageData.data[i * 4 + 1] = color[1]
+    //     imageData.data[i * 4 + 2] = color[2]
+    // }
+
     for (let i = 0; i < cells.length; ++i) {
         const cell = cells[i]
-        const color = palette[cell.color].color
-        data[i * 4] = color[0]
-        data[i * 4 + 1] = color[1]
-        data[i * 4 + 2] = color[2]
+        const l = cell.border ? 0 : 255
+        imageData.data[i * 4] = l
+        imageData.data[i * 4 + 1] = l
+        imageData.data[i * 4 + 2] = l
     }
 
     ctx.putImageData(imageData, 0, 0)
 }
 
-function calcDist(x1: number, y1: number, z1: number, x2: number, y2: number, z2: number): number {
+function calcDistSq(p1: [number, number, number], p2: [number, number, number]): number {
+    const [x1, y1, z1] = p1
+    const [x2, y2, z2] = p2
     const dx = x2 - x1
     const dy = y2 - y1
     const dz = z2 - z1
@@ -255,7 +277,43 @@ function calcDist(x1: number, y1: number, z1: number, x2: number, y2: number, z2
     return dist
 }
 
-function determineRegions(width: number, height: number, cells: Cell[]) {
+function choosePaletteHistogram(data: [number, number, number][], maxColors: number, bucketsPerComponent: number): [number, number, number][] {
+    // divide color space into buckets
+    const bpcSq = bucketsPerComponent * bucketsPerComponent
+    const numBuckets = bucketsPerComponent * bpcSq
+    const buckets: [number, number, number][][] = []
+    for (let i = 0; i < numBuckets; ++i) {
+        buckets.push([])
+    }
+
+    for (const xyz of data) {
+        const xb = Math.trunc(xyz[0] * bucketsPerComponent)
+        const yb = Math.trunc(xyz[1] * bucketsPerComponent)
+        const zb = Math.trunc(xyz[2] * bucketsPerComponent)
+        const xyzb = Math.min(numBuckets - 1, zb * bpcSq + yb * bucketsPerComponent + xb)
+        buckets[xyzb].push(xyz)
+    }
+
+    // choose maxColors most populous buckets
+    const bucketSumLength = buckets
+        .sort((x, y) => y.length - x.length)
+        .slice(0, maxColors)
+        .map(a => [a.reduce((xyz1, xyz2) => [xyz1[0] + xyz2[0], xyz1[1] + xyz2[1], xyz1[2] + xyz2[2]], [0, 0, 0]), a.length]) as [[number, number, number], number][]
+
+    const palette = bucketSumLength.map(elem => {
+        const [xyz, l] = elem
+        return divXYZ(xyz, l)
+    })
+
+    return palette
+}
+
+function divXYZ(xyz: [number, number, number], s: number): [number, number, number] {
+    const [x, y, z] = xyz
+    return [x / s, y / s, z / s]
+}
+
+function findRegions(width: number, height: number, cells: Cell[]) {
     let region = 0
     for (let y = 0; y < height; ++y) {
         let yOffset = y * width
@@ -273,7 +331,7 @@ function determineRegions(width: number, height: number, cells: Cell[]) {
     }
 }
 
-function drawBorders(width: number, height: number, cells: Cell[]) {
+function findBorders(width: number, height: number, cells: Cell[]) {
     // color borders
     for (let y = 0; y < height; ++y) {
         let yOffset = y * width
@@ -287,24 +345,24 @@ function drawBorders(width: number, height: number, cells: Cell[]) {
 
             // edge cells are border
             if (l < 0 || r >= width || t < 0 || b >= height) {
-                cell.color = 0
+                cell.border = true
                 continue
             }
 
             if (cells[xOffset - 1].region != cell.region) {
-                cell.color = 0
+                cell.border = true
             }
 
             if (cells[xOffset + 1].region != cell.region) {
-                cell.color = 0
+                cell.border = true
             }
 
             if (cells[xOffset - width].region != cell.region) {
-                cell.color = 0
+                cell.border = true
             }
 
             if (cells[xOffset + width].region != cell.region) {
-                cell.color = 0
+                cell.border = true
             }
         }
     }
@@ -403,4 +461,41 @@ function scanRegion(width: number, height: number, x0: number, y0: number, cells
             }
         }
     }
+}
+
+// function linear(x: number) {
+//     if (x <= .04045) {
+//         return x / 12.92
+//     }
+
+//     return Math.pow(((x + .055) / 1.055), 2.4)
+// }
+
+function imageData2RGBArray(data: Uint8ClampedArray): [number, number, number][] {
+    const result: [number, number, number][] = []
+    for (let i = 0; i < data.length; i += 4) {
+        result.push([data[i], data[i + 1], data[i + 2]])
+    }
+
+    return result
+}
+
+function rgb2xyz(rgb: [number, number, number]): [number, number, number] {
+    let [r, b, g] = rgb
+    r /= 255.0
+    g /= 255.0
+    b /= 255.0
+
+    const x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375
+    const y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750
+    const z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041
+    return [x, y, z]
+}
+
+function xyz2rgb(xyz: [number, number, number]): [number, number, number] {
+    const [x, y, z] = xyz
+    const r = (x * 3.2404542 + y * -1.5371385 + z * -0.4985314) * 255
+    const g = (x * -0.9692660 + y * 1.8760108 + z * 0.0415560) * 255
+    const b = (x * 0.0556434 + y * -0.2040259 + z * 1.0572252) * 255
+    return [r, g, b]
 }
