@@ -6,11 +6,17 @@ interface Cell {
     border: boolean
 }
 
+interface Region {
+    size: number
+}
+
 enum CameraMode {
     None,
     User,
     Environment,
 }
+
+type Color = [number, number, number]
 
 const camera = util.byId("camera") as HTMLVideoElement
 let cameraMode = CameraMode.None
@@ -61,7 +67,7 @@ async function init() {
     returnButton.addEventListener("click", showLoadUi)
 
     // TODO: temporary for testing purposes - remove this
-    // loadFromUrl("mario.jpg")
+    loadFromUrl("mario.jpg")
 }
 
 function onDragEnterOver(ev: DragEvent) {
@@ -121,7 +127,7 @@ async function useCamera() {
     const dialogWidth = acquireImageDiv.clientWidth
     const dialogHeight = acquireImageDiv.clientHeight
     const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: {max: dialogWidth}, height: {max: dialogHeight}, facingMode: "user" },
+        video: { width: { max: dialogWidth }, height: { max: dialogHeight }, facingMode: "user" },
         audio: false
     })
 
@@ -158,7 +164,7 @@ function onCameraLoad() {
     console.log(camera.clientWidth, camera.clientHeight, camera.width, camera.height, camera.videoWidth, camera.videoHeight)
     acquireImageDiv.hidden = false
     camera.play()
-    
+
 }
 
 function stopCamera() {
@@ -221,99 +227,150 @@ function processImage() {
     // get (flat) image data from canvas
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
 
-    // convert to xyz colors and choose palette
-    const data = imageData2RGBArray(imageData.data).map(rgb2xyz)
-    const palette = choosePaletteHistogram(data, 9, 3)
+    // convert to xyz colors and palettize data
+    const data = imageData2RGBArray(imageData.data)
+    const [palette, palettizedData] = palettizeMedianCut(data, 8)
 
-    const maxDist = Infinity
-    const cells = data.map(xyz => {
-        // find nearest color in palette
-        let paletteIndex: number = -1
-        let minDist = maxDist
-        for (let i = 0; i < palette.length; ++i) {
-            const dist = calcDistSq(xyz, palette[i])
-            if (dist < minDist) {
-                minDist = dist
-                paletteIndex = i
-            }
-        }
+    const cells: Cell[] = palettizedData.map(i => ({
+        color: i,
+        region: -1,
+        border: false
+    }))
 
-        return { color: paletteIndex, region: -1, border: false }
-    })
-
-    findRegions(imageData.width, imageData.height, cells)
+    const regions = findRegions(imageData.width, imageData.height, cells)
     findBorders(imageData.width, imageData.height, cells)
 
-    // replace with palette colors
-    // const paletteRGB = palette.map(xyz2rgb)
-
-    // testing only - draw mapped colors
-    // for (let i = 0; i < cells.length; ++i) {
-    //     const cell = cells[i]
-    //     const color = paletteRGB[cell.color]
-    //     imageData.data[i * 4] = color[0]
-    //     imageData.data[i * 4 + 1] = color[1]
-    //     imageData.data[i * 4 + 2] = color[2]
-    // }
-
+    // fill borders and regions
     for (let i = 0; i < cells.length; ++i) {
         const cell = cells[i]
         const l = cell.border ? 0 : 255
+
+        if (regions[cell.region].size < 1024) {
+            const color = palette[cell.color]
+            imageData.data[i * 4] = color[0]
+            imageData.data[i * 4 + 1] = color[1]
+            imageData.data[i * 4 + 2] = color[2]
+            continue
+        }
+
         imageData.data[i * 4] = l
         imageData.data[i * 4 + 1] = l
         imageData.data[i * 4 + 2] = l
     }
 
+    // DEBUG ONLY - show palettized image
+    // for (let i = 0; i < palettizedData.length; ++i) {
+    //     const colorIdx = palettizedData[i]
+    //     const color = palette[colorIdx]
+    //     imageData.data[i * 4] = color[0]
+    //     imageData.data[i * 4 + 1] = color[1]
+    //     imageData.data[i * 4 + 2] = color[2]
+    // }
+
     ctx.putImageData(imageData, 0, 0)
 }
 
-function calcDistSq(p1: [number, number, number], p2: [number, number, number]): number {
-    const [x1, y1, z1] = p1
-    const [x2, y2, z2] = p2
-    const dx = x2 - x1
-    const dy = y2 - y1
-    const dz = z2 - z1
-    const dist = dx * dx + dy * dy + dz * dz
-    return dist
-}
+// function calcDistSq(p1: Color, p2: Color): number {
+//     const [x1, y1, z1] = p1
+//     const [x2, y2, z2] = p2
+//     const dx = x2 - x1
+//     const dy = y2 - y1
+//     const dz = z2 - z1
+//     const dist = dx * dx + dy * dy + dz * dz
+//     return dist
+// }
 
-function choosePaletteHistogram(data: [number, number, number][], maxColors: number, bucketsPerComponent: number): [number, number, number][] {
-    // divide color space into buckets
-    const bpcSq = bucketsPerComponent * bucketsPerComponent
-    const numBuckets = bucketsPerComponent * bpcSq
-    const buckets: [number, number, number][][] = []
-    for (let i = 0; i < numBuckets; ++i) {
-        buckets.push([])
+function palettizeMedianCut(data: Color[], maxColors: number): [Color[], number[]] {
+    const buckets: number[][] = []
+
+    // place all colors in initial bucket
+    const bucket: number[] = []
+    for (let i = 0; i < data.length; ++i) {
+        bucket.push(i)
     }
 
-    for (const xyz of data) {
-        const xb = Math.trunc(xyz[0] * bucketsPerComponent)
-        const yb = Math.trunc(xyz[1] * bucketsPerComponent)
-        const zb = Math.trunc(xyz[2] * bucketsPerComponent)
-        const xyzb = Math.min(numBuckets - 1, zb * bpcSq + yb * bucketsPerComponent + xb)
-        buckets[xyzb].push(xyz)
+    buckets.push(bucket)
+
+    while (buckets.length < maxColors) {
+        const bucket = chooseBucket(data, buckets)
+        const newBucket = splitBucket(data, bucket)
+        buckets.push(newBucket)
     }
 
-    // choose maxColors most populous buckets
-    const bucketSumLength = buckets
-        .sort((x, y) => y.length - x.length)
-        .slice(0, maxColors)
-        .map(a => [a.reduce((xyz1, xyz2) => [xyz1[0] + xyz2[0], xyz1[1] + xyz2[1], xyz1[2] + xyz2[2]], [0, 0, 0]), a.length]) as [[number, number, number], number][]
+    // choose color for each bucket
+    const palette = buckets.map(b => divXYZ(b.reduce((xyz, i) => addXYZ(xyz, data[i]), [0, 0, 0]), b.length))
+    const palettizedData: number[] = data.map(() => 0)
+    for (let i = 0; i < buckets.length; ++i) {
+        const bucket = buckets[i]
+        for (let j = 0; j < bucket.length; ++j) {
+            palettizedData[bucket[j]] = i
+        }
+    }
 
-    const palette = bucketSumLength.map(elem => {
-        const [xyz, l] = elem
-        return divXYZ(xyz, l)
-    })
-
-    return palette
+    return [palette, palettizedData]
 }
 
-function divXYZ(xyz: [number, number, number], s: number): [number, number, number] {
+function chooseBucket(data: Color[], buckets: number[][]) {
+    const bucket = buckets.reduce((b1, b2) => calcBucketRange(data, b1) > calcBucketRange(data, b2) ? b1 : b2)
+    return bucket
+}
+
+function calcBucketRange(data: Color[], bucket: number[]): number {
+    const lx = bucket.reduce((min, i) => min < data[i][0] ? min : data[i][0], Infinity)
+    const rx = bucket.reduce((max, i) => max > data[i][0] ? max : data[i][0], 0)
+    const ly = bucket.reduce((min, i) => min < data[i][1] ? min : data[i][1], Infinity)
+    const ry = bucket.reduce((max, i) => max > data[i][1] ? max : data[i][1], 0)
+    const lz = bucket.reduce((min, i) => min < data[i][2] ? min : data[i][2], Infinity)
+    const rz = bucket.reduce((max, i) => max > data[i][2] ? max : data[i][2], 0)
+    const dx = rx - lx
+    const dy = ry - ly
+    const dz = rz - lz
+    const d = Math.max(dx, dy, dz)
+    return d
+}
+
+function splitBucket(data: Color[], bucket: number[]): number[] {
+    if (bucket.length <= 1) {
+        throw Error("Bucket must have at least two elements to split")
+    }
+
+    // determine component with max range in bucket
+    const lx = bucket.reduce((min, i) => min < data[i][0] ? min : data[i][0], Infinity)
+    const rx = bucket.reduce((max, i) => max > data[i][0] ? max : data[i][0], 0)
+    const ly = bucket.reduce((min, i) => min < data[i][1] ? min : data[i][1], Infinity)
+    const ry = bucket.reduce((max, i) => max > data[i][1] ? max : data[i][1], 0)
+    const lz = bucket.reduce((min, i) => min < data[i][2] ? min : data[i][2], Infinity)
+    const rz = bucket.reduce((max, i) => max > data[i][2] ? max : data[i][2], 0)
+    const dx = rx - lx
+    const dy = ry - ly
+    const dz = rz - lz
+    const d = Math.max(dx, dy, dz)
+
+    if (dx === d) {
+        bucket.sort((a, b) => data[a][0] - data[b][0])
+    } else if (dy === d) {
+        bucket.sort((a, b) => data[a][1] - data[b][1])
+    } else if (dz === d) {
+        bucket.sort((a, b) => data[a][2] - data[b][2])
+    }
+
+    // left half of array stays in bucket
+    // right half moves to new bucket
+    const medianIdx = Math.floor(bucket.length / 2)
+    const newBucket = bucket.splice(medianIdx, bucket.length - medianIdx)
+    return newBucket
+}
+
+function divXYZ(xyz: Color, s: number): Color {
     const [x, y, z] = xyz
     return [x / s, y / s, z / s]
 }
 
-function findRegions(width: number, height: number, cells: Cell[]) {
+function addXYZ(xyz1: Color, xyz2: Color): Color {
+    return [xyz1[0] + xyz2[0], xyz1[1] + xyz2[1], xyz1[2] + xyz2[2]]
+}
+
+function findRegions(width: number, height: number, cells: Cell[]) : Region[]{
     let region = 0
     for (let y = 0; y < height; ++y) {
         let yOffset = y * width
@@ -329,6 +386,17 @@ function findRegions(width: number, height: number, cells: Cell[]) {
             ++region
         }
     }
+
+    const regions: Region[] = []
+    for (let i = 0; i < region; ++i) {
+        regions.push({ size: 0 })
+    }
+
+    for (const cell of cells) {
+        regions[cell.region].size++
+    }
+
+    return regions
 }
 
 function findBorders(width: number, height: number, cells: Cell[]) {
@@ -364,44 +432,6 @@ function findBorders(width: number, height: number, cells: Cell[]) {
             if (cells[xOffset + width].region != cell.region) {
                 cell.border = true
             }
-        }
-    }
-}
-
-function fillInterior(width: number, height: number, cells: Cell[]) {
-    // color borders
-    for (let y = 0; y < height; ++y) {
-        let yOffset = y * width
-        for (let x = 0; x < width; ++x) {
-            let xOffset = yOffset + x
-            const cell = cells[xOffset]
-            const l = x - 1
-            const r = x + 1
-            const t = y - 1
-            const b = y + 1
-
-            // edge cells are border
-            if (l < 0 || r >= width || t < 0 || b >= height) {
-                continue
-            }
-
-            if (cells[xOffset - 1].region != cell.region) {
-                continue
-            }
-
-            if (cells[xOffset + 1].region != cell.region) {
-                continue
-            }
-
-            if (cells[xOffset - width].region != cell.region) {
-                continue
-            }
-
-            if (cells[xOffset + width].region != cell.region) {
-                continue
-            }
-
-            cell.color = 1
         }
     }
 }
@@ -471,8 +501,8 @@ function scanRegion(width: number, height: number, x0: number, y0: number, cells
 //     return Math.pow(((x + .055) / 1.055), 2.4)
 // }
 
-function imageData2RGBArray(data: Uint8ClampedArray): [number, number, number][] {
-    const result: [number, number, number][] = []
+function imageData2RGBArray(data: Uint8ClampedArray): Color[] {
+    const result: Color[] = []
     for (let i = 0; i < data.length; i += 4) {
         result.push([data[i], data[i + 1], data[i + 2]])
     }
@@ -480,7 +510,7 @@ function imageData2RGBArray(data: Uint8ClampedArray): [number, number, number][]
     return result
 }
 
-function rgb2xyz(rgb: [number, number, number]): [number, number, number] {
+function rgb2xyz(rgb: Color): Color {
     let [r, b, g] = rgb
     r /= 255.0
     g /= 255.0
@@ -492,7 +522,7 @@ function rgb2xyz(rgb: [number, number, number]): [number, number, number] {
     return [x, y, z]
 }
 
-function xyz2rgb(xyz: [number, number, number]): [number, number, number] {
+function xyz2rgb(xyz: Color): Color {
     const [x, y, z] = xyz
     const r = (x * 3.2404542 + y * -1.5371385 + z * -0.4985314) * 255
     const g = (x * -0.9692660 + y * 1.8760108 + z * 0.0415560) * 255
