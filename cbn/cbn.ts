@@ -245,7 +245,7 @@ function processImage() {
         const cell = cells[i]
         const l = cell.border ? 0 : 255
 
-        if (regions[cell.region].size < 1024) {
+        if (regions[cell.region].size < 256) {
             const color = palette[cell.color]
             imageData.data[i * 4] = color[0]
             imageData.data[i * 4 + 1] = color[1]
