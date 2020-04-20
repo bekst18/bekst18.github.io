@@ -7,7 +7,17 @@ interface Cell {
 }
 
 interface Region {
-    size: number
+    color: number
+    minX: number
+    maxX: number
+    minY: number
+    maxY: number
+    width: number
+    height: number
+    pixels: number
+    centroidX: number
+    centroidY: number
+    leaveColored: boolean
 }
 
 enum CameraMode {
@@ -22,6 +32,8 @@ const camera = util.byId("camera") as HTMLVideoElement
 let cameraMode = CameraMode.None
 const canvas = util.byId("canvas") as HTMLCanvasElement
 const acquireImageDiv = util.byId("acquireImage") as HTMLDivElement
+const paletteDiv = util.byId("palette") as HTMLDivElement
+const paletteEntryTemplate = util.byId("paletteEntry") as HTMLTemplateElement
 
 const ctx = canvas.getContext("2d") as CanvasRenderingContext2D
 if (!ctx) {
@@ -240,12 +252,22 @@ function processImage() {
     const regions = findRegions(imageData.width, imageData.height, cells)
     findBorders(imageData.width, imageData.height, cells)
 
+    // don't color border cells in regions we are leaving colored
+    for (const cell of cells) {
+        const region = regions[cell.region]
+        if (region.leaveColored) {
+            cell.border = false
+        }
+    }
+
     // fill borders and regions
+    // leave regions that are too thin or small to color colored
     for (let i = 0; i < cells.length; ++i) {
         const cell = cells[i]
         const l = cell.border ? 0 : 255
+        const region = regions[cell.region]
 
-        if (regions[cell.region].size < 256) {
+        if (region.leaveColored) {
             const color = palette[cell.color]
             imageData.data[i * 4] = color[0]
             imageData.data[i * 4 + 1] = color[1]
@@ -268,6 +290,8 @@ function processImage() {
     // }
 
     ctx.putImageData(imageData, 0, 0)
+    createPaletteUi(palette)
+    drawRegionLabels(ctx, regions)
 }
 
 // function calcDistSq(p1: Color, p2: Color): number {
@@ -370,7 +394,7 @@ function addXYZ(xyz1: Color, xyz2: Color): Color {
     return [xyz1[0] + xyz2[0], xyz1[1] + xyz2[1], xyz1[2] + xyz2[2]]
 }
 
-function findRegions(width: number, height: number, cells: Cell[]) : Region[]{
+function findRegions(width: number, height: number, cells: Cell[]): Region[] {
     let region = 0
     for (let y = 0; y < height; ++y) {
         let yOffset = y * width
@@ -389,11 +413,47 @@ function findRegions(width: number, height: number, cells: Cell[]) : Region[]{
 
     const regions: Region[] = []
     for (let i = 0; i < region; ++i) {
-        regions.push({ size: 0 })
+        regions.push({
+            pixels: 0,
+            centroidX: 0,
+            centroidY: 0,
+            color: -1,
+            minX: Infinity,
+            maxX: -1,
+            minY: Infinity,
+            maxY: -1,
+            width: 0,
+            height: 0,
+            leaveColored: false
+        })
     }
 
-    for (const cell of cells) {
-        regions[cell.region].size++
+    for (let y = 0; y < height; ++y) {
+        let yOffset = y * width
+        for (let x = 0; x < width; ++x) {
+            let xOffset = yOffset + x
+            const cell = cells[xOffset]
+            const region = regions[cell.region]
+            region.pixels++
+            region.centroidX += x
+            region.centroidY += y
+            region.color = cell.color
+            region.minX = Math.min(x, region.minX)
+            region.minY = Math.min(y, region.minY)
+            region.maxX = Math.max(x, region.maxX)
+            region.maxY = Math.max(y, region.maxY)
+        }
+    }
+
+    for (const region of regions) {
+        region.centroidX /= region.pixels
+        region.centroidY /= region.pixels
+        region.width = region.maxX - region.minX
+        region.height = region.maxY - region.minY
+    }
+
+    for (const region of regions) {
+        region.leaveColored = region.width < 32 || region.height < 32 || region.pixels < 512
     }
 
     return regions
@@ -510,22 +570,62 @@ function imageData2RGBArray(data: Uint8ClampedArray): Color[] {
     return result
 }
 
-function rgb2xyz(rgb: Color): Color {
-    let [r, b, g] = rgb
-    r /= 255.0
-    g /= 255.0
-    b /= 255.0
-
-    const x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375
-    const y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750
-    const z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041
-    return [x, y, z]
+function createPaletteUi(palette: Color[]) {
+    util.removeAllChildren(paletteDiv)
+    for (let i = 0; i < palette.length; ++i) {
+        const color = palette[i]
+        const lum = calcLuminance(color)
+        const fragment = paletteEntryTemplate.content.cloneNode(true) as DocumentFragment
+        const entryDiv = util.bySelector(fragment, ".palette-entry") as HTMLElement
+        entryDiv.textContent = i.toString()
+        entryDiv.style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`
+        entryDiv.style.color = lum < .5 ? "white" : "black"
+        paletteDiv.appendChild(fragment)
+    }
 }
 
-function xyz2rgb(xyz: Color): Color {
-    const [x, y, z] = xyz
-    const r = (x * 3.2404542 + y * -1.5371385 + z * -0.4985314) * 255
-    const g = (x * -0.9692660 + y * 1.8760108 + z * 0.0415560) * 255
-    const b = (x * 0.0556434 + y * -0.2040259 + z * 1.0572252) * 255
-    return [r, g, b]
+function calcLuminance(color: Color) {
+    const [r, g, b] = color
+    const l = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255)
+    return l
 }
+
+function drawRegionLabels(ctx: CanvasRenderingContext2D, regions: Region[]) {
+    const height = ctx.measureText("M").width
+    const font = ctx.font
+    ctx.font = "16px arial bold"
+
+    for (const region of regions) {
+        if (region.leaveColored) {
+            continue
+        }
+
+        const label = `${region.color + 1}`
+        const metrics = ctx.measureText(label)
+        const x = region.centroidX - metrics.width / 2
+        const y = region.centroidY - height / 2
+        ctx.fillText(label, x, y)
+    }
+
+    ctx.font = font
+}
+
+// function rgb2xyz(rgb: Color): Color {
+//     let [r, b, g] = rgb
+//     r /= 255.0
+//     g /= 255.0
+//     b /= 255.0
+
+//     const x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375
+//     const y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750
+//     const z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041
+//     return [x, y, z]
+// }
+
+// function xyz2rgb(xyz: Color): Color {
+//     const [x, y, z] = xyz
+//     const r = (x * 3.2404542 + y * -1.5371385 + z * -0.4985314) * 255
+//     const g = (x * -0.9692660 + y * 1.8760108 + z * 0.0415560) * 255
+//     const b = (x * 0.0556434 + y * -0.2040259 + z * 1.0572252) * 255
+//     return [r, g, b]
+// }
