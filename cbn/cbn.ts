@@ -1,24 +1,5 @@
-import * as util from "../util.js"
-
-interface Cell {
-    color: number
-    region: number
-    border: boolean
-}
-
-interface Region {
-    color: number
-    minX: number
-    maxX: number
-    minY: number
-    maxY: number
-    width: number
-    height: number
-    pixels: number
-    centroidX: number
-    centroidY: number
-    leaveColored: boolean
-}
+import * as util from "../shared/util.js"
+import * as imaging from "../shared/imaging.js"
 
 enum CameraMode {
     None,
@@ -26,7 +7,25 @@ enum CameraMode {
     Environment,
 }
 
-type Color = [number, number, number]
+interface RegionDrawInfo {
+    color: number
+    centroid: [number, number]
+}
+
+interface Bounds {
+    minX: number
+    maxX: number
+    minY: number
+    maxY: number
+}
+
+interface Region {
+    color: number
+    pixels: number
+    bounds: Bounds
+}
+
+type RegionOverlay = (Region | null)[]
 
 const camera = util.byId("camera") as HTMLVideoElement
 let cameraMode = CameraMode.None
@@ -238,280 +237,144 @@ function showLoadUi() {
 function processImage() {
     // get (flat) image data from canvas
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const { width, height } = imageData
 
     // convert to xyz colors and palettize data
-    const data = imageData2RGBArray(imageData.data)
-    const [palette, palettizedData] = palettizeMedianCut(data, 8)
+    const [palette, paletteOverlay] = imaging.palettizeHistogram(imageData, 3, 8)
+    // const [palette, paletteOverlay] = palettizeMedianCut(imageData, 8)
+    imaging.applyPalette(palette, paletteOverlay, imageData)
 
-    const cells: Cell[] = palettizedData.map(i => ({
-        color: i,
-        region: -1,
-        border: false
-    }))
+    const [regions, regionOverlay] = createRegionOverlay(width, height, paletteOverlay)
+    pruneRegions(width, height, regions, regionOverlay)
 
-    const regions = findRegions(imageData.width, imageData.height, cells)
-    findBorders(imageData.width, imageData.height, cells)
+    drawBorders(regionOverlay, imageData)
+    fillInterior(imageData.data, regionOverlay)
+    ctx.putImageData(imageData, 0, 0)
+    createPaletteUi(palette)
 
-    // don't color border cells in regions we are leaving colored
-    for (const cell of cells) {
-        const region = regions[cell.region]
-        if (region.leaveColored) {
-            cell.border = false
+    ctx.putImageData(imageData, 0, 0)
+    // drawRegionLabels(ctx, width, height, regionOverlay, paletteOverlay)
+}
+
+function createRegionOverlay(width: number, height: number, paletteOverlay: number[]): [Region[], RegionOverlay] {
+    const regionOverlay: RegionOverlay = util.fill(null, width * height)
+    const regions: Region[] = []
+
+    imaging.scan(width, height, (x, y, offset) => {
+        if (regionOverlay[offset]) {
+            return
+        }
+
+        const region: Region = {
+            color: paletteOverlay[offset],
+            pixels: 0,
+            bounds: {
+                minX: Infinity,
+                maxX: -1,
+                minY: Infinity,
+                maxY: -1
+            }
+        }
+
+        regionOverlay[offset] = region
+        regions.push(region)
+        exploreRegion(width, height, paletteOverlay, x, y, regionOverlay)
+    })
+
+    // prune some regions
+    return [regions, regionOverlay]
+}
+
+function pruneRegions(width: number, height: number, regions: Region[], regionOverlay: RegionOverlay): Region[] {
+    const regionSet = new Set(regions)
+
+    for (const region of regions) {
+        if (region.pixels <= 64) {
+            regionSet.delete(region)
         }
     }
 
-    // fill borders and regions
-    // leave regions that are too thin or small to color colored
-    for (let i = 0; i < cells.length; ++i) {
-        const cell = cells[i]
-        const l = cell.border ? 0 : 255
-        const region = regions[cell.region]
+    regions = [...regionSet]
+    calcRegionBounds(width, height, regionOverlay)
 
-        if (region.leaveColored) {
-            const color = palette[cell.color]
-            imageData.data[i * 4] = color[0]
-            imageData.data[i * 4 + 1] = color[1]
-            imageData.data[i * 4 + 2] = color[2]
+    for (const region of regions) {
+        if (region.bounds.maxX - region.bounds.minX <= 16) {
+            regionSet.delete(region)
+        }
+
+        if (region.bounds.maxY - region.bounds.minY <= 16) {
+            regionSet.delete(region)
+        }
+    }
+
+    // update the overlay
+    for (let i = 0; i < regionOverlay.length; ++i) {
+        const region = regionOverlay[i]
+        if (!region) {
             continue
         }
 
-        imageData.data[i * 4] = l
-        imageData.data[i * 4 + 1] = l
-        imageData.data[i * 4 + 2] = l
+        if (!regionSet.has(region)) {
+            regionOverlay[i] = null
+        }
     }
 
-    // DEBUG ONLY - show palettized image
-    // for (let i = 0; i < palettizedData.length; ++i) {
-    //     const colorIdx = palettizedData[i]
-    //     const color = palette[colorIdx]
-    //     imageData.data[i * 4] = color[0]
-    //     imageData.data[i * 4 + 1] = color[1]
-    //     imageData.data[i * 4 + 2] = color[2]
-    // }
-
-    ctx.putImageData(imageData, 0, 0)
-    createPaletteUi(palette)
-    drawRegionLabels(ctx, regions)
+    return [...regionSet]
 }
 
-// function calcDistSq(p1: Color, p2: Color): number {
-//     const [x1, y1, z1] = p1
-//     const [x2, y2, z2] = p2
-//     const dx = x2 - x1
-//     const dy = y2 - y1
-//     const dz = z2 - z1
-//     const dist = dx * dx + dy * dy + dz * dz
-//     return dist
+function calcRegionBounds(width: number, height: number, regionOverlay: RegionOverlay) {
+    imaging.scan(width, height, (x, y, offset) => {
+        const region = regionOverlay[offset]
+        if (!region) {
+            return
+        }
+
+        const bounds = region.bounds
+        bounds.minX = Math.min(bounds.minX, x)
+        bounds.maxX = Math.max(bounds.maxX, x)
+        bounds.minY = Math.min(bounds.minY, y)
+        bounds.maxY = Math.max(bounds.maxY, y)
+    })
+}
+
+// function calcMaxRegionRect(x: number, y: number, width: number, height: number, regionOverlay: number[]) {
+//     const numRegions = regionOverlay.reduce((a, b) => a > b ? a : b) + 1
+
+//     // algorithm needs to keep track of rectangle state for every column for every region
+//     const rowOverlay = util.generate(width, () => ({
+//         h: 0,
+//         l: 0,
+//         r: 0
+//     }))
+
+//     scanRows(width, height, (y, offset) => {
+//         const overlay = rowOverlay[y]
+//         for (let x = 0; x < width; ++x) {
+//             const region = 
+//         }
+//     })
 // }
 
-function palettizeMedianCut(data: Color[], maxColors: number): [Color[], number[]] {
-    const buckets: number[][] = []
 
-    // place all colors in initial bucket
-    const bucket: number[] = []
-    for (let i = 0; i < data.length; ++i) {
-        bucket.push(i)
-    }
-
-    buckets.push(bucket)
-
-    while (buckets.length < maxColors) {
-        const bucket = chooseBucket(data, buckets)
-        const newBucket = splitBucket(data, bucket)
-        buckets.push(newBucket)
-    }
-
-    // choose color for each bucket
-    const palette = buckets.map(b => divXYZ(b.reduce((xyz, i) => addXYZ(xyz, data[i]), [0, 0, 0]), b.length))
-    const palettizedData: number[] = data.map(() => 0)
-    for (let i = 0; i < buckets.length; ++i) {
-        const bucket = buckets[i]
-        for (let j = 0; j < bucket.length; ++j) {
-            palettizedData[bucket[j]] = i
-        }
-    }
-
-    return [palette, palettizedData]
-}
-
-function chooseBucket(data: Color[], buckets: number[][]) {
-    const bucket = buckets.reduce((b1, b2) => calcBucketRange(data, b1) > calcBucketRange(data, b2) ? b1 : b2)
-    return bucket
-}
-
-function calcBucketRange(data: Color[], bucket: number[]): number {
-    const lx = bucket.reduce((min, i) => min < data[i][0] ? min : data[i][0], Infinity)
-    const rx = bucket.reduce((max, i) => max > data[i][0] ? max : data[i][0], 0)
-    const ly = bucket.reduce((min, i) => min < data[i][1] ? min : data[i][1], Infinity)
-    const ry = bucket.reduce((max, i) => max > data[i][1] ? max : data[i][1], 0)
-    const lz = bucket.reduce((min, i) => min < data[i][2] ? min : data[i][2], Infinity)
-    const rz = bucket.reduce((max, i) => max > data[i][2] ? max : data[i][2], 0)
-    const dx = rx - lx
-    const dy = ry - ly
-    const dz = rz - lz
-    const d = Math.max(dx, dy, dz)
-    return d
-}
-
-function splitBucket(data: Color[], bucket: number[]): number[] {
-    if (bucket.length <= 1) {
-        throw Error("Bucket must have at least two elements to split")
-    }
-
-    // determine component with max range in bucket
-    const lx = bucket.reduce((min, i) => min < data[i][0] ? min : data[i][0], Infinity)
-    const rx = bucket.reduce((max, i) => max > data[i][0] ? max : data[i][0], 0)
-    const ly = bucket.reduce((min, i) => min < data[i][1] ? min : data[i][1], Infinity)
-    const ry = bucket.reduce((max, i) => max > data[i][1] ? max : data[i][1], 0)
-    const lz = bucket.reduce((min, i) => min < data[i][2] ? min : data[i][2], Infinity)
-    const rz = bucket.reduce((max, i) => max > data[i][2] ? max : data[i][2], 0)
-    const dx = rx - lx
-    const dy = ry - ly
-    const dz = rz - lz
-    const d = Math.max(dx, dy, dz)
-
-    if (dx === d) {
-        bucket.sort((a, b) => data[a][0] - data[b][0])
-    } else if (dy === d) {
-        bucket.sort((a, b) => data[a][1] - data[b][1])
-    } else if (dz === d) {
-        bucket.sort((a, b) => data[a][2] - data[b][2])
-    }
-
-    // left half of array stays in bucket
-    // right half moves to new bucket
-    const medianIdx = Math.floor(bucket.length / 2)
-    const newBucket = bucket.splice(medianIdx, bucket.length - medianIdx)
-    return newBucket
-}
-
-function divXYZ(xyz: Color, s: number): Color {
-    const [x, y, z] = xyz
-    return [x / s, y / s, z / s]
-}
-
-function addXYZ(xyz1: Color, xyz2: Color): Color {
-    return [xyz1[0] + xyz2[0], xyz1[1] + xyz2[1], xyz1[2] + xyz2[2]]
-}
-
-function findRegions(width: number, height: number, cells: Cell[]): Region[] {
-    let region = 0
-    for (let y = 0; y < height; ++y) {
-        let yOffset = y * width
-        for (let x = 0; x < width; ++x) {
-            let xOffset = yOffset + x
-            const cell = cells[xOffset]
-            if (cell.region != -1) {
-                continue
-            }
-
-            cell.region = region
-            scanRegion(width, height, x, y, cells)
-            ++region
-        }
-    }
-
-    const regions: Region[] = []
-    for (let i = 0; i < region; ++i) {
-        regions.push({
-            pixels: 0,
-            centroidX: 0,
-            centroidY: 0,
-            color: -1,
-            minX: Infinity,
-            maxX: -1,
-            minY: Infinity,
-            maxY: -1,
-            width: 0,
-            height: 0,
-            leaveColored: false
-        })
-    }
-
-    for (let y = 0; y < height; ++y) {
-        let yOffset = y * width
-        for (let x = 0; x < width; ++x) {
-            let xOffset = yOffset + x
-            const cell = cells[xOffset]
-            const region = regions[cell.region]
-            region.pixels++
-            region.centroidX += x
-            region.centroidY += y
-            region.color = cell.color
-            region.minX = Math.min(x, region.minX)
-            region.minY = Math.min(y, region.minY)
-            region.maxX = Math.max(x, region.maxX)
-            region.maxY = Math.max(y, region.maxY)
-        }
-    }
-
-    for (const region of regions) {
-        region.centroidX /= region.pixels
-        region.centroidY /= region.pixels
-        region.width = region.maxX - region.minX
-        region.height = region.maxY - region.minY
-    }
-
-    for (const region of regions) {
-        region.leaveColored = region.width < 32 || region.height < 32 || region.pixels < 512
-    }
-
-    return regions
-}
-
-function findBorders(width: number, height: number, cells: Cell[]) {
-    // color borders
-    for (let y = 0; y < height; ++y) {
-        let yOffset = y * width
-        for (let x = 0; x < width; ++x) {
-            let xOffset = yOffset + x
-            const cell = cells[xOffset]
-            const l = x - 1
-            const r = x + 1
-            const t = y - 1
-            const b = y + 1
-
-            // edge cells are border
-            if (l < 0 || r >= width || t < 0 || b >= height) {
-                cell.border = true
-                continue
-            }
-
-            if (cells[xOffset - 1].region != cell.region) {
-                cell.border = true
-            }
-
-            if (cells[xOffset + 1].region != cell.region) {
-                cell.border = true
-            }
-
-            if (cells[xOffset - width].region != cell.region) {
-                cell.border = true
-            }
-
-            if (cells[xOffset + width].region != cell.region) {
-                cell.border = true
-            }
-        }
-    }
-}
-
-function scanRegion(width: number, height: number, x0: number, y0: number, cells: Cell[]) {
+function exploreRegion(width: number, height: number, paletteOverlay: number[], x0: number, y0: number, regionOverlay: RegionOverlay) {
     const stack: number[] = []
+    const offset0 = y0 * width + x0
+    const region = regionOverlay[offset0]
+    if (!region) {
+        return
+    }
+
+    const color = region.color
+
     stack.push(x0)
     stack.push(y0)
-
-    const offset0 = y0 * width + x0
-    const cell0 = cells[offset0]
-    const region0 = cell0.region
-    const color0 = cell0.color
 
     while (stack.length > 0) {
         const y = stack.pop() as number
         const x = stack.pop() as number
         const offset = y * width + x
-        const cell = cells[offset]
-        cell.region = region0
+        regionOverlay[offset] = region
+        region.pixels++
 
         // explore neighbors (if same color)
         const l = x - 1
@@ -520,32 +383,40 @@ function scanRegion(width: number, height: number, x0: number, y0: number, cells
         const b = y + 1
 
         if (l >= 0) {
-            const cell1 = cells[offset - 1]
-            if (cell1.region == -1 && cell1.color == color0) {
+            const offset1 = offset - 1
+            const region1 = regionOverlay[offset1]
+            const color1 = paletteOverlay[offset1]
+            if (!region1 && color === color1) {
                 stack.push(l)
                 stack.push(y)
             }
         }
 
         if (r < width) {
-            const cell1 = cells[offset + 1]
-            if (cell1.region == -1 && cell1.color == color0) {
+            const offset1 = offset + 1
+            const region1 = regionOverlay[offset1]
+            const color1 = paletteOverlay[offset1]
+            if (!region1 && color === color1) {
                 stack.push(r)
                 stack.push(y)
             }
         }
 
         if (t >= 0) {
-            const cell1 = cells[offset - width]
-            if (cell1.region == -1 && cell1.color == color0) {
+            const offset1 = offset - width
+            const region1 = regionOverlay[offset1]
+            const color1 = paletteOverlay[offset1]
+            if (!region1 && color === color1) {
                 stack.push(x)
                 stack.push(t)
             }
         }
 
         if (b < height) {
-            const cell1 = cells[offset + width]
-            if (cell1.region == -1 && cell1.color == color0) {
+            const offset1 = offset + width
+            const region1 = regionOverlay[offset1]
+            const color1 = paletteOverlay[offset1]
+            if (!region1 && color === color1) {
                 stack.push(x)
                 stack.push(b)
             }
@@ -553,79 +424,131 @@ function scanRegion(width: number, height: number, x0: number, y0: number, cells
     }
 }
 
-// function linear(x: number) {
-//     if (x <= .04045) {
-//         return x / 12.92
-//     }
+function drawBorders(regionOverlay: RegionOverlay, imageData: ImageData) {
+    // color borders
+    const { width, height, data } = imageData
+    imaging.scanImageData(imageData, (x, y, offset) => {
+        const region = regionOverlay[offset]
+        if (!region) {
+            return
+        }
 
-//     return Math.pow(((x + .055) / 1.055), 2.4)
-// }
+        const l = x - 1
+        const r = x + 1
+        const t = y - 1
+        const b = y + 1
 
-function imageData2RGBArray(data: Uint8ClampedArray): Color[] {
-    const result: Color[] = []
-    for (let i = 0; i < data.length; i += 4) {
-        result.push([data[i], data[i + 1], data[i + 2]])
-    }
+        // edge cells are not border (for now)
+        if (l < 0 || r >= width || t < 0 || b >= height) {
+            return
+        }
 
-    return result
+        const lRegion = regionOverlay[offset - 1]
+        if (lRegion && lRegion !== region) {
+            data[offset * 4] = 0
+            data[offset * 4 + 1] = 0
+            data[offset * 4 + 2] = 0
+            regionOverlay[offset] = null
+        }
+
+        const rRegion = regionOverlay[offset + 1]
+        if (rRegion && rRegion !== region) {
+            data[offset * 4] = 0
+            data[offset * 4 + 1] = 0
+            data[offset * 4 + 2] = 0
+            regionOverlay[offset] = null
+        }
+
+        const tRegion = regionOverlay[offset - width]
+        if (tRegion && tRegion !== region) {
+            data[offset * 4] = 0
+            data[offset * 4 + 1] = 0
+            data[offset * 4 + 2] = 0
+            regionOverlay[offset] = null
+        }
+
+        const bRegion = regionOverlay[offset + width]
+        if (bRegion && bRegion !== region) {
+            data[offset * 4] = 0
+            data[offset * 4 + 1] = 0
+            data[offset * 4 + 2] = 0
+            regionOverlay[offset] = null
+        }
+    })
 }
 
-function createPaletteUi(palette: Color[]) {
+function fillInterior(data: Uint8ClampedArray, regionOverlay: RegionOverlay) {
+    for (let i = 0; i < regionOverlay.length; ++i) {
+        const region = regionOverlay[i]
+        if (!region) {
+            continue
+        }
+
+        data[i * 4] = 255
+        data[i * 4 + 1] = 255
+        data[i * 4 + 2] = 255
+    }
+}
+
+function createPaletteUi(palette: imaging.Color[]) {
     util.removeAllChildren(paletteDiv)
     for (let i = 0; i < palette.length; ++i) {
         const color = palette[i]
-        const lum = calcLuminance(color)
+        const lum = imaging.calcLuminance(color)
         const fragment = paletteEntryTemplate.content.cloneNode(true) as DocumentFragment
         const entryDiv = util.bySelector(fragment, ".palette-entry") as HTMLElement
-        entryDiv.textContent = i.toString()
+        entryDiv.textContent = `${i + 1}`
         entryDiv.style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`
         entryDiv.style.color = lum < .5 ? "white" : "black"
         paletteDiv.appendChild(fragment)
     }
 }
 
-function calcLuminance(color: Color) {
-    const [r, g, b] = color
-    const l = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255)
-    return l
-}
-
-function drawRegionLabels(ctx: CanvasRenderingContext2D, regions: Region[]) {
-    const height = ctx.measureText("M").width
+function drawRegionLabels(ctx: CanvasRenderingContext2D, width: number, height: number, regionOverlay: number[], paletteOverlay: number[]) {
+    const textHeight = ctx.measureText("M").width
     const font = ctx.font
     ctx.font = "16px arial bold"
 
-    for (const region of regions) {
-        if (region.leaveColored) {
-            continue
-        }
-
-        const label = `${region.color + 1}`
+    const infos = calcRegionDrawInfos(width, height, regionOverlay, paletteOverlay)
+    for (const info of infos) {
+        const label = `${info.color + 1}`
         const metrics = ctx.measureText(label)
-        const x = region.centroidX - metrics.width / 2
-        const y = region.centroidY - height / 2
+        const centroid = info.centroid
+        const x = centroid[0] - metrics.width / 2
+        const y = centroid[1] - textHeight / 2
         ctx.fillText(label, x, y)
     }
 
     ctx.font = font
 }
 
-// function rgb2xyz(rgb: Color): Color {
-//     let [r, b, g] = rgb
-//     r /= 255.0
-//     g /= 255.0
-//     b /= 255.0
+function calcRegionDrawInfos(width: number, height: number, regionOverlay: number[], paletteOverlay: number[]): RegionDrawInfo[] {
+    const numRegions = regionOverlay.reduce((a, b) => a > b ? a : b) + 1
+    const infos = util.generate(numRegions, () => ({
+        centroid: [0, 0],
+        pixels: 0,
+        color: 0
+    }))
 
-//     const x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375
-//     const y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750
-//     const z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041
-//     return [x, y, z]
-// }
+    imaging.scan(width, height, (x, y, offset) => {
+        const region = regionOverlay[offset]
+        if (region == -1) {
+            return
+        }
 
-// function xyz2rgb(xyz: Color): Color {
-//     const [x, y, z] = xyz
-//     const r = (x * 3.2404542 + y * -1.5371385 + z * -0.4985314) * 255
-//     const g = (x * -0.9692660 + y * 1.8760108 + z * 0.0415560) * 255
-//     const b = (x * 0.0556434 + y * -0.2040259 + z * 1.0572252) * 255
-//     return [r, g, b]
-// }
+        const info = infos[regionOverlay[offset]]
+        info.centroid[0] += x
+        info.centroid[1] += y
+        info.color = paletteOverlay[offset]
+        info.pixels++
+    })
+
+    const drawInfos: RegionDrawInfo[] = infos
+        .filter(i => i.pixels > 0)
+        .map(info => ({
+            color: info.color,
+            centroid: [info.centroid[0] / info.pixels, info.centroid[1] / info.pixels]
+        }))
+
+    return drawInfos
+}

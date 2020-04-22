@@ -1,4 +1,4 @@
-import * as util from "../util.js"
+import * as util from "../shared/util.js"
 import * as glu from "./glu.js"
 
 const vertexSrc = `#version 300 es

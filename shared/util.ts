@@ -125,7 +125,7 @@ export function getElementIndex(elem: Element): number {
 }
 
 // try the specified function, return either the result or an error if an exception occured
-export function tryf<T>(f: () => T) : T | Error {
+export function tryf<T>(f: () => T): T | Error {
     try {
         return f()
     }
@@ -136,4 +136,75 @@ export function tryf<T>(f: () => T) : T | Error {
 
         return Error(x.toString())
     }
+}
+
+/**
+ * returns an array of the form [start..end) where end = start + length - 1
+ * @param start start number or length if only one argument is provided
+ * @param length length of array
+ */
+export function sequence(start: number, length = -1): number[] {
+    if (length === -1) {
+        length = start
+        start = 0
+    }
+
+    const a: number[] = []
+    for (let i = 0; i < length; ++i) {
+        a.push(i + start)
+    }
+
+    return a
+}
+
+/**
+ * generate an array given it's length and a function to call for each index
+ * @param length length of array
+ * @param f function to call with each index
+ */
+export function generate<T>(length: number, f: (i: number) => T) {
+    const a: T[] = []
+    for (let i = 0; i < length; ++i) {
+        a.push(f(i))
+    }
+
+    return a
+}
+
+/**
+ * returns an array of the specified length filled with the specified value
+ * @param value value to fill array with
+ * @param length length of array
+ */
+export function fill<T>(value: T, length: number): T[] {
+    const a: T[] = []
+    for (let i = 0; i < length; ++i) {
+        a.push(value)
+    }
+
+    return a
+}
+
+/**
+ * Load an image from the specified url
+ * Returns a promise that resolves when the image is loaded
+ * @param url url to load image from
+ */
+export function loadImage(url: string): Promise<HTMLImageElement> {
+    const promise = new Promise<HTMLImageElement>(resolve => {
+        const img = new Image()
+        img.addEventListener("load", () => resolve(img))
+        img.src = url
+    })
+
+    return promise
+}
+
+export function bench(name: string, f: () => void) {
+    const startTime = performance.now()
+    // console.log(`${startTime}: start ${name} ms`)
+    f()
+    const endTime = performance.now()
+    // console.log(`${endTime}: end ${name} ms`)
+    console.log(`${name} elapsed ${endTime - startTime} ms`)
 }
