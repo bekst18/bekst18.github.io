@@ -91,7 +91,7 @@ async function init() {
     stopCameraButton.addEventListener("click", stopCamera)
     captureImageButton.addEventListener("click", captureImage)
     returnButton.addEventListener("click", showLoadUi)
-    // loadFromUrl("peppa1.png")
+    loadFromUrl("peppa1.png")
 }
 
 function onDragEnterOver(ev: DragEvent) {
@@ -255,7 +255,6 @@ function processImage() {
     // convert to xyz colors and palettize data
     const [palette, paletteOverlay] = palettize(imageData, 3, 8)
     imaging.applyPalette(palette, paletteOverlay, imageData)
-    
     let [regions, regionOverlay] = createRegionOverlay(width, height, paletteOverlay)
     regions = pruneRegions(width, height, regions, regionOverlay)
     drawBorders(regionOverlay, imageData)
@@ -273,7 +272,7 @@ function palettize(imageData: ImageData, bucketsPerComponent: number, maxColors:
     const numBuckets = bucketPitch * bucketsPerComponent
 
     // creat intial buckets
-    const buckets = util.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
+    let buckets = util.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
 
     // assign and update bucket for each pixel
     const bucketOverlay = util.generate(pixels, i => {
@@ -281,6 +280,7 @@ function palettize(imageData: ImageData, bucketsPerComponent: number, maxColors:
         const g = data[i * 4 + 1] / 255
         const b = data[i * 4 + 2] / 255
 
+        // ignore white
         if (r >= .95 && g >= .95 && b >= .95) {
             return null
         }
@@ -296,35 +296,67 @@ function palettize(imageData: ImageData, bucketsPerComponent: number, maxColors:
         return bucket
     })
 
+    // prune empty buckets
+    buckets = buckets.filter(b => b.pixels > 0)
+
     // calculate bucket colors
     for (const bucket of buckets) {
         bucket.color = imaging.divXYZ(bucket.color, bucket.pixels)
     }
 
-    const topBuckets = buckets
+    // combine buckets that are very close in color after color averaging
+    let bucketSet = new Set(buckets)
+    while (bucketSet.size > 1) {
+        // proceed for as long as buckets can be combined
+        let merge = false
+        for (const bucket of bucketSet) {
+            // find "nearest" color
+            const nearest = [...bucketSet]
+                .filter(b => b != bucket)
+                .reduce((b1, b2) => imaging.calcDistSq(bucket.color, b1.color) < imaging.calcDistSq(bucket.color, b2.color) ? b1 : b2)
+
+            const distSq = imaging.calcDistSq(bucket.color, nearest.color)
+            if (distSq > .1) {
+                continue
+            }
+
+            // merge the buckets
+            bucket.color = imaging.divXYZ(
+                imaging.addXYZ(imaging.mulXYZ(bucket.color, bucket.pixels), imaging.mulXYZ(nearest.color, nearest.pixels)),
+                bucket.pixels + nearest.pixels)
+
+            bucketSet.delete(nearest)
+            merge = true
+        }
+
+        if (!merge) {
+            break
+        }
+    }
+
+    buckets = [...bucketSet]
         .sort((b1, b2) => b2.pixels - b1.pixels)
         .slice(0, maxColors)
 
-    const bucketSet = new Set(topBuckets)
-
     // map all colors to top N buckets
     for (let i = 0; i < bucketOverlay.length; ++i) {
-        let bucket = bucketOverlay[i]
-        if (!bucket || bucketSet.has(bucket)) {
+        // otherwise, map to new bucket
+        const r = data[i * 4] / 255
+        const g = data[i * 4 + 1] / 255
+        const b = data[i * 4 + 2] / 255
+
+        if (r >= .95 && g >= .95 && b >= .95) {
+            bucketOverlay[i] = null
             continue
         }
 
-        // otherwise, map to new bucket
-        const r = data[i * 4] / 255
-        const g = data[i * 4] / 255
-        const b = data[i * 4] / 255
         const color: [number, number, number] = [r, g, b]
-        bucket = topBuckets.reduce((b1, b2) => imaging.calcDistSq(b1.color, color) < imaging.calcDistSq(b2.color, color) ? b1 : b2)
+        const bucket = buckets.reduce((b1, b2) => imaging.calcDistSq(b1.color, color) < imaging.calcDistSq(b2.color, color) ? b1 : b2)
         bucketOverlay[i] = bucket
     }
 
     // determine palette colors
-    const palette = topBuckets.map(b => imaging.mulXYZ(b.color, 255))
+    const palette = buckets.map(b => imaging.mulXYZ(b.color, 255))
     const paletteOverlay = bucketOverlay.map(b => b ? buckets.indexOf(b) : -1)
     return [palette, paletteOverlay]
 }
