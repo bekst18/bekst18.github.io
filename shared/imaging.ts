@@ -222,11 +222,6 @@ export function scanImageData(imageData: ImageData, f: (x: number, y: number, of
     scan(width, height, f)
 }
 
-export function scanImageDataRegion(imageData: ImageData, x0: number, y0: number, f: (x: number, y: number, offset: number) => void): void {
-    const { width, height } = imageData
-    scanRegion(width, height, x0, y0, f)
-}
-
 export function scan(width: number, height: number, f: (x: number, y: number, offset: number) => void): void {
     for (let y = 0; y < height; ++y) {
         const yOffset = y * width
@@ -237,31 +232,30 @@ export function scan(width: number, height: number, f: (x: number, y: number, of
     }
 }
 
-export function scanRegion(x0: number, y0: number, width: number, height: number, f: (x: number, y: number, offset: number) => void): void {
-    const r = x0 + width
-    const b = y0 + height
-
-    for (let y = y0; y < b; ++y) {
-        const yOffset = y * width
-        for (let x = x0; x < r; ++x) {
+export function scanRegion(x0: number, y0: number, width: number, height: number, rowPitch: number, f: (x: number, y: number, offset: number) => void): void {
+    const x1 = x0 + width
+    const y1 = y0 + height
+    for (let y = y0; y < y1; ++y) {
+        const yOffset = y * rowPitch
+        for (let x = x0; x < x1; ++x) {
             const xOffset = yOffset + x
             f(x, y, xOffset)
         }
     }
 }
 
-export function scanRows(width: number, height: number, f: (y: number, offset: number) => void): void {
+export function scanRows(width: number, height: number, f: (y: number, offset: number) => void) {
     for (let y = 0; y < height; ++y) {
-        const yOffset = y * width
-        f(y, yOffset)
+        const offset = y * width
+        f(y, offset)
     }
 }
 
-export function scanRowsRegion(x0: number, y0: number, width: number, height: number, f: (y: number, offset: number) => void): void {
-    const b = y0 + height
-    for (let y = y0; y < b; ++y) {
-        const yOffset = y * width + x0
-        f(y, yOffset)
+export function scanRowsRegion(y0: number, height: number, rowPitch: number, f: (y: number, offset: number) => void) {
+    const y1 = y0 + height
+    for (let y = 0; y < y1; ++y) {
+        const offset = y * rowPitch
+        f(y, offset)
     }
 }
 

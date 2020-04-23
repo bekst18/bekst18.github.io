@@ -7,11 +7,6 @@ enum CameraMode {
     Environment,
 }
 
-interface RegionDrawInfo {
-    color: number
-    centroid: [number, number]
-}
-
 interface Bounds {
     minX: number
     maxX: number
@@ -19,10 +14,30 @@ interface Bounds {
     maxY: number
 }
 
+function calcWidth(bounds: Bounds): number {
+    return bounds.maxX - bounds.minX + 1
+}
+
+function calcHeight(bounds: Bounds): number {
+    return bounds.maxY - bounds.minY + 1
+}
+
+function calcArea(bounds: Bounds): number {
+    return calcWidth(bounds) * calcHeight(bounds)
+}
+
+function calcCenter(bounds: Bounds): [number, number] {
+    return [
+        bounds.minX + calcWidth(bounds) / 2,
+        bounds.minY + calcHeight(bounds) / 2
+    ]
+}
+
 interface Region {
     color: number
     pixels: number
     bounds: Bounds
+    maxRect: Bounds
 }
 
 type RegionOverlay = (Region | null)[]
@@ -244,16 +259,13 @@ function processImage() {
     // const [palette, paletteOverlay] = palettizeMedianCut(imageData, 8)
     imaging.applyPalette(palette, paletteOverlay, imageData)
 
-    const [regions, regionOverlay] = createRegionOverlay(width, height, paletteOverlay)
-    pruneRegions(width, height, regions, regionOverlay)
-
+    let [regions, regionOverlay] = createRegionOverlay(width, height, paletteOverlay)
+    regions = pruneRegions(width, height, regions, regionOverlay)
     drawBorders(regionOverlay, imageData)
     fillInterior(imageData.data, regionOverlay)
     ctx.putImageData(imageData, 0, 0)
     createPaletteUi(palette)
-
-    ctx.putImageData(imageData, 0, 0)
-    // drawRegionLabels(ctx, width, height, regionOverlay, paletteOverlay)
+    drawRegionLabels(ctx, regions)
 }
 
 function createRegionOverlay(width: number, height: number, paletteOverlay: number[]): [Region[], RegionOverlay] {
@@ -294,15 +306,24 @@ function pruneRegions(width: number, height: number, regions: Region[], regionOv
         }
     }
 
-    regions = [...regionSet]
     calcRegionBounds(width, height, regionOverlay)
-
-    for (const region of regions) {
-        if (region.bounds.maxX - region.bounds.minX <= 16) {
+    for (const region of regionSet) {
+        if (calcWidth(region.bounds) <= 16) {
             regionSet.delete(region)
         }
 
-        if (region.bounds.maxY - region.bounds.minY <= 16) {
+        if (calcHeight(region.bounds) <= 16) {
+            regionSet.delete(region)
+        }
+    }
+
+    // calculate maximal rec for each region
+    for (const region of regionSet) {
+        region.maxRect = calcMaxRegionRect(width, region, regionOverlay)
+    }
+
+    for (const region of regionSet) {
+        if (calcArea(region.maxRect) < 64) {
             regionSet.delete(region)
         }
     }
@@ -337,23 +358,84 @@ function calcRegionBounds(width: number, height: number, regionOverlay: RegionOv
     })
 }
 
-// function calcMaxRegionRect(x: number, y: number, width: number, height: number, regionOverlay: number[]) {
-//     const numRegions = regionOverlay.reduce((a, b) => a > b ? a : b) + 1
+function calcMaxRegionRect(rowPitch: number, region: Region, regionOverlay: RegionOverlay): Bounds {
+    // derived from https://stackoverflow.com/questions/7245/puzzle-find-largest-rectangle-maximal-rectangle-problem
+    // algorithm needs to keep track of rectangle state for every column for every region
+    const { minX: x0, minY: y0, maxX: x1, maxY: y1 } = region.bounds
+    const width = x1 - x0 + 1
+    const height = y1 - y0 + 1
+    const ls = util.fill(x0, width)
+    const rs = util.fill(x0 + width, width)
+    const hs = util.fill(0, width)
 
-//     // algorithm needs to keep track of rectangle state for every column for every region
-//     const rowOverlay = util.generate(width, () => ({
-//         h: 0,
-//         l: 0,
-//         r: 0
-//     }))
+    let maxArea = 0
+    const bounds: Bounds = {
+        minX: Infinity,
+        maxX: -1,
+        minY: Infinity,
+        maxY: -1,
+    }
 
-//     scanRows(width, height, (y, offset) => {
-//         const overlay = rowOverlay[y]
-//         for (let x = 0; x < width; ++x) {
-//             const region = 
-//         }
-//     })
-// }
+    imaging.scanRowsRegion(y0, height, rowPitch, (y, yOffset) => {
+        let l = x0
+        let r = x0 + width
+
+        // height scan
+        for (let x = x0; x < x1; ++x) {
+            const i = x - x0
+            const offset = yOffset + x
+            const isRegion = regionOverlay[offset] === region
+
+            if (isRegion) {
+                hs[i] += 1
+            } else {
+                hs[i] = 0
+            }
+        }
+
+        // l scan
+        for (let x = x0; x < x1; ++x) {
+            const i = x - x0
+            const offset = yOffset + x
+            const isRegion = regionOverlay[offset] === region
+
+            if (isRegion) {
+                ls[i] = Math.max(ls[i], l)
+            } else {
+                ls[i] = 0
+                l = x + 1
+            }
+        }
+
+        // r scan
+        for (let x = x1 - 1; x >= 0; --x) {
+            const i = x - x0
+            const offset = yOffset + x
+            const isRegion = regionOverlay[offset] === region
+
+            if (isRegion) {
+                rs[i] = Math.min(rs[i], r)
+            } else {
+                rs[i] = x1
+                r = x
+            }
+        }
+
+        // area scan
+        for (let i = 0; i < width; ++i) {
+            const area = hs[i] * (rs[i] - ls[i])
+            if (area > maxArea) {
+                maxArea = area
+                bounds.minX = ls[i]
+                bounds.maxX = rs[i]
+                bounds.minY = y - hs[i]
+                bounds.maxY = y
+            }
+        }
+    })
+
+    return bounds
+}
 
 
 function exploreRegion(width: number, height: number, paletteOverlay: number[], x0: number, y0: number, regionOverlay: RegionOverlay) {
@@ -504,51 +586,21 @@ function createPaletteUi(palette: imaging.Color[]) {
     }
 }
 
-function drawRegionLabels(ctx: CanvasRenderingContext2D, width: number, height: number, regionOverlay: number[], paletteOverlay: number[]) {
+function drawRegionLabels(ctx: CanvasRenderingContext2D, regions: Region[]) {
+    console.log(regions)
+    ctx.font = "16px arial bold"
     const textHeight = ctx.measureText("M").width
     const font = ctx.font
-    ctx.font = "16px arial bold"
 
-    const infos = calcRegionDrawInfos(width, height, regionOverlay, paletteOverlay)
-    for (const info of infos) {
-        const label = `${info.color + 1}`
+    for (const region of regions) {
+        const label = `${region.color + 1}`
         const metrics = ctx.measureText(label)
-        const centroid = info.centroid
-        const x = centroid[0] - metrics.width / 2
-        const y = centroid[1] - textHeight / 2
+        const center = calcCenter(region.maxRect)
+        console.log(center)
+        const x = center[0] - metrics.width / 2
+        const y = center[1] + textHeight / 2
         ctx.fillText(label, x, y)
     }
 
     ctx.font = font
-}
-
-function calcRegionDrawInfos(width: number, height: number, regionOverlay: number[], paletteOverlay: number[]): RegionDrawInfo[] {
-    const numRegions = regionOverlay.reduce((a, b) => a > b ? a : b) + 1
-    const infos = util.generate(numRegions, () => ({
-        centroid: [0, 0],
-        pixels: 0,
-        color: 0
-    }))
-
-    imaging.scan(width, height, (x, y, offset) => {
-        const region = regionOverlay[offset]
-        if (region == -1) {
-            return
-        }
-
-        const info = infos[regionOverlay[offset]]
-        info.centroid[0] += x
-        info.centroid[1] += y
-        info.color = paletteOverlay[offset]
-        info.pixels++
-    })
-
-    const drawInfos: RegionDrawInfo[] = infos
-        .filter(i => i.pixels > 0)
-        .map(info => ({
-            color: info.color,
-            centroid: [info.centroid[0] / info.pixels, info.centroid[1] / info.pixels]
-        }))
-
-    return drawInfos
 }
