@@ -91,7 +91,6 @@ async function init() {
     stopCameraButton.addEventListener("click", stopCamera)
     captureImageButton.addEventListener("click", captureImage)
     returnButton.addEventListener("click", showLoadUi)
-    loadFromUrl("peppa1.png")
 }
 
 function onDragEnterOver(ev: DragEvent) {
