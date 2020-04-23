@@ -98,7 +98,13 @@ export function palettizeHistogram(imageData: ImageData, bucketsPerComponent: nu
 export function applyPalette(palette: Color[], palleteOverlay: number[], imageData: ImageData) {
     const data = imageData.data
     for (let i = 0; i < palleteOverlay.length; ++i) {
-        const color = palette[palleteOverlay[i]]
+        // ignore index of -1
+        const idx = palleteOverlay[i]
+        if (idx == -1) {
+            continue
+        }
+
+        const color = palette[idx]
         data[i * 4] = color[0]
         data[i * 4 + 1] = color[1]
         data[i * 4 + 2] = color[2]

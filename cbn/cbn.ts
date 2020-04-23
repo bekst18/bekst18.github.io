@@ -91,6 +91,7 @@ async function init() {
     stopCameraButton.addEventListener("click", stopCamera)
     captureImageButton.addEventListener("click", captureImage)
     returnButton.addEventListener("click", showLoadUi)
+    // loadFromUrl("peppa1.png")
 }
 
 function onDragEnterOver(ev: DragEvent) {
@@ -252,10 +253,9 @@ function processImage() {
     const { width, height } = imageData
 
     // convert to xyz colors and palettize data
-    const [palette, paletteOverlay] = imaging.palettizeHistogram(imageData, 3, 8)
-    // const [palette, paletteOverlay] = imaging.palettizeMedianCut(imageData, 8)
+    const [palette, paletteOverlay] = palettize(imageData, 3, 8)
     imaging.applyPalette(palette, paletteOverlay, imageData)
-
+    
     let [regions, regionOverlay] = createRegionOverlay(width, height, paletteOverlay)
     regions = pruneRegions(width, height, regions, regionOverlay)
     drawBorders(regionOverlay, imageData)
@@ -263,6 +263,70 @@ function processImage() {
     ctx.putImageData(imageData, 0, 0)
     createPaletteUi(palette)
     drawRegionLabels(ctx, regions)
+}
+
+// specialized to ignore white
+function palettize(imageData: ImageData, bucketsPerComponent: number, maxColors: number): [imaging.Color[], number[]] {
+    const { width, height, data } = imageData
+    const pixels = width * height
+    const bucketPitch = bucketsPerComponent * bucketsPerComponent
+    const numBuckets = bucketPitch * bucketsPerComponent
+
+    // creat intial buckets
+    const buckets = util.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
+
+    // assign and update bucket for each pixel
+    const bucketOverlay = util.generate(pixels, i => {
+        const r = data[i * 4] / 255
+        const g = data[i * 4 + 1] / 255
+        const b = data[i * 4 + 2] / 255
+
+        if (r >= .95 && g >= .95 && b >= .95) {
+            return null
+        }
+
+        const rb = Math.min(Math.floor(r * bucketsPerComponent), bucketsPerComponent - 1)
+        const gb = Math.min(Math.floor(g * bucketsPerComponent), bucketsPerComponent - 1)
+        const bb = Math.min(Math.floor(b * bucketsPerComponent), bucketsPerComponent - 1)
+
+        const bucketIdx = rb * bucketPitch + gb * bucketsPerComponent + bb
+        const bucket = buckets[bucketIdx]
+        bucket.color = imaging.addXYZ([r, g, b], bucket.color)
+        bucket.pixels++
+        return bucket
+    })
+
+    // calculate bucket colors
+    for (const bucket of buckets) {
+        bucket.color = imaging.divXYZ(bucket.color, bucket.pixels)
+    }
+
+    const topBuckets = buckets
+        .sort((b1, b2) => b2.pixels - b1.pixels)
+        .slice(0, maxColors)
+
+    const bucketSet = new Set(topBuckets)
+
+    // map all colors to top N buckets
+    for (let i = 0; i < bucketOverlay.length; ++i) {
+        let bucket = bucketOverlay[i]
+        if (!bucket || bucketSet.has(bucket)) {
+            continue
+        }
+
+        // otherwise, map to new bucket
+        const r = data[i * 4] / 255
+        const g = data[i * 4] / 255
+        const b = data[i * 4] / 255
+        const color: [number, number, number] = [r, g, b]
+        bucket = topBuckets.reduce((b1, b2) => imaging.calcDistSq(b1.color, color) < imaging.calcDistSq(b2.color, color) ? b1 : b2)
+        bucketOverlay[i] = bucket
+    }
+
+    // determine palette colors
+    const palette = topBuckets.map(b => imaging.mulXYZ(b.color, 255))
+    const paletteOverlay = bucketOverlay.map(b => b ? buckets.indexOf(b) : -1)
+    return [palette, paletteOverlay]
 }
 
 function createRegionOverlay(width: number, height: number, paletteOverlay: number[]): [Region[], RegionOverlay] {
@@ -304,7 +368,7 @@ function pruneRegions(width: number, height: number, regions: Region[], regionOv
     const regionSet = new Set(regions)
 
     for (const region of regions) {
-        if (region.pixels <= 64) {
+        if (region.pixels <= 32) {
             regionSet.delete(region)
         }
     }
@@ -326,7 +390,7 @@ function pruneRegions(width: number, height: number, regions: Region[], regionOv
     }
 
     for (const region of regionSet) {
-        if (calcArea(region.maxRect) < 64) {
+        if (calcArea(region.maxRect) < 32) {
             regionSet.delete(region)
         }
     }
@@ -439,7 +503,6 @@ function calcMaxRegionRect(rowPitch: number, region: Region, regionOverlay: Regi
 
     return bounds
 }
-
 
 function exploreRegion(width: number, height: number, paletteOverlay: number[], x0: number, y0: number, regionOverlay: RegionOverlay) {
     const stack: number[] = []
@@ -595,6 +658,10 @@ function drawRegionLabels(ctx: CanvasRenderingContext2D, regions: Region[]) {
     const font = ctx.font
 
     for (const region of regions) {
+        if (region.color === -1) {
+            continue
+        }
+
         const label = `${region.color + 1}`
         const metrics = ctx.measureText(label)
         const center = calcCenter(region.maxRect)
