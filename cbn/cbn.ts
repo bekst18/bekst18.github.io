@@ -91,9 +91,6 @@ async function init() {
     stopCameraButton.addEventListener("click", stopCamera)
     captureImageButton.addEventListener("click", captureImage)
     returnButton.addEventListener("click", showLoadUi)
-
-    // TODO: temporary for testing purposes - remove this
-    loadFromUrl("mario.jpg")
 }
 
 function onDragEnterOver(ev: DragEvent) {
