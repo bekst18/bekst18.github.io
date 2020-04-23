@@ -593,7 +593,6 @@ function createPaletteUi(palette: imaging.Color[]) {
 }
 
 function drawRegionLabels(ctx: CanvasRenderingContext2D, regions: Region[]) {
-    console.log(regions)
     ctx.font = "16px arial bold"
     const textHeight = ctx.measureText("M").width
     const font = ctx.font
@@ -602,7 +601,6 @@ function drawRegionLabels(ctx: CanvasRenderingContext2D, regions: Region[]) {
         const label = `${region.color + 1}`
         const metrics = ctx.measureText(label)
         const center = calcCenter(region.maxRect)
-        console.log(center)
         const x = center[0] - metrics.width / 2
         const y = center[1] + textHeight / 2
         ctx.fillText(label, x, y)
