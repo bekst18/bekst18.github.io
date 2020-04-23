@@ -256,7 +256,7 @@ function processImage() {
 
     // convert to xyz colors and palettize data
     const [palette, paletteOverlay] = imaging.palettizeHistogram(imageData, 3, 8)
-    // const [palette, paletteOverlay] = palettizeMedianCut(imageData, 8)
+    // const [palette, paletteOverlay] = imaging.palettizeMedianCut(imageData, 8)
     imaging.applyPalette(palette, paletteOverlay, imageData)
 
     let [regions, regionOverlay] = createRegionOverlay(width, height, paletteOverlay)
@@ -281,6 +281,12 @@ function createRegionOverlay(width: number, height: number, paletteOverlay: numb
             color: paletteOverlay[offset],
             pixels: 0,
             bounds: {
+                minX: Infinity,
+                maxX: -1,
+                minY: Infinity,
+                maxY: -1
+            },
+            maxRect: {
                 minX: Infinity,
                 maxX: -1,
                 minY: Infinity,
