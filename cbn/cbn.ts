@@ -255,6 +255,7 @@ function processImage() {
     // convert to xyz colors and palettize data
     const [palette, paletteOverlay] = palettize(imageData, 3, 8)
     imaging.applyPalette(palette, paletteOverlay, imageData)
+    
     let [regions, regionOverlay] = createRegionOverlay(width, height, paletteOverlay)
     regions = pruneRegions(width, height, regions, regionOverlay)
     drawBorders(regionOverlay, imageData)
