@@ -254,7 +254,7 @@ function processImage() {
     // convert to xyz colors and palettize data
     const [palette, paletteOverlay] = palettize(imageData, 3, 8)
     imaging.applyPalette(palette, paletteOverlay, imageData)
-    
+
     let [regions, regionOverlay] = createRegionOverlay(width, height, paletteOverlay)
     regions = pruneRegions(width, height, regions, regionOverlay)
     drawBorders(regionOverlay, imageData)
@@ -507,7 +507,7 @@ function calcMaxRegionRect(rowPitch: number, region: Region, regionOverlay: Regi
         }
 
         // r scan
-        for (let x = x1 - 1; x >= 0; --x) {
+        for (let x = x1 - 1; x >= x0; --x) {
             const i = x - x0
             const offset = yOffset + x
             const isRegion = regionOverlay[offset] === region

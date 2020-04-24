@@ -46,7 +46,6 @@ void main() {
 
 const canvas = util.byId("canvas") as HTMLCanvasElement
 const errorsDiv = util.byId("errors");
-const acquireImage = util.byId("acquireImage") as HTMLButtonElement
 
 init()
 
@@ -73,7 +72,6 @@ function init() {
 
     canvas.addEventListener("keydown", (ev) => handleKeyDown(ev, gs.keyState))
     canvas.addEventListener("keyup", (ev) => handleKeyUp(ev, gs.keyState))
-    acquireImage.addEventListener("click", handleAcquireImageClick)
 
     requestAnimationFrame(() => {
         tick(gs)
@@ -205,8 +203,4 @@ function handleKeyDown(ev: KeyboardEvent, keyState: Record<string, boolean>) {
 
 function handleKeyUp(ev: KeyboardEvent, keyState: Record<string, boolean>) {
     keyState[ev.key] = false
-}
-
-function handleAcquireImageClick() {
-    navigator.mediaDevices.getUserMedia({video: true})
 }
