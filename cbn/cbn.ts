@@ -398,20 +398,23 @@ function createRegionOverlay(width: number, height: number, paletteOverlay: numb
 
 function pruneRegions(width: number, height: number, regions: Region[], regionOverlay: RegionOverlay): Region[] {
     const regionSet = new Set(regions)
+    const minRegionWidth = 10
+    const minRegionHeight = 10
+    const minRegionPixels = minRegionWidth * minRegionHeight
 
     for (const region of regions) {
-        if (region.pixels <= 32) {
+        if (region.pixels <= minRegionPixels) {
             regionSet.delete(region)
         }
     }
 
     calcRegionBounds(width, height, regionOverlay)
     for (const region of regionSet) {
-        if (calcWidth(region.bounds) <= 16) {
+        if (calcWidth(region.bounds) <= minRegionWidth) {
             regionSet.delete(region)
         }
 
-        if (calcHeight(region.bounds) <= 16) {
+        if (calcHeight(region.bounds) <= minRegionHeight) {
             regionSet.delete(region)
         }
     }
@@ -422,12 +425,12 @@ function pruneRegions(width: number, height: number, regions: Region[], regionOv
     }
 
     for (const region of regionSet) {
-        if (calcWidth(region.maxRect) < 12) {
+        if (calcWidth(region.maxRect) < minRegionWidth) {
             regionSet.delete(region)
             continue
         }
 
-        if (calcHeight(region.maxRect) < 12) {
+        if (calcHeight(region.maxRect) < minRegionHeight) {
             regionSet.delete(region)
             continue
         }
