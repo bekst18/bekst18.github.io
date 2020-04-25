@@ -422,8 +422,14 @@ function pruneRegions(width: number, height: number, regions: Region[], regionOv
     }
 
     for (const region of regionSet) {
-        if (calcArea(region.maxRect) < 32) {
+        if (calcWidth(region.maxRect) < 12) {
             regionSet.delete(region)
+            continue
+        }
+
+        if (calcHeight(region.maxRect) < 12) {
+            regionSet.delete(region)
+            continue
         }
     }
 
