@@ -227,7 +227,7 @@ function captureImage() {
         return
     }
 
-    showPlayUi(camera, camera.videoWidth, camera.videoHeight);
+    playState = showPlayUi(camera, camera.videoWidth, camera.videoHeight);
 }
 
 function showPlayUi(img: CanvasImageSource, width: number, height: number): PlayState {
@@ -252,6 +252,7 @@ function showPlayUi(img: CanvasImageSource, width: number, height: number): Play
 }
 
 function showLoadUi() {
+    playState = null
     loadUi.hidden = false
     playUi.hidden = true
 }
@@ -799,7 +800,6 @@ function onCanvasClick(evt: MouseEvent) {
 
     // if all regions are filled, replace with original image data
     if (regions.every(r => r.filled || r.color === -1)) {
-        console.log("Coloring complete!")
         ctx.putImageData(playState.imageData, 0, 0)
     }
 }
