@@ -306,3 +306,7 @@ export function calcLuminance(color: Color) {
     const l = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255)
     return l
 }
+
+export function copyImageData(imageData: ImageData): ImageData {
+    return new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height)
+}

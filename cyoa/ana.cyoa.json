@@ -1,6 +1,6 @@
 {
     "$schema": "./cyoa.schema.json",
-    "title": "Test Adventure",
+    "title": "A walk in the woods",
     "description": "First CYOA Pilot Module",
     "passages": {
         "intro": {

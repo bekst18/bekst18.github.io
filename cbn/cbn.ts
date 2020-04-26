@@ -38,9 +38,17 @@ interface Region {
     pixels: number
     bounds: Bounds
     maxRect: Bounds
+    filled: boolean
 }
 
 type RegionOverlay = (Region | null)[]
+
+interface PlayState {
+    imageData: ImageData
+    palette: imaging.Color[]
+    regions: Region[]
+    regionOverlay: RegionOverlay
+}
 
 const camera = util.byId("camera") as HTMLVideoElement
 let cameraMode = CameraMode.None
@@ -57,6 +65,8 @@ if (!ctx) {
 const captureImageButton = util.byId("captureImageButton") as HTMLButtonElement
 const loadUi = util.byId("loadUi") as HTMLDivElement
 const playUi = util.byId("playUi") as HTMLDivElement
+
+let playState: PlayState | null = null
 
 init()
 
@@ -91,6 +101,7 @@ async function init() {
     stopCameraButton.addEventListener("click", stopCamera)
     captureImageButton.addEventListener("click", captureImage)
     returnButton.addEventListener("click", showLoadUi)
+    canvas.addEventListener("click", onCanvasClick)
 }
 
 function onDragEnterOver(ev: DragEvent) {
@@ -120,7 +131,7 @@ function loadFromUrl(url: string) {
     clearErrorMessages()
     const img = new Image()
     img.addEventListener("load", () => {
-        showPlayUi(img, img.width, img.height)
+        playState = showPlayUi(img, img.width, img.height)
     })
 
     img.src = url
@@ -132,7 +143,6 @@ function clearErrorMessages() {
 }
 
 function appendErrorMessage(error: string) {
-    console.log(error)
     const errorsDiv = util.byId("errors");
     const div = document.createElement("div");
     div.classList.add("error-message")
@@ -184,7 +194,6 @@ async function flipCamera() {
 }
 
 function onCameraLoad() {
-    console.log(camera.clientWidth, camera.clientHeight, camera.width, camera.height, camera.videoWidth, camera.videoHeight)
     acquireImageDiv.hidden = false
     camera.play()
 
@@ -221,7 +230,7 @@ function captureImage() {
     showPlayUi(camera, camera.videoWidth, camera.videoHeight);
 }
 
-function showPlayUi(img: CanvasImageSource, width: number, height: number) {
+function showPlayUi(img: CanvasImageSource, width: number, height: number): PlayState {
     // maintain aspect ratio!
     const vw = document.documentElement.clientWidth
     const vh = document.documentElement.clientHeight
@@ -238,7 +247,8 @@ function showPlayUi(img: CanvasImageSource, width: number, height: number) {
     playUi.hidden = false
 
     ctx.drawImage(img, 0, 0, canvas.clientWidth, canvas.clientHeight)
-    processImage()
+    const playState = processImage()
+    return playState
 }
 
 function showLoadUi() {
@@ -246,9 +256,10 @@ function showLoadUi() {
     playUi.hidden = true
 }
 
-function processImage() {
+function processImage(): PlayState {
     // get (flat) image data from canvas
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    const initialImageData = imaging.copyImageData(imageData)
     const { width, height } = imageData
 
     // convert to xyz colors and palettize data
@@ -267,6 +278,13 @@ function processImage() {
     ctx.putImageData(imageData, 0, 0)
     createPaletteUi(palette)
     drawRegionLabels(ctx, regions)
+
+    return {
+        imageData: initialImageData,
+        palette: palette,
+        regions: regions,
+        regionOverlay: regionOverlay
+    }
 }
 
 // specialized to ignore white
@@ -389,7 +407,8 @@ function createRegionOverlay(width: number, height: number, paletteOverlay: numb
                 maxX: -1,
                 minY: Infinity,
                 maxY: -1
-            }
+            },
+            filled: false
         }
 
         regionOverlay[offset] = region
@@ -403,8 +422,8 @@ function createRegionOverlay(width: number, height: number, paletteOverlay: numb
 
 function pruneRegions(width: number, height: number, regions: Region[], regionOverlay: RegionOverlay): Region[] {
     const regionSet = new Set(regions)
-    const minRegionWidth = 6
-    const minRegionHeight = 6
+    const minRegionWidth = 10
+    const minRegionHeight = 10
     const minRegionPixels = minRegionWidth * minRegionHeight
 
     for (const region of regions) {
@@ -740,4 +759,47 @@ function drawRegionLabels(ctx: CanvasRenderingContext2D, regions: Region[]) {
     }
 
     ctx.font = font
+}
+
+function onCanvasClick(evt: MouseEvent) {
+    if (!playState) {
+        return
+    }
+
+    const { palette, regions, regionOverlay } = playState
+    const idx = evt.offsetY * ctx.canvas.width + evt.offsetX
+    const region = regionOverlay[idx]
+    if (!region || region.color === -1) {
+        return
+    }
+
+    const bounds = region.bounds
+    const regionWidth = calcWidth(bounds)
+    const regionHeight = calcHeight(bounds)
+    const imageData = ctx.getImageData(bounds.minX, bounds.minY, regionWidth, regionHeight)
+    const data = imageData.data
+    const color = palette[region.color]
+
+    imaging.scanImageData(imageData, (x, y, offset) => {
+        const imageX = x + bounds.minX
+        const imageY = y + bounds.minY
+        const imageOffset = imageY * ctx.canvas.width + imageX
+        const imageRegion = regionOverlay[imageOffset]
+        if (imageRegion !== region) {
+            return
+        }
+
+        data[offset * 4] = color[0]
+        data[offset * 4 + 1] = color[1]
+        data[offset * 4 + 2] = color[2]
+    })
+
+    ctx.putImageData(imageData, bounds.minX, bounds.minY)
+    region.filled = true
+
+    // if all regions are filled, replace with original image data
+    if (regions.every(r => r.filled || r.color === -1)) {
+        console.log("Coloring complete!")
+        ctx.putImageData(playState.imageData, 0, 0)
+    }
 }
