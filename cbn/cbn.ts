@@ -252,11 +252,16 @@ function processImage() {
     const { width, height } = imageData
 
     // convert to xyz colors and palettize data
-    const [palette, paletteOverlay] = palettize(imageData, 3, 8)
+    let [palette, paletteOverlay] = palettize(imageData, 3, 8)
     imaging.applyPalette(palette, paletteOverlay, imageData)
 
+    ctx.putImageData(imageData, 0, 0)
     let [regions, regionOverlay] = createRegionOverlay(width, height, paletteOverlay)
     regions = pruneRegions(width, height, regions, regionOverlay)
+
+    // some pallette entries will now be unused by regions, remove these
+    palette = removeUnusedPaletteEntries(palette, regions)
+
     drawBorders(regionOverlay, imageData)
     fillInterior(imageData.data, regionOverlay)
     ctx.putImageData(imageData, 0, 0)
@@ -398,8 +403,8 @@ function createRegionOverlay(width: number, height: number, paletteOverlay: numb
 
 function pruneRegions(width: number, height: number, regions: Region[], regionOverlay: RegionOverlay): Region[] {
     const regionSet = new Set(regions)
-    const minRegionWidth = 10
-    const minRegionHeight = 10
+    const minRegionWidth = 6
+    const minRegionHeight = 6
     const minRegionPixels = minRegionWidth * minRegionHeight
 
     for (const region of regions) {
@@ -449,6 +454,29 @@ function pruneRegions(width: number, height: number, regions: Region[], regionOv
     }
 
     return [...regionSet]
+}
+
+function removeUnusedPaletteEntries(palette: imaging.Color[], regions: Region[]): imaging.Color[] {
+    // create a map from current color index to new color index
+    const usedSet = new Set(regions.map(r => r.color))
+    usedSet.delete(-1)
+    const used = [...usedSet]
+    const map = new Map<number, number>(used.map((u, i) => [u, i]))
+
+    for (const region of regions) {
+        if (region.color === -1) {
+            continue
+        }
+
+        const color = map.get(region.color)
+        if (typeof color === "undefined") {
+            throw new Error("Color not found in map")
+        }
+
+        region.color = color
+    }
+
+    return used.map(i => palette[i])
 }
 
 function calcRegionBounds(width: number, height: number, regionOverlay: RegionOverlay) {

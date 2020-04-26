@@ -111,7 +111,6 @@ export function applyPalette(palette: Color[], palleteOverlay: number[], imageDa
     }
 }
 
-
 function createBucket(data: Uint8ClampedArray, indices: number[]): Bucket {
     if (indices.length == 0) {
         throw new Error("bucket must contain at least 1 value")
