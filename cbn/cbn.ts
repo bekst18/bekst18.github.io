@@ -270,7 +270,7 @@ function processImage(): PlayState {
     ctx.putImageData(imageData, 0, 0)
     let [regions, regionOverlay] = createRegionOverlay(width, height, paletteOverlay)
     regions = pruneRegions(width, height, regions, regionOverlay)
-
+ 
     // some pallette entries will now be unused by regions, remove these
     palette = removeUnusedPaletteEntries(palette, regions)
 
