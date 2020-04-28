@@ -222,6 +222,10 @@ export function calcDistSq(xyz1: Color, xyz2: Color): number {
     return distSq
 }
 
+export function calcDist(xyz1: Color, xyz2: Color): number {
+    return Math.sqrt(calcDistSq(xyz1, xyz2))
+}
+
 export function scanImageData(imageData: ImageData, f: (x: number, y: number, offset: number) => void): void {
     const { width, height } = imageData
     scan(width, height, f)

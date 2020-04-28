@@ -339,8 +339,8 @@ function palettize(imageData: ImageData, bucketsPerComponent: number, maxColors:
                 .filter(b => b != bucket)
                 .reduce((b1, b2) => imaging.calcDistSq(bucket.color, b1.color) < imaging.calcDistSq(bucket.color, b2.color) ? b1 : b2)
 
-            const distSq = imaging.calcDistSq(bucket.color, nearest.color)
-            if (distSq > .1) {
+            const dist = imaging.calcDist(bucket.color, nearest.color)
+            if (dist > .1) {
                 continue
             }
 
