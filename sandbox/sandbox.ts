@@ -6,6 +6,11 @@ if (!ctx) {
     throw new Error("Canvas element not supported")
 }
 
+const gl = canvas.getContext("webgl2-compute")
+if (!gl) {
+    throw new Error("GL compute not supported")
+}
+
 init()
 
 async function init() {

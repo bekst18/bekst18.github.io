@@ -1,186 +1,64 @@
-import * as util from "../shared/util.js"
-import * as glu from "./glu.js"
+import * as dom from "../shared/dom.js"
+import * as array from "../shared/array.js"
+import * as gfx from "./gfx.js"
+import * as gen from "./gen.js"
+import * as grid from "../shared/grid.js"
 
-const vertexSrc = `#version 300 es
-precision mediump float;
-in vec4 in_position;
+const tileSize = 24
 
-void main() {
-    gl_Position = in_position;
-}
-`
-const fragmentSrc = `#version 300 es
-precision mediump float;
-uniform vec2 scroll_offset;
-out vec4 out_color;
-
-${glu.perlin2}
-
-int mmod(const int n, const int M) {
-    return ((n % M) + M) % M;
+interface Thing {
+    name: string
+    texture: WebGLTexture
+    textureLayer: number
 }
 
-ivec2 mmod(const ivec2 n, const ivec2 M) {
-    return ((n % M) + M) % M;
+interface Tile {
+    things: Thing[]
 }
 
-float grid_line_dist(const vec2 xy, const int interval, const float width) {
-    vec2 mxy = vec2(mmod(ivec2(xy), ivec2(interval, interval)));
-    mxy = clamp(mxy, vec2(0, 0), vec2(width, width));
-    vec2 dxy = vec2(width, width) - mxy;
-    return max(dxy.x, dxy.y) / float(width);
-}
+type MapGrid = grid.Grid<Tile>
 
-void main() {
-    vec2 xy = gl_FragCoord.xy + scroll_offset.xy;
-    float freq = 16.f / 512.f;
-    float v = fbm2(freq * xy.x, freq * xy.y, 2.f, .5f, 5) / 32.f;
-    vec4 bg = vec4(.9 + v,.9 + v,.9 + v,1);
-    float d1 = grid_line_dist(xy, 128, 3.f);
-    float d2 = grid_line_dist(xy, 32, 1.f);
-    vec3 a = mix(bg.rgb, vec3(0, 0, 1), d1);
-    vec3 b = mix(a, vec3(0, 0, 1), d2);
-    out_color = vec4(b, 1);
-}
-`
+async function generateMap(renderer: gfx.Renderer, width: number, height: number) {
+    const gmap = gen.generateMap(width, height)
 
-const canvas = util.byId("canvas") as HTMLCanvasElement
-const errorsDiv = util.byId("errors");
+    // bake all 24x24 tile images to a single texture
+    // store mapping from image url to index
+    const imageUrls = array.mapDistinct(gen.iterThings(gmap), th => th.image)
+    const layerMap = new Map<string, number>(imageUrls.map((url, i) => [url, i]))
+    const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
+    const texture = renderer.bakeTextureArray(tileSize, tileSize, images)
 
-init()
+    const map: MapGrid = new grid.Grid<Tile>(gmap.width, gmap.height, (x, y) => {
+        const gtile = gmap.at(x, y)
+        const tile: Tile = {
+            things: []
+        }
 
-interface Point {
-    x: number,
-    y: number
-}
+        for (const gthing of gtile.things) {
+            const layer = layerMap.get(gthing.image)
+            if (typeof layer === "undefined") {
+                throw new Error(`texture index not found for ${gthing.image}`)
+            }
 
-interface GameState {
-    gl: WebGL2RenderingContext
-    program: WebGLProgram
-    vao: WebGLVertexArrayObject,
-    scrollOffsetLocation: WebGLUniformLocation,
-    scrollOffset: Point,
-    keyState: Record<string, boolean>
-}
+            const thing: Thing = {
+                name: gthing.name,
+                texture: texture,
+                textureLayer: layer
+            }
 
-function init() {
-    canvas.width = canvas.clientWidth
-    canvas.height = canvas.clientHeight
+            tile.things.push(thing)
+        }
 
-    clearErrorMessages()
-    const gs = createGameState()
-
-    canvas.addEventListener("keydown", (ev) => handleKeyDown(ev, gs.keyState))
-    canvas.addEventListener("keyup", (ev) => handleKeyUp(ev, gs.keyState))
-
-    requestAnimationFrame(() => {
-        tick(gs)
+        return tile
     })
+
+    return map
 }
 
-function createGameState(): GameState {
-    const gl = canvas.getContext("webgl2")
-    if (!gl) {
-        throw new Error("Failed to not initialize webgl 2.0. Confirm that your browser is up to date and has support.")
-    }
-
-    clearErrorMessages()
-
-    // compile program, get uniform locations
-    const program = glu.compileProgram(gl, vertexSrc, fragmentSrc)
-    const scrollOffsetLocation = glu.getUniformLocation(gl, program, "scroll_offset")
-
-    const positionBuffer = gl.createBuffer()
-    if (!positionBuffer) {
-        throw new Error("Failed to create buffer")
-    }
-
-    const positions = [-1, -1, 1, -1, 1, 1, -1, 1]
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW)
-
-    const indexBuffer = gl.createBuffer()
-    if (!indexBuffer) {
-        throw new Error("Failed to create index buffer")
-    }
-
-    const vao = gl.createVertexArray()
-    if (!vao) {
-        throw new Error("failed to create vertex array object")
-    }
-
-    const positionAttributeIndex = gl.getAttribLocation(program, "in_position")
-    if (positionAttributeIndex < 0) {
-        throwError("in_position attribute was not found")
-    }
-
-    gl.bindVertexArray(vao)
-
-    const indices = [0, 1, 2, 0, 2, 3]
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer)
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW)
-
-    gl.vertexAttribPointer(positionAttributeIndex, 2, gl.FLOAT, false, 0, 0)
-    gl.enableVertexAttribArray(positionAttributeIndex)
-
-    return {
-        gl: gl,
-        program: program,
-        vao: vao,
-        scrollOffsetLocation: scrollOffsetLocation,
-        scrollOffset: { x: 0, y: 0 },
-        keyState: {}
-    }
-}
-
-function tick(gs: GameState) {
-    processInput(gs)
-    renderFrame(gs)
-    requestAnimationFrame(() => tick(gs))
-}
-
-function processInput(gs: GameState) {
-    if (gs.keyState["w"]) {
-        gs.scrollOffset.y += 1
-    }
-
-    if (gs.keyState["s"]) {
-        gs.scrollOffset.y -= 1
-    }
-
-    if (gs.keyState["a"]) {
-        gs.scrollOffset.x -= 1
-    }
-
-    if (gs.keyState["d"]) {
-        gs.scrollOffset.x += 1
-    }
-}
-
-function renderFrame(gs: GameState) {
-    const { gl, program, vao } = gs
-    checkResize()
-    gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
-    gl.clearColor(0, 0, 0, 1)
-    gl.clear(gl.COLOR_BUFFER_BIT)
-    gl.useProgram(program)
-    gl.uniform2f(gs.scrollOffsetLocation, gs.scrollOffset.x, gs.scrollOffset.y)
-    gl.bindVertexArray(vao)
-    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0)
-}
-
-function checkResize() {
-    if (canvas.width == canvas.clientWidth && canvas.height == canvas.clientHeight) {
-        return
-    }
-
-    canvas.width = canvas.clientWidth
-    canvas.height = canvas.clientHeight
-}
+const errorsDiv = dom.byId("errors");
 
 function clearErrorMessages() {
-    canvas.hidden = false
-    util.removeAllChildren(errorsDiv)
+    dom.removeAllChildren(errorsDiv)
 }
 
 function appendErrorMessage(error: string) {
@@ -189,18 +67,38 @@ function appendErrorMessage(error: string) {
     div.classList.add("error-message")
     div.textContent = error
     errorsDiv.appendChild(div)
-    canvas.hidden = true
 }
 
-function throwError(message: string) {
-    appendErrorMessage(message)
-    throw new Error(message)
+function tick(renderer: gfx.Renderer, map: TileMap) {
+    for (let ty = 0; ty < map.height; ++ty) {
+        for (let tx = 0; tx < map.width; ++tx) {
+            const tile = map.at(tx, ty)
+            const x = tx * tileSize
+            const y = ty * tileSize
+            for (const thing of tile.things) {
+                const sprite: gfx.Sprite = {
+                    position: [x, y],
+                    color: [1, 1, 1, 1],
+                    width: tileSize,
+                    height: tileSize,
+                    texture: thing.texture,
+                    layer: thing.textureLayer
+                }
+
+                renderer.drawSprite(sprite)
+            }
+        }
+    }
+
+    renderer.flush()
 }
 
-function handleKeyDown(ev: KeyboardEvent, keyState: Record<string, boolean>) {
-    keyState[ev.key] = true
+
+async function main() {
+    const canvas = dom.byId("canvas") as HTMLCanvasElement
+    const renderer = new gfx.Renderer(canvas)
+    const map = await generateMap(renderer, 32, 32)
+    requestAnimationFrame(() => tick(renderer, map))
 }
 
-function handleKeyUp(ev: KeyboardEvent, keyState: Record<string, boolean>) {
-    keyState[ev.key] = false
-}
+main()

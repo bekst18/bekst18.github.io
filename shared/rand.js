@@ -1,0 +1,32 @@
+/**
+ * choose a uniform random integer from interval [min, max)
+ * @param min
+ * @param max
+ */
+export function int(min, max) {
+    const range = max - min;
+    return Math.floor(Math.random() * range + min);
+}
+/**
+ * choose a random element from the specified array
+ * @param list array-like object to select a random element from
+ */
+export function choose(a) {
+    const idx = int(0, a.length);
+    return a[idx];
+}
+/**
+ * randomly shuffle the specified array
+ * @param a array to shuffle
+ */
+export function shuffle(a) {
+    for (let i = a.length - 1; i >= 0; --i) {
+        const j = Math.floor(Math.random() * i);
+        const tmp = a[i];
+        a[i] = a[j];
+        a[j] = tmp;
+    }
+    return a;
+}
+;
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoicmFuZC5qcyIsInNvdXJjZVJvb3QiOiIiLCJzb3VyY2VzIjpbInJhbmQudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IkFBQUE7Ozs7R0FJRztBQUNILE1BQU0sVUFBVSxHQUFHLENBQUMsR0FBVyxFQUFFLEdBQVc7SUFDeEMsTUFBTSxLQUFLLEdBQUcsR0FBRyxHQUFHLEdBQUcsQ0FBQztJQUN4QixPQUFPLElBQUksQ0FBQyxLQUFLLENBQUMsSUFBSSxDQUFDLE1BQU0sRUFBRSxHQUFHLEtBQUssR0FBRyxHQUFHLENBQUMsQ0FBQztBQUNuRCxDQUFDO0FBRUQ7OztHQUdHO0FBQ0gsTUFBTSxVQUFVLE1BQU0sQ0FBSSxDQUFlO0lBQ3JDLE1BQU0sR0FBRyxHQUFHLEdBQUcsQ0FBQyxDQUFDLEVBQUUsQ0FBQyxDQUFDLE1BQU0sQ0FBQyxDQUFBO0lBQzVCLE9BQU8sQ0FBQyxDQUFDLEdBQUcsQ0FBQyxDQUFDO0FBQ2xCLENBQUM7QUFFRDs7O0dBR0c7QUFDSCxNQUFNLFVBQVUsT0FBTyxDQUFJLENBQVc7SUFDbEMsS0FBSyxJQUFJLENBQUMsR0FBRyxDQUFDLENBQUMsTUFBTSxHQUFHLENBQUMsRUFBRSxDQUFDLElBQUksQ0FBQyxFQUFFLEVBQUUsQ0FBQyxFQUFFO1FBQ3BDLE1BQU0sQ0FBQyxHQUFHLElBQUksQ0FBQyxLQUFLLENBQUMsSUFBSSxDQUFDLE1BQU0sRUFBRSxHQUFHLENBQUMsQ0FBQyxDQUFDO1FBQ3hDLE1BQU0sR0FBRyxHQUFHLENBQUMsQ0FBQyxDQUFDLENBQUMsQ0FBQztRQUNqQixDQUFDLENBQUMsQ0FBQyxDQUFDLEdBQUcsQ0FBQyxDQUFDLENBQUMsQ0FBQyxDQUFDO1FBQ1osQ0FBQyxDQUFDLENBQUMsQ0FBQyxHQUFHLEdBQUcsQ0FBQztLQUNkO0lBRUQsT0FBTyxDQUFDLENBQUM7QUFDYixDQUFDO0FBQUEsQ0FBQyIsInNvdXJjZXNDb250ZW50IjpbIi8qKlxyXG4gKiBjaG9vc2UgYSB1bmlmb3JtIHJhbmRvbSBpbnRlZ2VyIGZyb20gaW50ZXJ2YWwgW21pbiwgbWF4KVxyXG4gKiBAcGFyYW0gbWluIFxyXG4gKiBAcGFyYW0gbWF4IFxyXG4gKi9cclxuZXhwb3J0IGZ1bmN0aW9uIGludChtaW46IG51bWJlciwgbWF4OiBudW1iZXIpIHtcclxuICAgIGNvbnN0IHJhbmdlID0gbWF4IC0gbWluO1xyXG4gICAgcmV0dXJuIE1hdGguZmxvb3IoTWF0aC5yYW5kb20oKSAqIHJhbmdlICsgbWluKTtcclxufVxyXG5cclxuLyoqXHJcbiAqIGNob29zZSBhIHJhbmRvbSBlbGVtZW50IGZyb20gdGhlIHNwZWNpZmllZCBhcnJheVxyXG4gKiBAcGFyYW0gbGlzdCBhcnJheS1saWtlIG9iamVjdCB0byBzZWxlY3QgYSByYW5kb20gZWxlbWVudCBmcm9tXHJcbiAqL1xyXG5leHBvcnQgZnVuY3Rpb24gY2hvb3NlPFQ+KGE6IEFycmF5TGlrZTxUPikge1xyXG4gICAgY29uc3QgaWR4ID0gaW50KDAsIGEubGVuZ3RoKVxyXG4gICAgcmV0dXJuIGFbaWR4XTtcclxufVxyXG5cclxuLyoqXHJcbiAqIHJhbmRvbWx5IHNodWZmbGUgdGhlIHNwZWNpZmllZCBhcnJheVxyXG4gKiBAcGFyYW0gYSBhcnJheSB0byBzaHVmZmxlXHJcbiAqL1xyXG5leHBvcnQgZnVuY3Rpb24gc2h1ZmZsZTxUPihhOiBBcnJheTxUPikge1xyXG4gICAgZm9yIChsZXQgaSA9IGEubGVuZ3RoIC0gMTsgaSA+PSAwOyAtLWkpIHtcclxuICAgICAgICBjb25zdCBqID0gTWF0aC5mbG9vcihNYXRoLnJhbmRvbSgpICogaSk7XHJcbiAgICAgICAgY29uc3QgdG1wID0gYVtpXTtcclxuICAgICAgICBhW2ldID0gYVtqXTtcclxuICAgICAgICBhW2pdID0gdG1wO1xyXG4gICAgfVxyXG5cclxuICAgIHJldHVybiBhO1xyXG59OyJdfQ==

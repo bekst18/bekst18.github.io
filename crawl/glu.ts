@@ -1,4 +1,24 @@
 /* webgl utility library */
+import * as dom from "../shared/dom.js"
+
+/**
+ * create webgl2 rendering context
+ */
+export function createContext(canvas: HTMLCanvasElement): WebGL2RenderingContext {
+    const gl = canvas.getContext("webgl2")
+    if (!gl) {
+        throw new Error("Failed to not initialize webgl 2.0. Confirm that your browser is up to date and has support.")
+    }
+
+    return gl
+}
+
+/**
+ * 
+ * @param gl gl context
+ * @param type type of shader to create
+ * @param source shader source
+ */
 export function createShader(gl: WebGL2RenderingContext, type: GLenum, source: string): WebGLShader {
     const shader = gl.createShader(type)
     if (!shader) {
@@ -17,6 +37,12 @@ export function createShader(gl: WebGL2RenderingContext, type: GLenum, source: s
     throw new Error(message)
 }
 
+/**
+ * create a gl program from shaders
+ * @param gl gl context
+ * @param vertexShader vertex shader to link
+ * @param fragmentShader fragment shader to link
+ */
 export function createProgram(gl: WebGL2RenderingContext, vertexShader: WebGLShader, fragmentShader: WebGLShader): WebGLProgram {
     const program = gl.createProgram();
     if (!program) {
@@ -37,6 +63,12 @@ export function createProgram(gl: WebGL2RenderingContext, vertexShader: WebGLSha
     throw new Error(`Failed to link program: ${message ?? ""}`)
 }
 
+/**
+ * compile and link the vertex and fragment shader source
+ * @param gl gl context
+ * @param vertexSrc vertex shader source
+ * @param fragmentSrc fragment shader source
+ */
 export function compileProgram(gl: WebGL2RenderingContext, vertexSrc: string, fragmentSrc: string): WebGLProgram {
     const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSrc)
     const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSrc)
@@ -44,6 +76,25 @@ export function compileProgram(gl: WebGL2RenderingContext, vertexSrc: string, fr
     return program
 }
 
+/**
+ * create a buffer, throw an exception on failure
+ * @param gl gl context
+ */
+export function createBuffer(gl: WebGL2RenderingContext): WebGLBuffer {
+    const buffer = gl.createBuffer()
+    if (!buffer) {
+        throw new Error("Failed to create buffer")
+    }
+
+    return buffer
+}
+
+/**
+ * Retreive location for uniform, throws exception if not found
+ * @param gl gl context
+ * @param program gl program
+ * @param name name of uniform
+ */
 export function getUniformLocation(gl: WebGL2RenderingContext, program: WebGLProgram, name: string): WebGLUniformLocation {
     const location = gl.getUniformLocation(program, name)
     if (!location) {
@@ -51,6 +102,74 @@ export function getUniformLocation(gl: WebGL2RenderingContext, program: WebGLPro
     }
 
     return location
+}
+
+/**
+ * Retreive location for attribute, throws exception if not found
+ * @param gl gl context
+ * @param program gl program
+ * @param name name of attribute
+ */
+export function getAttribLocation(gl: WebGL2RenderingContext, program: WebGLProgram, name: string): number {
+    const attribLocation = gl.getAttribLocation(program, name)
+    if (attribLocation < 0) {
+        throw new Error(`${name} attribute was not found`)
+    }
+
+    return attribLocation
+}
+
+/**
+ * create a vertex array object, throw exception on failure
+ * @param gl gl context
+ */
+export function createVertexArray(gl: WebGL2RenderingContext): WebGLVertexArrayObject {
+    const vao = gl.createVertexArray()
+    if (!vao) {
+        throw new Error("failed to create vertex array object")
+    }
+
+    return vao
+}
+
+/**
+ * create a texture object, throw an exception on failure
+ * @param gl gl context
+ */
+export function createTexture(gl: WebGL2RenderingContext): WebGLVertexArrayObject {
+    const texture = gl.createTexture()
+    if (!texture) {
+        throw new Error("failed to create texture object")
+    }
+
+    return texture
+}
+
+/**
+ * create a sampler object, throw an exception on failure
+ * @param gl gl context
+ */
+export function createSampler(gl: WebGL2RenderingContext): WebGLVertexArrayObject {
+    const sampler = gl.createSampler()
+    if (!sampler) {
+        throw new Error("failed to create sampler object")
+    }
+
+    return sampler
+}
+
+/**
+ * load a texture from the specified file
+ * @param gl gl context
+ * @param url url from which to load texture
+ */
+export async function loadTexture(gl: WebGL2RenderingContext, url: string): Promise<WebGLTexture> {
+    const texture = createTexture(gl)
+    const image = await dom.loadImage(url)
+    gl.bindTexture(gl.TEXTURE_2D, texture)
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
+    gl.generateMipmap(gl.TEXTURE_2D)
+    return texture
 }
 
 /* shader fragments */
@@ -660,4 +779,4 @@ float fbm2(const float x, const float y, const float lacunarity, const float gai
 }
 `
 
-export {perlin2}
+export { perlin2 }

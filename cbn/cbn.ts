@@ -1,5 +1,6 @@
-import * as util from "../shared/util.js"
+import * as array from "../shared/array.js"
 import * as imaging from "../shared/imaging.js"
+import * as dom from "../shared/dom.js"
 
 enum CameraMode {
     None,
@@ -50,34 +51,34 @@ interface PlayState {
     regionOverlay: RegionOverlay
 }
 
-const camera = util.byId("camera") as HTMLVideoElement
+const camera = dom.byId("camera") as HTMLVideoElement
 let cameraMode = CameraMode.None
-const canvas = util.byId("canvas") as HTMLCanvasElement
-const acquireImageDiv = util.byId("acquireImage") as HTMLDivElement
-const paletteDiv = util.byId("palette") as HTMLDivElement
-const paletteEntryTemplate = util.byId("paletteEntry") as HTMLTemplateElement
+const canvas = dom.byId("canvas") as HTMLCanvasElement
+const acquireImageDiv = dom.byId("acquireImage") as HTMLDivElement
+const paletteDiv = dom.byId("palette") as HTMLDivElement
+const paletteEntryTemplate = dom.byId("paletteEntry") as HTMLTemplateElement
 
 const ctx = canvas.getContext("2d") as CanvasRenderingContext2D
 if (!ctx) {
     throwErrorMessage("Canvas element not supported")
 }
 
-const captureImageButton = util.byId("captureImageButton") as HTMLButtonElement
-const loadUi = util.byId("loadUi") as HTMLDivElement
-const playUi = util.byId("playUi") as HTMLDivElement
+const captureImageButton = dom.byId("captureImageButton") as HTMLButtonElement
+const loadUi = dom.byId("loadUi") as HTMLDivElement
+const playUi = dom.byId("playUi") as HTMLDivElement
 
 let playState: PlayState | null = null
 
 init()
 
 async function init() {
-    const fileDropBox = util.byId("fileDropBox") as HTMLDivElement
-    const fileInput = util.byId("fileInput") as HTMLInputElement
-    const fileButton = util.byId("fileButton") as HTMLButtonElement
-    const useCameraButton = util.byId("useCameraButton") as HTMLButtonElement
-    const flipCameraButton = util.byId("flipCameraButton") as HTMLButtonElement
-    const stopCameraButton = util.byId("stopCameraButton") as HTMLButtonElement
-    const returnButton = util.byId("returnButton") as HTMLButtonElement
+    const fileDropBox = dom.byId("fileDropBox") as HTMLDivElement
+    const fileInput = dom.byId("fileInput") as HTMLInputElement
+    const fileButton = dom.byId("fileButton") as HTMLButtonElement
+    const useCameraButton = dom.byId("useCameraButton") as HTMLButtonElement
+    const flipCameraButton = dom.byId("flipCameraButton") as HTMLButtonElement
+    const stopCameraButton = dom.byId("stopCameraButton") as HTMLButtonElement
+    const returnButton = dom.byId("returnButton") as HTMLButtonElement
 
     fileButton.addEventListener("click", () => {
         fileInput.click()
@@ -138,12 +139,12 @@ function loadFromUrl(url: string) {
 }
 
 function clearErrorMessages() {
-    const errorsDiv = util.byId("errors")
-    util.removeAllChildren(errorsDiv)
+    const errorsDiv = dom.byId("errors")
+    dom.removeAllChildren(errorsDiv)
 }
 
 function appendErrorMessage(error: string) {
-    const errorsDiv = util.byId("errors");
+    const errorsDiv = dom.byId("errors");
     const div = document.createElement("div");
     div.classList.add("error-message")
     div.textContent = error
@@ -296,10 +297,10 @@ function palettize(imageData: ImageData, bucketsPerComponent: number, maxColors:
     const numBuckets = bucketPitch * bucketsPerComponent
 
     // creat intial buckets
-    let buckets = util.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
+    let buckets = array.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
 
     // assign and update bucket for each pixel
-    const bucketOverlay = util.generate(pixels, i => {
+    const bucketOverlay = array.generate(pixels, i => {
         const r = data[i * 4] / 255
         const g = data[i * 4 + 1] / 255
         const b = data[i * 4 + 2] / 255
@@ -386,7 +387,7 @@ function palettize(imageData: ImageData, bucketsPerComponent: number, maxColors:
 }
 
 function createRegionOverlay(width: number, height: number, paletteOverlay: number[]): [Region[], RegionOverlay] {
-    const regionOverlay: RegionOverlay = util.fill(null, width * height)
+    const regionOverlay: RegionOverlay = array.uniform(null, width * height)
     const regions: Region[] = []
 
     imaging.scan(width, height, (x, y, offset) => {
@@ -520,9 +521,9 @@ function calcMaxRegionRect(rowPitch: number, region: Region, regionOverlay: Regi
     const { minX: x0, minY: y0, maxX: x1, maxY: y1 } = region.bounds
     const width = x1 - x0 + 1
     const height = y1 - y0 + 1
-    const ls = util.fill(x0, width)
-    const rs = util.fill(x0 + width, width)
-    const hs = util.fill(0, width)
+    const ls = array.uniform(x0, width)
+    const rs = array.uniform(x0 + width, width)
+    const hs = array.uniform(0, width)
 
     let maxArea = 0
     const bounds: Bounds = {
@@ -728,12 +729,12 @@ function fillInterior(data: Uint8ClampedArray, regionOverlay: RegionOverlay) {
 }
 
 function createPaletteUi(palette: imaging.Color[]) {
-    util.removeAllChildren(paletteDiv)
+    dom.removeAllChildren(paletteDiv)
     for (let i = 0; i < palette.length; ++i) {
         const color = palette[i]
         const lum = imaging.calcLuminance(color)
         const fragment = paletteEntryTemplate.content.cloneNode(true) as DocumentFragment
-        const entryDiv = util.bySelector(fragment, ".palette-entry") as HTMLElement
+        const entryDiv = dom.bySelector(fragment, ".palette-entry") as HTMLElement
         entryDiv.textContent = `${i + 1}`
         entryDiv.style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`
         entryDiv.style.color = lum < .5 ? "white" : "black"
