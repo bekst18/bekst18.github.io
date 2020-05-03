@@ -187,7 +187,7 @@ function generateWordSearch(settings) {
     for (let i = 0; i < maxRetries; ++i) {
         const grid = createGrid(body, minWidth + i, minHeight + i);
         if (placeWords(grid, words, horizontal, vertical, diagonal, reverse)) {
-            // fillRandomCharacters(grid, words);
+            fillRandomCharacters(grid, words);
             success = true;
             break;
         }
