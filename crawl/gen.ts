@@ -20,26 +20,14 @@ enum RegionType {
     Room
 }
 
-interface Rect {
-    x: number,
-    y: number,
-    width: number,
-    height: number
-}
-
 interface Region {
-    region: Rect,
-    nonOverlappingRegion: Rect,
+    rect: grid.Rect,
+    nonOverlappingRect: grid.Rect,
     depth: number,
     type: RegionType
 }
 
 type Coords = [number, number]
-
-interface Tunnel {
-    type: RegionType
-    coords: Coords
-}
 
 interface Thing {
     name: string
@@ -54,7 +42,7 @@ export function generateMap(width: number, height: number): grid.Grid<Tile> {
     const rooms = generateRooms(width, height)
     const map = new grid.Grid<Tile>(width, height, () => ({ things: [] }))
 
-    rooms.scan((x, y, type) => {
+    for (const [x, y, type] of rooms.scan()) {
         switch (type) {
             case TileType.Door:
                 map.at(x, y).things.push({
@@ -76,8 +64,12 @@ export function generateMap(width: number, height: number): grid.Grid<Tile> {
                     image: "./assets/floor.png"
                 })
                 break;
+
+            case TileType.Exterior:
+                break
+
         }
-    })
+    }
 
     return map
 }
@@ -92,8 +84,9 @@ export function* iterThings(grd: grid.Grid<Tile>) {
 
 function generateRooms(width: number, height: number): grid.Grid<TileType> {
     const grd = new grid.Grid<TileType>(width, height, () => TileType.Exterior)
+    const regionStack: Region[] = []
     const regions: Region[] = []
-    const maxRooms = 32
+    const maxRooms = 128
 
     // place initial room
     {
@@ -102,162 +95,215 @@ function generateRooms(width: number, height: number): grid.Grid<TileType> {
         const x = rnd.int(0, grd.width - minRoomSize)
         const y = rnd.int(0, grd.height - minRoomSize)
         const size = rnd.int(minRoomSize, Math.min(maxRoomSize, grd.width - x, grd.height - y))
-        placeRoom(RegionType.Room, x, y, size, size, grd, connect)
+        const region: Region = {
+            rect: { x: x, y: y, width: size, height: size },
+            nonOverlappingRect: { x: x, y: y, width: size, height: size },
+            depth: 0,
+            type: RegionType.Room
+        }
+
+        if (!tryPlaceRegion(grd, region)) {
+            throw new Error("Failed to place initial region")
+        }
+
+        regionStack.push(region)
+        regions.push(region)
     }
 
     let numRooms = 1
     while (true) {
-        if (connect.length == 0) {
+        if (regionStack.length <= 0) {
+            console.log("No more tunnel rooms")
             break
         }
 
         if (numRooms >= maxRooms) {
+            console.log("Max rooms reached")
             break
         }
 
-        // find a place to begin tunneling to next room
-        const { type, coords: [cx, cy] } = array.pop(connect)
-        const nxy = findTunnelableNeighbor(grd, cx, cy)
-        if (!nxy) {
+        // take region off of the stack
+        const region = array.pop(regionStack)
+
+        // try to tunnel from this region
+        const nextRegion = tryTunnels(grd, region)
+        if (!nextRegion) {
             continue
         }
 
-        const [nx, ny] = nxy
+        nextRegion.depth = region.depth + 1
+        regionStack.push(region)
+        regionStack.push(nextRegion)
+        regions.push(nextRegion)
 
-        if (type == RegionType.Hallway) {
-            // try placing a room here
-            if (tryRoom(grd, connect, cx, cy, nx, ny)) {
-                numRooms++
-            }
-        } else {
-            tryHallway(grd, connect, cx, cy, nx, ny)
+        if (nextRegion.type === RegionType.Room) {
+            numRooms++
         }
     }
 
+    // remove dead end hallways
+    for (const region of regions) {
+        if (region.type !== RegionType.Hallway) {
+            continue
+        }
+
+        const numDoors = array.countIf(grd.iterRect(region.rect), t => t === TileType.Door)
+        if (numDoors > 1) {
+            continue
+        }
+
+        for (const [x, y] of grd.scanRect(region.nonOverlappingRect)) {
+            grd.set(x, y, TileType.Exterior)
+        }
+
+        for (const [x, y, t] of grd.scanRect(region.rect)) {
+            if (t === TileType.Door) {
+                grd.set(x, y, TileType.Wall)
+            }
+        }
+    }
+
+    const firstRegion = regions.reduce((x, y) => x.depth < y.depth ? x : y)
+    const lastRegion = regions.reduce((x, y) => x.depth > y.depth ? x : y)
     console.log(`Placed ${numRooms} rooms`)
 
     return grd
 }
 
-function tryHallway(grd: grid.Grid<TileType>, connect: Tunnel[], cx: number, cy: number, nx: number, ny: number): boolean {
-    rnd.shuffle(hallLengths)
-    for (const length of hallLengths) {
-        if (tryPlaceHallway(grd, connect, cx, cy, nx, ny, length)) {
-            return true
+function tryTunnels(grd: grid.Grid<TileType>, region: Region): (Region | null) {
+    // try to tunnel from this room
+    const tunnels: Coords[] = []
+    for (const [x, y] of grd.scanRect(region.rect)) {
+        if (isTunnelable(grd, x, y)) {
+            tunnels.push([x, y])
         }
     }
 
-    return false
+    rnd.shuffle(tunnels)
+
+    // try each tunnelable location
+    while (tunnels.length > 0) {
+        // find a place to begin tunneling to next room
+        const [tx, ty] = array.pop(tunnels)
+        const nxy = findTunnelableNeighbor(grd, tx, ty)
+        if (!nxy) {
+            continue
+        }
+
+        const [nx, ny] = nxy
+        const nextRegion = tryTunnel(grd, region, tx, ty, nx, ny)
+        if (nextRegion) {
+            return nextRegion
+        }
+    }
+
+    return null
 }
 
-function tryRoom(grd: grid.Grid<TileType>, connect: Tunnel[], cx: number, cy: number, nx: number, ny: number): boolean {
+function tryTunnel(grd: grid.Grid<TileType>, region: Region, tx: number, ty: number, nx: number, ny: number): (Region | null) {
+    switch (region.type) {
+        case RegionType.Hallway:
+            return tryRoom(grd, tx, ty, nx, ny)
+
+        case RegionType.Room:
+            return tryHallway(grd, tx, ty, nx, ny)
+    }
+}
+
+function tryHallway(grd: grid.Grid<TileType>, tx: number, ty: number, nx: number, ny: number): (Region | null) {
+    rnd.shuffle(hallLengths)
+    for (const length of hallLengths) {
+        // for nx / ny
+        // nx === cx = vertical hallway
+        // ny === cy = horizontal hallway
+        const width = ny === ty ? length : 3
+        const height = nx === tx ? length : 3
+        const region = tryPlaceAdjacentRegion(grd, RegionType.Hallway, tx, ty, nx, ny, width, height)
+        if (region) {
+            return region
+        }
+    }
+
+    return null
+}
+
+function tryRoom(grd: grid.Grid<TileType>, tx: number, ty: number, nx: number, ny: number): (Region | null) {
     // try placing a room here
     rnd.shuffle(roomSizes)
     for (const size of roomSizes) {
-        if (tryPlaceRegion(grd, RegionType.Room, connect, cx, cy, nx, ny, size, size)) {
-            return true
+        const region = tryPlaceAdjacentRegion(grd, RegionType.Room, tx, ty, nx, ny, size, size)
+        if (region) {
+            return region
         }
     }
 
-    return false
+    return null
 }
 
-function tryPlaceHallway(grd: grid.Grid<TileType>, connect: Tunnel[], cx: number, cy: number, nx: number, ny: number, length: number): boolean {
+function tryPlaceAdjacentRegion(grd: grid.Grid<TileType>, type: RegionType, tx: number, ty: number, nx: number, ny: number, width: number, height: number): (Region | null) {
     // for nx / ny
-    // nx === cx = vertical hallway
-    // ny === cy = horizontal hallway
-    const width = ny === cy ? length : 3
-    const height = nx === cx ? length : 3
-    return tryPlaceRegion(grd, RegionType.Hallway, connect, cx, cy, nx, ny, width, height)
-}
-
-function tryPlaceRegion(grd: grid.Grid<TileType>, type: RegionType, connect: Tunnel[], cx: number, cy: number, nx: number, ny: number, width: number, height: number): boolean {
-    // for nx / ny
-    // nx < cx - horizontal - right to left
-    // nx > cx - horizontal - left to right
-    // ny < cy - vertical - bottom to top
-    // ny > cy - vertical - top to bottom
+    // nx < tx - horizontal - right to left
+    // nx > tx - horizontal - left to right
+    // ny < ty - vertical - bottom to top
+    // ny > ty - vertical - top to bottom
     // for each case - find hallway rect, find check overlap rect
-    if (nx < cx) {
+    const region: Region = {
+        rect: { x: 0, y: 0, width: 0, height: 0 },
+        nonOverlappingRect: { x: 0, y: 0, width: 0, height: 0 },
+        depth: 0,
+        type: type
+    }
+
+    if (nx < tx) {
         // right to left
-        const x = cx - width + 1
-        const y = cy - Math.floor(height / 2)
-
-        if (!grd.regionInBounds(x, y, width, height)) {
-            return false
-        }
-
-        if (!regionIsExterior(grd, x, y, width - 1, height)) {
-            return false
-        }
-
-        placeRoom(type, x, y, width, height, grd, connect)
-    } else if (nx > cx) {
+        const x = tx - width + 1
+        const y = ty - Math.floor(height / 2)
+        region.rect = { x: x, y: y, width: width, height: height }
+        region.nonOverlappingRect = { x: x, y: y, width: width - 1, height: height }
+    } else if (nx > tx) {
         // left to right
-        const x = cx
-        const y = cy - Math.floor(height / 2)
-
-        if (!grd.regionInBounds(x, y, width, height)) {
-            return false
-        }
-
-        if (!regionIsExterior(grd, x + 1, y, width - 1, height)) {
-            return false
-        }
-
-        placeRoom(type, x, y, width, height, grd, connect)
-    } else if (ny < cy) {
+        const x = tx
+        const y = ty - Math.floor(height / 2)
+        region.rect = { x: x, y: y, width: width, height: height }
+        region.nonOverlappingRect = { x: x + 1, y: y, width: width - 1, height: height }
+    } else if (ny < ty) {
         // bottom to top
-        const x = cx - Math.floor(width / 2)
-        const y = cy - height + 1
-
-        if (!grd.regionInBounds(x, y, width, height)) {
-            return false
-        }
-
-        if (!regionIsExterior(grd, x, y, width, height - 1)) {
-            return false
-        }
-
-        placeRoom(type, x, y, width, height, grd, connect)
-    } else if (ny > cy) {
+        const x = tx - Math.floor(width / 2)
+        const y = ty - height + 1
+        region.rect = { x: x, y: y, width: width, height: height }
+        region.nonOverlappingRect = { x: x, y: y, width: width, height: height - 1 }
+    } else if (ny > ty) {
         // top to bottom
-        const x = cx - Math.floor(width / 2)
-        const y = cy
-
-        if (!grd.regionInBounds(x, y, width, height)) {
-            return false
-        }
-
-        if (!regionIsExterior(grd, x, y + 1, width, height - 1)) {
-            return false
-        }
-
-        placeRoom(type, x, y, width, height, grd, connect)
+        const x = tx - Math.floor(width / 2)
+        const y = ty
+        region.rect = { x: x, y: y, width: width, height: height }
+        region.nonOverlappingRect = { x: x, y: y + 1, width: width, height: height - 1 }
     } else {
         throw new Error("invalid tunnel position")
     }
 
-    grd.set(cx, cy, TileType.Door)
-    return true
+    const success = tryPlaceRegion(grd, region)
+    if (!success) {
+        return null
+    }
+
+    grd.set(tx, ty, TileType.Door)
+    return region
 }
 
-function placeRoom(type: RegionType, x: number, y: number, width: number, height: number, grid: grid.Grid<TileType>, connect: Tunnel[]) {
-    // place the room, find potential connection points
-    encloseRoom(x, y, width, height, grid)
+function tryPlaceRegion(grd: grid.Grid<TileType>, region: Region): boolean {
+    const { x, y, width, height } = region.rect
+    if (!grd.regionInBounds(x, y, width, height)) {
+        return false
+    }
 
-    const roomConnect: Tunnel[] = []
-    grid.scanRegion(x, y, width, height, (x, y) => {
-        if (isTunnelable(grid, x, y)) {
-            roomConnect.push({
-                type: type,
-                coords: [x, y]
-            })
-        }
-    })
+    const { x: nx, y: ny, width: nwidth, height: nheight } = region.nonOverlappingRect
+    if (!regionIsExterior(grd, nx, ny, nwidth, nheight)) {
+        return false
+    }
 
-    rnd.shuffle(roomConnect)
-    connect.push(...roomConnect)
+    encloseRoom(x, y, width, height, grd)
+    return true
 }
 
 function isTunnelable(grid: grid.Grid<TileType>, x: number, y: number): boolean {
@@ -291,15 +337,14 @@ function findTunnelableNeighbor(grid: grid.Grid<TileType>, x: number, y: number)
 function encloseRoom(x0: number, y0: number, width: number, height: number, grid: grid.Grid<TileType>) {
     const r = x0 + width - 1
     const b = y0 + height - 1
-
-    grid.scanRegion(x0, y0, width, height, (x, y) => {
+    for (const [x, y] of grid.scanRegion(x0, y0, width, height)) {
         if (x === x0 || y == y0 || x === r || y === b) {
             grid.set(x, y, TileType.Wall)
-            return
+            continue
         }
 
         grid.set(x, y, TileType.Interior)
-    })
+    }
 }
 
 function regionIsExterior(grid: grid.Grid<TileType>, x0: number, y0: number, width: number, height: number): boolean {

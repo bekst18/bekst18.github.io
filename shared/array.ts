@@ -118,3 +118,32 @@ export function pop<T>(a: T[]): T {
 
     return elem
 }
+
+/**
+ * count the number of items in an iterable
+ * @param a iterable
+ */
+export function count<T>(a: Iterable<T>): number {
+    let r = 0
+    for (const _ of a) {
+        ++r
+    }
+
+    return r
+}
+
+/**
+ * count the number of items in an iterable that meet conditions in predicate
+ * @param a iterable
+ * @param f predicate
+ */
+export function countIf<T>(a: Iterable<T>, f: (x: T) => boolean): number {
+    let r = 0
+    for (const x of a) {
+        if (f(x)) {
+            ++r
+        }
+    }
+
+    return r
+}

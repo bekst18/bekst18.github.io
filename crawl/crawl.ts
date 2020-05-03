@@ -69,7 +69,7 @@ function appendErrorMessage(error: string) {
     errorsDiv.appendChild(div)
 }
 
-function tick(renderer: gfx.Renderer, map: TileMap) {
+function tick(renderer: gfx.Renderer, map: MapGrid) {
     for (let ty = 0; ty < map.height; ++ty) {
         for (let tx = 0; tx < map.width; ++tx) {
             const tile = map.at(tx, ty)
@@ -92,7 +92,6 @@ function tick(renderer: gfx.Renderer, map: TileMap) {
 
     renderer.flush()
 }
-
 
 async function main() {
     const canvas = dom.byId("canvas") as HTMLCanvasElement
