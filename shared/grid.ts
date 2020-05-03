@@ -12,13 +12,15 @@ export interface Rect {
  * a generic 2d array of data
  */
 export class Grid<T> {
-    private data: T[] = []
+    constructor(readonly width: number = 0, readonly height: number = 0, readonly data: T[], readonly offset: number=0, readonly rowPitch: number=0) {
+        // check for errors
+        if (this.rowPitch === 0) {
+            this.rowPitch = this.width
+        }
 
-    constructor(readonly width: number, readonly height: number, f: (x: number, y: number) => T) {
-        for (let y = 0; y < height; ++y) {
-            for (let x = 0; x < width; ++x) {
-                this.data.push(f(x, y))
-            }
+        const maxOffset = this.offset + this.rowPitch * this.height
+        if (maxOffset > this.data.length) {
+            throw new Error(`Max offset of ${maxOffset} is greater than length of data array - ${this.data.length}`)
         }
     }
 
@@ -27,7 +29,7 @@ export class Grid<T> {
             throw new Error(`${x} x-coordinate is out of bounds, must be between 0 and ${this.width - 1}`)
         }
 
-        if (y < 0 || y >= this.width) {
+        if (y < 0 || y >= this.height) {
             throw new Error(`${y} y-coordinate is out of bounds, must be between 0 and ${this.height - 1}`)
         }
     }
@@ -46,7 +48,7 @@ export class Grid<T> {
 
     flat(x: number, y: number): number {
         this.assertBounds(x, y)
-        const i = y * this.width + x
+        const i = this.offset + y * this.rowPitch + x
         return i
     }
 

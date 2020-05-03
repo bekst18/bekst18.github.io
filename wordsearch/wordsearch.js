@@ -10,8 +10,8 @@ function init() {
     const loadSettingsButton = document.getElementById("loadSettings");
     const returnToSettingsButton = document.getElementById("returnToSettings");
     const resetButton = document.getElementById("resetButton");
-    const widthInput = document.getElementById("width");
-    const heightInput = document.getElementById("height");
+    const minWidthInput = document.getElementById("minWidth");
+    const minHeightInput = document.getElementById("minHeight");
     const horizontalCheckbox = document.getElementById("horizontal");
     const verticalCheckbox = document.getElementById("vertical");
     const diagonalCheckbox = document.getElementById("diagonal");
@@ -63,8 +63,8 @@ function init() {
     loadSettingsButton.addEventListener("click", loadSettings);
 
     resetButton.addEventListener("click", (evt) => {
-        widthInput.value = 24;
-        heightInput.value = 20;
+        minWidthInput.value = "";
+        minHeightInput.value = "";
 
         var wordDivs = settingsWordList.querySelectorAll("#settingsWordList .word");
         for (const div of wordDivs) {
@@ -87,8 +87,8 @@ function init() {
     });
 
     function getSettings() {
-        const width = parseInt(widthInput.value) || 32;
-        const height = parseInt(heightInput.value) || 32;
+        const minWidth = parseInt(minWidthInput.value) || 0;
+        const minHeight = parseInt(minHeightInput.value) || 0;
         const words = getWords(settingsWordList);
         const horizontal = horizontalCheckbox.checked;
         const vertical = verticalCheckbox.checked;
@@ -96,8 +96,8 @@ function init() {
         const reverse = reverseCheckbox.checked;
 
         return {
-            width: width,
-            height: height,
+            minWidth: minWidth,
+            minHeight: minHeight,
             words: words,
             horizontal: horizontal,
             vertical: vertical,
@@ -115,8 +115,8 @@ function init() {
 
         const settings = JSON.parse(json);
         removeChildren(settingsWordList);
-        widthInput.value = settings.width;
-        heightInput.value = settings.height;
+        minWidthInput.value = settings.minWidth || "";
+        minHeightInput.value = settings.minHeight || "";
         horizontalCheckbox.checked = settings.horizontal;
         verticalCheckbox.checked = settings.vertical;
         diagonalCheckbox.checked = settings.diagonal;
@@ -168,7 +168,7 @@ function getWords(wordList) {
 }
 
 function generateWordSearch(settings) {
-    const { words, width, height, horizontal, vertical, diagonal, reverse } = settings;
+    const { words, minWidth, minHeight, horizontal, vertical, diagonal, reverse } = settings;
     const table = document.getElementById("letterTable");
     const wordList = document.getElementById("resultsWordList");
     const body = table.tBodies[0];
@@ -185,9 +185,9 @@ function generateWordSearch(settings) {
     const maxRetries = 128;
     let success = false;
     for (let i = 0; i < maxRetries; ++i) {
-        const grid = createGrid(body, width, height);
+        const grid = createGrid(body, minWidth + i, minHeight + i);
         if (placeWords(grid, words, horizontal, vertical, diagonal, reverse)) {
-            fillRandomCharacters(grid, words);
+            // fillRandomCharacters(grid, words);
             success = true;
             break;
         }
@@ -311,7 +311,6 @@ function tryPlaceWord(grid, dirs, word) {
 
 function tryFindWordPlacement(grid, dirs, word) {
     if (word.length > grid.width && word.length > grid.height) {
-        console.log(`${word} with length ${word.length} is too long to be placed in any direction`);
         return false
     }
 
@@ -363,7 +362,9 @@ function isValidWordPlacement(grid, word, x0, y0, dir) {
     const success = letters.every((ch, i) => {
         const x = x0 + dir.x * i;
         const y = y0 + dir.y * i;
+
         if (grid.get(y, x) === ch) {
+            anyOverlap = true
             return true;
         }
 
@@ -371,6 +372,15 @@ function isValidWordPlacement(grid, word, x0, y0, dir) {
             return true;
         }
     });
+
+    // exception: full overlap (i.e. prefix overlapping longer word) should not be considered valid
+    if (letters.every((ch, i) => {
+        const x = x0 + dir.x * i;
+        const y = y0 + dir.y * i;
+        return grid.get(y, x) === ch
+    })) {
+        return false
+    }
 
     return success;
 }
