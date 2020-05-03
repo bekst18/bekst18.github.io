@@ -364,7 +364,6 @@ function isValidWordPlacement(grid, word, x0, y0, dir) {
         const y = y0 + dir.y * i;
 
         if (grid.get(y, x) === ch) {
-            anyOverlap = true
             return true;
         }
 
