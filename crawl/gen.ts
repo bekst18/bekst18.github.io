@@ -13,6 +13,8 @@ enum TileType {
     Wall,
     Interior,
     Exterior
+    Up,
+    Down
 }
 
 enum RegionType {
@@ -40,36 +42,53 @@ interface Tile {
 
 export function generateMap(width: number, height: number): grid.Grid<Tile> {
     const rooms = generateRooms(width, height)
-    const map = new grid.Grid<Tile>(width, height, () => ({ things: [] }))
+    const map = rooms.map(type => {
+        const tile: Tile = {
+            things: []
+        }
 
-    for (const [x, y, type] of rooms.scan()) {
         switch (type) {
             case TileType.Door:
-                map.at(x, y).things.push({
+                tile.things.push({
                     name: "Door",
                     image: "./assets/closed.png"
                 })
                 break;
 
             case TileType.Wall:
-                map.at(x, y).things.push({
+                tile.things.push({
                     name: "Door",
                     image: "./assets/wall.png"
                 })
                 break;
 
             case TileType.Interior:
-                map.at(x, y).things.push({
+                tile.things.push({
                     name: "Door",
                     image: "./assets/floor.png"
                 })
                 break;
 
+            case TileType.Up:
+                tile.things.push({
+                    name: "Door",
+                    image: "./assets/up.png"
+                })
+                break;
+
+            case TileType.Down:
+                tile.things.push({
+                    name: "Door",
+                    image: "./assets/down.png"
+                })
+                break;
+
             case TileType.Exterior:
                 break
-
         }
-    }
+
+        return tile
+    })
 
     return map
 }
@@ -83,7 +102,7 @@ export function* iterThings(grd: grid.Grid<Tile>) {
 }
 
 function generateRooms(width: number, height: number): grid.Grid<TileType> {
-    const grd = new grid.Grid<TileType>(width, height, () => TileType.Exterior)
+    const grd = grid.generate(width, height, () => TileType.Exterior)
     const regionStack: Region[] = []
     const regions: Region[] = []
     const maxRooms = 128
@@ -164,7 +183,21 @@ function generateRooms(width: number, height: number): grid.Grid<TileType> {
     }
 
     const firstRegion = regions.reduce((x, y) => x.depth < y.depth ? x : y)
+    for (const [x, y, t] of grd.scanRect(firstRegion.rect)) {
+        if (t === TileType.Wall && hasInteriorNeighbor(grd, x, y)) {
+            grd.set(x, y, TileType.Up)
+            break
+        }
+    }
+
     const lastRegion = regions.reduce((x, y) => x.depth > y.depth ? x : y)
+    for (const [x, y, t] of grd.scanRect(lastRegion.rect)) {
+        if (t === TileType.Wall && hasInteriorNeighbor(grd, x, y)) {
+            grd.set(x, y, TileType.Down)
+            break
+        }
+    }
+
     console.log(`Placed ${numRooms} rooms`)
 
     return grd
@@ -328,6 +361,30 @@ function findTunnelableNeighbor(grid: grid.Grid<TileType>, x: number, y: number)
     }
 
     if (grid.at(x, y - 1) === TileType.Exterior && grid.at(x, y + 1) === TileType.Interior) {
+        return [x, y - 1]
+    }
+
+    return null
+}
+
+function hasInteriorNeighbor(grd: grid.Grid<TileType>, x: number, y: number) {
+    return findTunnelableNeighbor(grd, x, y) != null
+}
+
+function findInteriorNeighbor(grd: grid.Grid<TileType>, x: number, y: number): (Coords | null) {
+    if (x > 0 && grd.at(x - 1, y) === TileType.Interior) {
+        return [x - 1, y]
+    }
+
+    if (y < grd.width && grd.at(x, y + 1) === TileType.Interior) {
+        return [x, y + 1]
+    }
+
+    if (x < grd.width && grd.at(x + 1, y) === TileType.Interior) {
+        return [x + 1, y]
+    }
+
+    if (y > 0 && grd.at(x, y - 1) === TileType.Interior) {
         return [x, y - 1]
     }
 

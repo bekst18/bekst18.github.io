@@ -12,7 +12,7 @@ export interface Rect {
  * a generic 2d array of data
  */
 export class Grid<T> {
-    constructor(readonly width: number = 0, readonly height: number = 0, readonly data: T[], readonly offset: number=0, readonly rowPitch: number=0) {
+    constructor(readonly width: number = 0, readonly height: number = 0, readonly data: T[], readonly offset: number = 0, readonly rowPitch: number = 0) {
         // check for errors
         if (this.rowPitch === 0) {
             this.rowPitch = this.width
@@ -158,9 +158,22 @@ export class Grid<T> {
     /**
      * copy a portion of this grid into a new grid
      */
-    subgrid(x: number, y: number, width: number, height: number): Grid<T> {
-        const dst = new Grid<T>(width, height, (dx, dy) => this.at(x + dx, y + dy))
+    view(x: number, y: number, width: number, height: number): Grid<T> {
+        const offset = this.flat(x, y)
+        const dst = new Grid<T>(width, height, this.data, offset, this.rowPitch)
         return dst
+    }
+
+    map<U>(f: (v: T, x: number, y: number) => U): Grid<U> {
+        const data: U[] = []
+        for (let y = 0; y < this.height; ++y) {
+            for (let x = 0; x < this.width; ++x) {
+                const v = this.at(x, y)
+                data.push(f(v, x, y))
+            }
+        }
+
+        return new Grid<U>(this.width, this.height, data)
     }
 }
 
@@ -195,4 +208,16 @@ export function copyRegion<T>(
     for (const [x, y, v] of src.scanRegion(sx, sy, width, height)) {
         dst.set(x + dx, y + dy, v)
     }
+}
+
+export function generate<T>(width: number, height: number, f: (x: number, y: number) => T): Grid<T> {
+    const data: T[] = []
+    for (let y = 0; y < height; ++y) {
+        for (let x = 0; x < width; ++x) {
+            data.push(f(x, y))
+        }
+    }
+
+    const grd = new Grid<T>(width, height, data)
+    return grd
 }

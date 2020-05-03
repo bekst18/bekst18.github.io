@@ -28,7 +28,7 @@ async function generateMap(renderer: gfx.Renderer, width: number, height: number
     const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
     const texture = renderer.bakeTextureArray(tileSize, tileSize, images)
 
-    const map: MapGrid = new grid.Grid<Tile>(gmap.width, gmap.height, (x, y) => {
+    const map: MapGrid = grid.generate(gmap.width, gmap.height, (x, y) => {
         const gtile = gmap.at(x, y)
         const tile: Tile = {
             things: []
