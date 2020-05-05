@@ -75,7 +75,7 @@ export class Renderer {
     private vertices: Float32Array = new Float32Array()
     private indices: Uint16Array = new Uint16Array()
 
-    constructor(private readonly canvas: HTMLCanvasElement) {
+    constructor(readonly canvas: HTMLCanvasElement) {
         this.gl = glu.createContext(canvas)
         const gl = this.gl
 

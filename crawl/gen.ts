@@ -4,6 +4,7 @@
 import * as array from "../shared/array.js"
 import * as grid from "../shared/grid.js"
 import * as rnd from "../shared/rand.js"
+import * as rl from "./rl.js"
 
 const roomSizes = [5, 7, 9, 11]
 const hallLengths = [5, 7, 9, 11]
@@ -12,9 +13,10 @@ enum TileType {
     Door,
     Wall,
     Interior,
-    Exterior
+    Exterior,
     Up,
-    Down
+    Down,
+    Player,
 }
 
 enum RegionType {
@@ -29,75 +31,117 @@ interface Region {
     type: RegionType
 }
 
-type Coords = [number, number]
-
-interface Thing {
-    name: string
-    image: string
+/**
+ * components of a generated map area
+ */
+export interface MapData {
+    tiles: rl.Tile[]
+    fixtures: rl.Fixture[]
+    stairsUp: rl.Fixture
+    stairsDown: rl.Fixture
+    player: rl.Player
 }
 
-interface Tile {
-    things: Thing[]
-}
-
-export function generateMap(width: number, height: number): grid.Grid<Tile> {
+export function generateMap(player: rl.Player, width: number, height: number): MapData {
     const rooms = generateRooms(width, height)
-    const map = rooms.map(type => {
-        const tile: Tile = {
-            things: []
-        }
 
-        switch (type) {
+    const tiles: rl.Tile[] = []
+    const fixtures: rl.Fixture[] = []
+    let stairsUp: rl.Fixture | null = null
+    let stairsDown: rl.Fixture | null = null
+    let startPosition: rl.Coords | null = null
+
+    for (const [x, y, t] of rooms.scan()) {
+        switch (t) {
             case TileType.Door:
-                tile.things.push({
-                    name: "Door",
-                    image: "./assets/closed.png"
+                fixtures.push({
+                    position: [x, y],
+                    passable: false,
+                    transparent: false,
+                    name: "Closed Door",
+                    image: "./assets/closed.png",
+                    texture: null,
+                    textureLayer: null
                 })
                 break;
 
             case TileType.Wall:
-                tile.things.push({
-                    name: "Door",
-                    image: "./assets/wall.png"
+                tiles.push({
+                    position: [x, y],
+                    passable: false,
+                    transparent: false,
+                    name: "Wall",
+                    image: "./assets/wall.png",
+                    texture: null,
+                    textureLayer: null
                 })
                 break;
 
             case TileType.Interior:
-                tile.things.push({
-                    name: "Door",
-                    image: "./assets/floor.png"
+                tiles.push({
+                    position: [x, y],
+                    passable: true,
+                    transparent: true,
+                    name: "Floor",
+                    image: "./assets/floor.png",
+                    texture: null,
+                    textureLayer: null
                 })
                 break;
 
             case TileType.Up:
-                tile.things.push({
-                    name: "Door",
-                    image: "./assets/up.png"
-                })
+                stairsUp = {
+                    position: [x, y],
+                    passable: false,
+                    transparent: false,
+                    name: "Stairs Up",
+                    image: "./assets/up.png",
+                    texture: null,
+                    textureLayer: null
+                }
                 break;
 
             case TileType.Down:
-                tile.things.push({
-                    name: "Door",
-                    image: "./assets/down.png"
-                })
+                stairsDown = {
+                    position: [x, y],
+                    passable: false,
+                    transparent: false,
+                    name: "Stairs Down",
+                    image: "./assets/down.png",
+                    texture: null,
+                    textureLayer: null
+                }
+                break;
+
+            case TileType.Player:
+                startPosition = [x, y]
                 break;
 
             case TileType.Exterior:
                 break
         }
+    }
 
-        return tile
-    })
+    if (!stairsUp) {
+        throw new Error("Stairs up were not placed")
+    }
 
-    return map
-}
+    if (!stairsDown) {
+        throw new Error("Stairs down were not placed")
+    }
 
-export function* iterThings(grd: grid.Grid<Tile>) {
-    for (const tile of grd) {
-        for (const thing of tile.things) {
-            yield thing
-        }
+    if (!startPosition) {
+        throw new Error("Start position was not determined")
+    }
+
+    player.position = startPosition
+
+    return {
+        tiles: tiles,
+        fixtures: fixtures,
+        stairsUp: stairsUp,
+        stairsDown: stairsDown,
+        player: player
     }
 }
 
@@ -184,8 +228,10 @@ function generateRooms(width: number, height: number): grid.Grid<TileType> {
 
     const firstRegion = regions.reduce((x, y) => x.depth < y.depth ? x : y)
     for (const [x, y, t] of grd.scanRect(firstRegion.rect)) {
-        if (t === TileType.Wall && hasInteriorNeighbor(grd, x, y)) {
+        const interiorNeighbor = findInteriorNeighbor(grd, x, y)
+        if (t === TileType.Wall && interiorNeighbor != null) {
             grd.set(x, y, TileType.Up)
+            grd.set(interiorNeighbor[0], interiorNeighbor[1], TileType.Player)
             break
         }
     }
@@ -205,7 +251,7 @@ function generateRooms(width: number, height: number): grid.Grid<TileType> {
 
 function tryTunnels(grd: grid.Grid<TileType>, region: Region): (Region | null) {
     // try to tunnel from this room
-    const tunnels: Coords[] = []
+    const tunnels: grid.Coords[] = []
     for (const [x, y] of grd.scanRect(region.rect)) {
         if (isTunnelable(grd, x, y)) {
             tunnels.push([x, y])
@@ -343,7 +389,7 @@ function isTunnelable(grid: grid.Grid<TileType>, x: number, y: number): boolean 
     return findTunnelableNeighbor(grid, x, y) != null
 }
 
-function findTunnelableNeighbor(grid: grid.Grid<TileType>, x: number, y: number): (Coords | null) {
+function findTunnelableNeighbor(grid: grid.Grid<TileType>, x: number, y: number): (grid.Coords | null) {
     if (x === 0 || y === 0 || x === grid.width - 1 || y === grid.height - 1) {
         return null
     }
@@ -371,7 +417,7 @@ function hasInteriorNeighbor(grd: grid.Grid<TileType>, x: number, y: number) {
     return findTunnelableNeighbor(grd, x, y) != null
 }
 
-function findInteriorNeighbor(grd: grid.Grid<TileType>, x: number, y: number): (Coords | null) {
+function findInteriorNeighbor(grd: grid.Grid<TileType>, x: number, y: number): (grid.Coords | null) {
     if (x > 0 && grd.at(x - 1, y) === TileType.Interior) {
         return [x - 1, y]
     }

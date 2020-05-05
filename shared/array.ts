@@ -147,3 +147,40 @@ export function countIf<T>(a: Iterable<T>, f: (x: T) => boolean): number {
 
     return r
 }
+
+export function reduce<T, U>(a: Iterable<T>, f: (previousValue: U, currentValue: T) => U, initialValue: U): U {
+    let value = initialValue
+    for (const x of a) {
+        value = f(value, x)
+    }
+
+    return value
+}
+
+/**
+ * returns the first item in the iterable that satisfies the predicates
+ * @param a iterable
+ * @param f predicate function
+ */
+export function find<T>(a: Iterable<T>, f: (x: T) => boolean): (T | null) {
+    for (const x of a) {
+        if (f(x)) {
+            return x
+        }
+    }
+
+    return null
+}
+
+/**
+ * yields only elements of a that satisfy the specified predicate
+ * @param a iterable
+ * @param f predicate
+ */
+export function* filter<T>(a: Iterable<T>, f: (x: T) => boolean) {
+    for (const x of a) {
+        if (f(x)) {
+            yield x
+        }
+    }
+}

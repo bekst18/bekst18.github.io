@@ -9,6 +9,11 @@ export interface Rect {
 }
 
 /**
+ * 2d coords
+ */
+export type Coords = [number, number]
+
+/**
  * a generic 2d array of data
  */
 export class Grid<T> {
@@ -46,10 +51,24 @@ export class Grid<T> {
         return this.regionInBounds(rect.x, rect.y, rect.width, rect.height)
     }
 
+    /**
+     * return flattened index for specified coordinates
+     * @param x x coord
+     * @param y y coord
+     */
     flat(x: number, y: number): number {
         this.assertBounds(x, y)
         const i = this.offset + y * this.rowPitch + x
         return i
+    }
+
+    /**
+     * return flattened index for coordinates
+     * @param xy coordinates to flatten
+     */
+    flatCoords(xy: Coords): number {
+        const [x, y] = xy
+        return this.flat(x, y)
     }
 
     /**
@@ -73,6 +92,15 @@ export class Grid<T> {
     }
 
     /**
+     * access item at specified coordinates
+     * @param xy coordinates to access
+     */
+    atCoords(xy: Coords): T {
+        const [x, y] = xy
+        return this.at(x, y)
+    }
+
+    /**
      * set item at specified flat index to specified value
      * @param i flat index of item
      * @param value value
@@ -89,6 +117,16 @@ export class Grid<T> {
      */
     set(x: number, y: number, value: T): void {
         this.setf(this.flat(x, y), value)
+    }
+
+    /**
+     * set item at specified coordinates to specified value
+     * @param xy coords
+     * @param value value to set
+     */
+    setCoords(xy: Coords, value: T): void {
+        const [x, y] = xy
+        this.set(x, y, value)
     }
 
     /**
@@ -110,7 +148,6 @@ export class Grid<T> {
         }
     }
 
-
     /**
      * scan the specified region of the array
      * @param rect rect containing area to scan
@@ -128,6 +165,9 @@ export class Grid<T> {
         return this.scanRegion(0, 0, this.width, this.height)
     }
 
+    /**
+     * iterate over all things in grid
+     */
     *[Symbol.iterator]() {
         for (const x of this.data) {
             yield x
@@ -164,6 +204,10 @@ export class Grid<T> {
         return dst
     }
 
+    /**
+     * construct a new grid by applying a function to every element in this grid
+     * @param f mapping function
+     */
     map<U>(f: (v: T, x: number, y: number) => U): Grid<U> {
         const data: U[] = []
         for (let y = 0; y < this.height; ++y) {
@@ -174,6 +218,23 @@ export class Grid<T> {
         }
 
         return new Grid<U>(this.width, this.height, data)
+    }
+
+    /**
+     * find the coordinates of an element in the grid that meets the specified criteria
+     * @param f predicate function
+     */
+    findCoords(f: (v: T) => boolean): (Coords | null) {
+        for (let y = 0; y < this.height; ++y) {
+            for (let x = 0; x < this.width; ++x) {
+                const v = this.at(x, y)
+                if (f(v)) {
+                    return [x, y]
+                }
+            }
+        }
+
+        return null
     }
 }
 
