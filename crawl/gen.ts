@@ -1,35 +1,7 @@
-/**
- * map generation library
- */
-import * as array from "../shared/array.js"
-import * as grid from "../shared/grid.js"
-import * as rnd from "../shared/rand.js"
 import * as rl from "./rl.js"
-
-const roomSizes = [5, 7, 9, 11]
-const hallLengths = [5, 7, 9, 11]
-
-enum TileType {
-    Door,
-    Wall,
-    Interior,
-    Exterior,
-    Up,
-    Down,
-    Player,
-}
-
-enum RegionType {
-    Hallway,
-    Room
-}
-
-interface Region {
-    rect: grid.Rect,
-    nonOverlappingRect: grid.Rect,
-    depth: number,
-    type: RegionType
-}
+import * as geo from "../shared/geo2d.js"
+import * as rand from "../shared/rand.js"
+import * as array from "../shared/array.js"
 
 /**
  * components of a generated map area
@@ -42,415 +14,327 @@ export interface MapData {
     player: rl.Player
 }
 
-export function generateMap(player: rl.Player, width: number, height: number): MapData {
-    const rooms = generateRooms(width, height)
+enum RoomType {
+    Hallway,
+    Room
+}
 
-    const tiles: rl.Tile[] = []
-    const fixtures: rl.Fixture[] = []
-    let stairsUp: rl.Fixture | null = null
-    let stairsDown: rl.Fixture | null = null
-    let startPosition: rl.Coords | null = null
+interface RoomMap {
+    width: number,
+    height: number,
+    rooms: Room[]
+}
 
-    for (const [x, y, t] of rooms.scan()) {
-        switch (t) {
-            case TileType.Door:
-                fixtures.push({
-                    position: [x, y],
-                    passable: false,
-                    transparent: false,
-                    name: "Closed Door",
-                    image: "./assets/closed.png",
-                    texture: null,
-                    textureLayer: null
-                })
-                break;
+class Room {
+    public depth: number = 0
 
-            case TileType.Wall:
-                tiles.push({
-                    position: [x, y],
-                    passable: false,
-                    transparent: false,
-                    name: "Wall",
-                    image: "./assets/wall.png",
-                    texture: null,
-                    textureLayer: null
-                })
-                break;
+    constructor(readonly type: RoomType, public tiles: rl.Tile[], public aabb: geo.AABB) { }
 
-            case TileType.Interior:
-                tiles.push({
-                    position: [x, y],
-                    passable: true,
-                    transparent: true,
-                    name: "Floor",
-                    image: "./assets/floor.png",
-                    texture: null,
-                    textureLayer: null
-                })
-                break;
+    clone(): Room {
+        const room = new Room(
+            this.type,
+            this.tiles.map(t => t.clone()),
+            this.aabb.clone()
+        )
 
-            case TileType.Up:
-                stairsUp = {
-                    position: [x, y],
-                    passable: false,
-                    transparent: false,
-                    name: "Stairs Up",
-                    image: "./assets/up.png",
-                    texture: null,
-                    textureLayer: null
-                }
-                break;
+        return room
+    }
 
-            case TileType.Down:
-                stairsDown = {
-                    position: [x, y],
-                    passable: false,
-                    transparent: false,
-                    name: "Stairs Down",
-                    image: "./assets/down.png",
-                    texture: null,
-                    textureLayer: null
-                }
-                break;
-
-            case TileType.Player:
-                startPosition = [x, y]
-                break;
-
-            case TileType.Exterior:
-                break
+    // translate the room (in-place)
+    translate(offset: geo.Point) {
+        this.aabb = this.aabb.translate(offset)
+        for (const tile of this.tiles) {
+            tile.position = tile.position.addPoint(offset)
         }
-    }
-
-    if (!stairsUp) {
-        throw new Error("Stairs up were not placed")
-    }
-
-    if (!stairsDown) {
-        throw new Error("Stairs down were not placed")
-    }
-
-    if (!startPosition) {
-        throw new Error("Start position was not determined")
-    }
-
-    player.position = startPosition
-
-    return {
-        tiles: tiles,
-        fixtures: fixtures,
-        stairsUp: stairsUp,
-        stairsDown: stairsDown,
-        player: player
     }
 }
 
-function generateRooms(width: number, height: number): grid.Grid<TileType> {
-    const grd = grid.generate(width, height, () => TileType.Exterior)
-    const regionStack: Region[] = []
-    const regions: Region[] = []
-    const maxRooms = 128
+const wall = new rl.Tile({
+    position: new geo.Point(0, 0),
+    name: "Brick Wall",
+    image: "./assets/wall.png",
+    passable: false,
+    transparent: false
+})
+
+const interior = new rl.Tile({
+    position: new geo.Point(0, 0),
+    name: "Floor",
+    image: "./assets/floor.png",
+    passable: true,
+    transparent: true
+})
+
+const door = new rl.Fixture({
+    position: new geo.Point(0, 0),
+    name: "A Closed Wooden Door",
+    image: "./assets/closed.png",
+    passable: true,
+    transparent: true
+})
+
+const stairsUp = new rl.Thing({
+    position: new geo.Point(0, 0),
+    name: "Stairs Up",
+    image: "./assets/up.png",
+    passable: false,
+    transparent: false,
+})
+
+const stairsDown = new rl.Thing({
+    position: new geo.Point(0, 0),
+    name: "Stairs Down",
+    image: "./assets/down.png",
+    passable: false,
+    transparent: false,
+})
+
+export function generateMap(player: rl.Player, width: number, height: number): MapData {
+    const map: MapData = {
+        tiles: [],
+        fixtures: [],
+        stairsUp: stairsUp.clone(),
+        stairsDown: stairsDown.clone(),
+        player: player
+    }
+
+    // create some pre-sized rooms and hallways for placement
+    const roomTemplates = [5, 7, 9, 11].map(size => createRoom(RoomType.Room, size, size))
+    const hallTemplates = []
+    hallTemplates.push(...[5, 5, 7, 9, 11].map(length => createRoom(RoomType.Hallway, length, 3)))
+    hallTemplates.push(...[5, 5, 7, 9, 11].map(length => createRoom(RoomType.Hallway, 3, length)))
+
+    const roomStack: Room[] = []
+    const roomMap: RoomMap = {
+        rooms: [],
+        width: width,
+        height: height
+    }
 
     // place initial room
     {
-        const minRoomSize = roomSizes.reduce((x, y) => x < y ? x : y)
-        const maxRoomSize = roomSizes.reduce((x, y) => x > y ? x : y)
-        const x = rnd.int(0, grd.width - minRoomSize)
-        const y = rnd.int(0, grd.height - minRoomSize)
-        const size = rnd.int(minRoomSize, Math.min(maxRoomSize, grd.width - x, grd.height - y))
-        const region: Region = {
-            rect: { x: x, y: y, width: size, height: size },
-            nonOverlappingRect: { x: x, y: y, width: size, height: size },
-            depth: 0,
-            type: RegionType.Room
-        }
+        const room = rand.choose(roomTemplates).clone()
+        const offset = new geo.Point(
+            rand.int(0, width - room.aabb.width),
+            rand.int(0, height - room.aabb.height),
+        )
 
-        if (!tryPlaceRegion(grd, region)) {
-            throw new Error("Failed to place initial region")
-        }
-
-        regionStack.push(region)
-        regions.push(region)
+        room.translate(offset)
+        roomStack.push(room)
+        roomMap.rooms.push(room)
     }
 
-    let numRooms = 1
-    while (true) {
-        if (regionStack.length <= 0) {
-            console.log("No more tunnel rooms")
-            break
-        }
-
-        if (numRooms >= maxRooms) {
-            console.log("Max rooms reached")
-            break
-        }
-
-        // take region off of the stack
-        const region = array.pop(regionStack)
-
-        // try to tunnel from this region
-        const nextRegion = tryTunnels(grd, region)
-        if (!nextRegion) {
+    // attempt to tunnel from room to room for as long as we can
+    while (roomStack.length !== 0) {
+        const room = array.pop(roomStack)
+        const templates = room.type === RoomType.Hallway ? roomTemplates : hallTemplates
+        const placement = tryTunnel(roomMap, templates, room)
+        if (placement == null) {
             continue
         }
 
-        nextRegion.depth = region.depth + 1
-        regionStack.push(region)
-        regionStack.push(nextRegion)
-        regions.push(nextRegion)
+        const [nextRoom, pt] = placement
 
-        if (nextRegion.type === RegionType.Room) {
-            numRooms++
-        }
+        // remove wall at join point
+        room.tiles = room.tiles.filter(t => !t.position.equal(pt))
+        nextRoom.tiles = nextRoom.tiles.filter(t => !t.position.equal(pt))
+
+        // add shared door at join point
+        const newDoor = door.clone()
+        newDoor.position = pt.clone()
+        map.fixtures.push(newDoor)
+
+        nextRoom.depth = room.depth + 1
+        roomStack.push(room)
+        roomStack.push(nextRoom)
+        roomMap.rooms.push(nextRoom)
     }
 
-    // remove dead end hallways
-    for (const region of regions) {
-        if (region.type !== RegionType.Hallway) {
-            continue
-        }
+    // place player and up stairs
+    const firstRoom = roomMap.rooms.reduce((x, y) => x.depth < y.depth ? x : y)
+    const stairsUpPosition = towardCenter(firstRoom.aabb, rand.choose([...scanEdge(firstRoom.aabb)].filter(pt => !map.fixtures.some(f => f.position.equal(pt)))))
+    firstRoom.tiles = firstRoom.tiles.filter(t => !t.position.equal(stairsUpPosition))
+    map.stairsUp.position = stairsUpPosition
+    map.player.position = towardCenter(firstRoom.aabb, stairsUpPosition)
 
-        const numDoors = array.countIf(grd.iterRect(region.rect), t => t === TileType.Door)
-        if (numDoors > 1) {
-            continue
-        }
+    // place down stairs
+    const lastRoom = roomMap.rooms.reduce((x, y) => x.depth > y.depth ? x : y)
+    const stairsDownPosition = towardCenter(lastRoom.aabb, rand.choose([...scanEdge(lastRoom.aabb)].filter(pt => !map.fixtures.some(f => f.position.equal(pt)))))
+    lastRoom.tiles = lastRoom.tiles.filter(t => !t.position.equal(stairsDownPosition))
+    map.stairsDown.position = stairsDownPosition
 
-        for (const [x, y] of grd.scanRect(region.nonOverlappingRect)) {
-            grd.set(x, y, TileType.Exterior)
-        }
+    for (const room of roomMap.rooms) {
+        map.tiles.push(...room.tiles)
+    }
+ 
+    return map
+}
 
-        for (const [x, y, t] of grd.scanRect(region.rect)) {
-            if (t === TileType.Door) {
-                grd.set(x, y, TileType.Wall)
+function tryTunnel(roomMap: RoomMap, templates: Room[], room: Room): [Room, geo.Point] | null {
+    const pts = [...scanEdge(room.aabb)]
+    rand.shuffle(pts)
+    rand.shuffle(templates)
+
+    for (const pt of pts) {
+        for (const template of templates) {
+            const room = tryConnect(roomMap, template, pt)
+            if (room) {
+                return [room, pt]
             }
         }
     }
 
-    const firstRegion = regions.reduce((x, y) => x.depth < y.depth ? x : y)
-    for (const [x, y, t] of grd.scanRect(firstRegion.rect)) {
-        const interiorNeighbor = findInteriorNeighbor(grd, x, y)
-        if (t === TileType.Wall && interiorNeighbor != null) {
-            grd.set(x, y, TileType.Up)
-            grd.set(interiorNeighbor[0], interiorNeighbor[1], TileType.Player)
-            break
-        }
-    }
-
-    const lastRegion = regions.reduce((x, y) => x.depth > y.depth ? x : y)
-    for (const [x, y, t] of grd.scanRect(lastRegion.rect)) {
-        if (t === TileType.Wall && hasInteriorNeighbor(grd, x, y)) {
-            grd.set(x, y, TileType.Down)
-            break
-        }
-    }
-
-    console.log(`Placed ${numRooms} rooms`)
-
-    return grd
+    return null
 }
 
-function tryTunnels(grd: grid.Grid<TileType>, region: Region): (Region | null) {
-    // try to tunnel from this room
-    const tunnels: grid.Coords[] = []
-    for (const [x, y] of grd.scanRect(region.rect)) {
-        if (isTunnelable(grd, x, y)) {
-            tunnels.push([x, y])
-        }
-    }
+function tryConnect(roomMap: RoomMap, template: Room, pt0: geo.Point): (Room | null) {
+    const pts = [...scanEdge(template.aabb)]
+    const aabb = template.aabb.shrink(1)
+    rand.shuffle(pts)
 
-    rnd.shuffle(tunnels)
-
-    // try each tunnelable location
-    while (tunnels.length > 0) {
-        // find a place to begin tunneling to next room
-        const [tx, ty] = array.pop(tunnels)
-        const nxy = findTunnelableNeighbor(grd, tx, ty)
-        if (!nxy) {
+    for (const pt1 of pts) {
+        const translation = pt0.subPoint(pt1)
+        if (!canPlaceRoom(roomMap, aabb.translate(translation))) {
             continue
         }
 
-        const [nx, ny] = nxy
-        const nextRegion = tryTunnel(grd, region, tx, ty, nx, ny)
-        if (nextRegion) {
-            return nextRegion
+        // place room and return
+        const room = template.clone()
+        room.translate(translation)
+
+        return room
+    }
+
+    return null
+}
+
+function canPlaceRoom(roomMap: RoomMap, aabb: geo.AABB): boolean {
+    const { width: mapWidth, height: mapHeight } = roomMap
+
+    // note - exteriors can overlap, but not interiors
+    return (
+        aabb.min.x >= 0 && aabb.min.y >= 0 &&
+        aabb.max.x < mapWidth && aabb.max.y < mapHeight &&
+        roomMap.rooms.every(room => !room.aabb.shrink(1).overlaps(aabb)))
+}
+
+function createRoom(type: RoomType, width: number, height: number): Room {
+    const tiles: rl.Tile[] = []
+    const aabb = new geo.AABB(new geo.Point(0, 0), new geo.Point(width, height))
+
+    for (const { x, y } of scanInterior(aabb)) {
+        const tile = interior.clone()
+        tile.position = new geo.Point(x, y)
+        tiles.push(tile)
+    }
+
+    for (const { x, y } of scanBorder(aabb)) {
+        const tile = wall.clone()
+        tile.position = new geo.Point(x, y)
+        tiles.push(tile)
+    }
+
+    return new Room(type, tiles, new geo.AABB(new geo.Point(0, 0), new geo.Point(width, height)))
+}
+
+function* scan(width: number, height: number): Iterable<geo.Point> {
+    const pt = new geo.Point(0, 0)
+    for (let y = 0; y < height; ++y) {
+        pt.y = y
+        for (let x = 0; x < width; ++x) {
+            pt.x = x
+            yield pt.clone()
         }
     }
-
-    return null
 }
 
-function tryTunnel(grd: grid.Grid<TileType>, region: Region, tx: number, ty: number, nx: number, ny: number): (Region | null) {
-    switch (region.type) {
-        case RegionType.Hallway:
-            return tryRoom(grd, tx, ty, nx, ny)
-
-        case RegionType.Room:
-            return tryHallway(grd, tx, ty, nx, ny)
-    }
-}
-
-function tryHallway(grd: grid.Grid<TileType>, tx: number, ty: number, nx: number, ny: number): (Region | null) {
-    rnd.shuffle(hallLengths)
-    for (const length of hallLengths) {
-        // for nx / ny
-        // nx === cx = vertical hallway
-        // ny === cy = horizontal hallway
-        const width = ny === ty ? length : 3
-        const height = nx === tx ? length : 3
-        const region = tryPlaceAdjacentRegion(grd, RegionType.Hallway, tx, ty, nx, ny, width, height)
-        if (region) {
-            return region
+function* scanRect(rect: geo.AABB): Iterable<geo.Point> {
+    // scan all border positions of the rectangle
+    for (let y = rect.min.y; y < rect.max.y; ++y) {
+        for (let x = rect.min.x; x < rect.max.x; ++x) {
+            const pt = new geo.Point(x, y)
+            yield pt
         }
     }
-
-    return null
 }
 
-function tryRoom(grd: grid.Grid<TileType>, tx: number, ty: number, nx: number, ny: number): (Region | null) {
-    // try placing a room here
-    rnd.shuffle(roomSizes)
-    for (const size of roomSizes) {
-        const region = tryPlaceAdjacentRegion(grd, RegionType.Room, tx, ty, nx, ny, size, size)
-        if (region) {
-            return region
-        }
-    }
-
-    return null
+function scanInterior(rect: geo.AABB): Iterable<geo.Point> {
+    // scan all interior positions of the rectangle
+    return scanRect(rect.shrink(1))
 }
 
-function tryPlaceAdjacentRegion(grd: grid.Grid<TileType>, type: RegionType, tx: number, ty: number, nx: number, ny: number, width: number, height: number): (Region | null) {
-    // for nx / ny
-    // nx < tx - horizontal - right to left
-    // nx > tx - horizontal - left to right
-    // ny < ty - vertical - bottom to top
-    // ny > ty - vertical - top to bottom
-    // for each case - find hallway rect, find check overlap rect
-    const region: Region = {
-        rect: { x: 0, y: 0, width: 0, height: 0 },
-        nonOverlappingRect: { x: 0, y: 0, width: 0, height: 0 },
-        depth: 0,
-        type: type
-    }
-
-    if (nx < tx) {
-        // right to left
-        const x = tx - width + 1
-        const y = ty - Math.floor(height / 2)
-        region.rect = { x: x, y: y, width: width, height: height }
-        region.nonOverlappingRect = { x: x, y: y, width: width - 1, height: height }
-    } else if (nx > tx) {
-        // left to right
-        const x = tx
-        const y = ty - Math.floor(height / 2)
-        region.rect = { x: x, y: y, width: width, height: height }
-        region.nonOverlappingRect = { x: x + 1, y: y, width: width - 1, height: height }
-    } else if (ny < ty) {
-        // bottom to top
-        const x = tx - Math.floor(width / 2)
-        const y = ty - height + 1
-        region.rect = { x: x, y: y, width: width, height: height }
-        region.nonOverlappingRect = { x: x, y: y, width: width, height: height - 1 }
-    } else if (ny > ty) {
-        // top to bottom
-        const x = tx - Math.floor(width / 2)
-        const y = ty
-        region.rect = { x: x, y: y, width: width, height: height }
-        region.nonOverlappingRect = { x: x, y: y + 1, width: width, height: height - 1 }
-    } else {
-        throw new Error("invalid tunnel position")
-    }
-
-    const success = tryPlaceRegion(grd, region)
-    if (!success) {
-        return null
-    }
-
-    grd.set(tx, ty, TileType.Door)
-    return region
+function scanEdge(rect: geo.AABB): Iterable<geo.Point> {
+    // scan non-corner border of rect
+    return array.filter(scanBorder(rect), pt => !isCorner(rect, pt))
 }
 
-function tryPlaceRegion(grd: grid.Grid<TileType>, region: Region): boolean {
-    const { x, y, width, height } = region.rect
-    if (!grd.regionInBounds(x, y, width, height)) {
-        return false
-    }
+function isCorner(rect: geo.AABB, pt: geo.Point) {
+    const l = rect.min.x
+    const t = rect.min.y
+    const r = rect.max.x - 1
+    const b = rect.max.y - 1
 
-    const { x: nx, y: ny, width: nwidth, height: nheight } = region.nonOverlappingRect
-    if (!regionIsExterior(grd, nx, ny, nwidth, nheight)) {
-        return false
-    }
-
-    encloseRoom(x, y, width, height, grd)
-    return true
+    return (
+        (pt.x === l && pt.y === t) ||
+        (pt.x === l && pt.y === b) ||
+        (pt.x === r && pt.y === b) ||
+        (pt.x === r && pt.y === t))
 }
 
-function isTunnelable(grid: grid.Grid<TileType>, x: number, y: number): boolean {
-    return findTunnelableNeighbor(grid, x, y) != null
-}
-
-function findTunnelableNeighbor(grid: grid.Grid<TileType>, x: number, y: number): (grid.Coords | null) {
-    if (x === 0 || y === 0 || x === grid.width - 1 || y === grid.height - 1) {
-        return null
+function* scanBorder(rect: geo.AABB): Iterable<geo.Point> {
+    // left
+    for (let y = rect.min.y; y < rect.max.y - 1; ++y) {
+        const pt = new geo.Point(rect.min.x, y)
+        yield pt
     }
 
-    if (grid.at(x - 1, y) === TileType.Exterior && grid.at(x + 1, y) === TileType.Interior) {
-        return [x - 1, y]
+    // bottom
+    for (let x = rect.min.x; x < rect.max.x - 1; ++x) {
+        const pt = new geo.Point(x, rect.max.y - 1)
+        yield pt
     }
 
-    if (grid.at(x, y + 1) === TileType.Exterior && grid.at(x, y - 1) === TileType.Interior) {
-        return [x, y + 1]
+    // right
+    for (let y = rect.max.y - 1; y > rect.min.y; --y) {
+        const pt = new geo.Point(rect.max.x - 1, y)
+        yield pt
     }
 
-    if (grid.at(x + 1, y) === TileType.Exterior && grid.at(x - 1, y) === TileType.Interior) {
-        return [x + 1, y]
-    }
-
-    if (grid.at(x, y - 1) === TileType.Exterior && grid.at(x, y + 1) === TileType.Interior) {
-        return [x, y - 1]
-    }
-
-    return null
-}
-
-function hasInteriorNeighbor(grd: grid.Grid<TileType>, x: number, y: number) {
-    return findTunnelableNeighbor(grd, x, y) != null
-}
-
-function findInteriorNeighbor(grd: grid.Grid<TileType>, x: number, y: number): (grid.Coords | null) {
-    if (x > 0 && grd.at(x - 1, y) === TileType.Interior) {
-        return [x - 1, y]
-    }
-
-    if (y < grd.width && grd.at(x, y + 1) === TileType.Interior) {
-        return [x, y + 1]
-    }
-
-    if (x < grd.width && grd.at(x + 1, y) === TileType.Interior) {
-        return [x + 1, y]
-    }
-
-    if (y > 0 && grd.at(x, y - 1) === TileType.Interior) {
-        return [x, y - 1]
-    }
-
-    return null
-}
-
-function encloseRoom(x0: number, y0: number, width: number, height: number, grid: grid.Grid<TileType>) {
-    const r = x0 + width - 1
-    const b = y0 + height - 1
-    for (const [x, y] of grid.scanRegion(x0, y0, width, height)) {
-        if (x === x0 || y == y0 || x === r || y === b) {
-            grid.set(x, y, TileType.Wall)
-            continue
-        }
-
-        grid.set(x, y, TileType.Interior)
+    // top
+    for (let x = rect.max.x - 1; x > rect.min.x; --x) {
+        const pt = new geo.Point(x, rect.min.y)
+        yield pt
     }
 }
 
-function regionIsExterior(grid: grid.Grid<TileType>, x0: number, y0: number, width: number, height: number): boolean {
-    const exterior = array.all(grid.iterRegion(x0, y0, width, height), x => x == TileType.Exterior)
-    return exterior
+function* scanLeft(rect: geo.AABB): Iterable<geo.Point> {
+    for (let y = rect.min.y; y < rect.max.y; ++y) {
+        const pt = new geo.Point(rect.min.x, y)
+        yield pt
+    }
+}
+
+function* scanBottom(rect: geo.AABB): Iterable<geo.Point> {
+    for (let x = rect.min.x; x < rect.max.x; ++x) {
+        const pt = new geo.Point(x, rect.max.y - 1)
+        yield pt
+    }
+}
+
+function* scanRight(rect: geo.AABB): Iterable<geo.Point> {
+    for (let y = rect.min.y; y < rect.max.y; ++y) {
+        const pt = new geo.Point(rect.max.x - 1, y)
+        yield pt
+    }
+}
+
+function* scanTop(rect: geo.AABB): Iterable<geo.Point> {
+    for (let x = rect.min.x; x < rect.max.x; ++x) {
+        const pt = new geo.Point(x, rect.min.y)
+        yield pt
+    }
+}
+
+function towardCenter(rect: geo.AABB, pt: geo.Point): geo.Point {
+    return pt.addPoint(rect.center.subPoint(pt).sign())
 }

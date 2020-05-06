@@ -4,20 +4,21 @@ import * as gfx from "./gfx.js"
 import * as gen from "./gen.js"
 import * as input from "../shared/input.js"
 import * as rl from "./rl.js"
+import * as geo from "../shared/geo2d.js"
 
 const tileSize = 24
 
 async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: number, height: number): Promise<gen.MapData> {
-    const data = gen.generateMap(player, width, height)
+    const map = gen.generateMap(player, width, height)
 
     // bake all 24x24 tile images to a single array texture
     // store mapping from image url to index
     let imageUrls: string[] = []
-    imageUrls.push(...data.tiles.map(t => t.image))
-    imageUrls.push(...data.fixtures.map(t => t.image))
-    imageUrls.push(data.stairsUp.image)
-    imageUrls.push(data.stairsDown.image)
-    imageUrls.push(data.player.image)
+    imageUrls.push(...map.tiles.map(t => t.image))
+    imageUrls.push(...map.fixtures.map(t => t.image))
+    imageUrls.push(map.stairsUp.image)
+    imageUrls.push(map.stairsDown.image)
+    imageUrls.push(map.player.image)
     imageUrls = imageUrls.filter(url => url)
     imageUrls = array.distinct(imageUrls)
 
@@ -25,23 +26,25 @@ async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: num
     const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
     const texture = renderer.bakeTextureArray(tileSize, tileSize, images)
 
-    const assignTexture = (th: rl.Thing) => {
+    const initRenderData = (th: rl.Thing) => {
         const layer = layerMap.get(th.image)
         if (layer === undefined) {
             throw new Error(`texture index not found for ${th.image}`)
         }
 
-        th.texture = texture
-        th.textureLayer = layer
+        th.renderData = {
+            texture: texture,
+            textureLayer: layer
+        }
     }
 
-    data.tiles.forEach(assignTexture)
-    data.fixtures.forEach(assignTexture)
-    assignTexture(data.stairsUp)
-    assignTexture(data.stairsDown)
-    assignTexture(data.player)
+    map.tiles.forEach(initRenderData)
+    map.fixtures.forEach(initRenderData)
+    initRenderData(map.stairsUp)
+    initRenderData(map.stairsDown)
+    initRenderData(map.player)
 
-    return data
+    return map
 }
 
 const errorsDiv = dom.byId("errors");
@@ -66,22 +69,22 @@ function tick(renderer: gfx.Renderer, keys: input.Keys, map: gen.MapData) {
 
 function handleInput(map: gen.MapData, keys: input.Keys) {
     const player = map.player
-    const position: rl.Coords = [player.position[0], player.position[1]]
+    const position = player.position.clone()
 
     if (keys.pressed("w")) {
-        position[1] -= 1
+        position.y -= 1
     }
 
     if (keys.pressed("s")) {
-        position[1] += 1
+        position.y += 1
     }
 
     if (keys.pressed("a")) {
-        position[0] -= 1
+        position.x -= 1
     }
 
     if (keys.pressed("d")) {
-        position[0] += 1
+        position.x += 1
     }
 
     if (isPassable(map, position)) {
@@ -91,17 +94,15 @@ function handleInput(map: gen.MapData, keys: input.Keys) {
     keys.update()
 }
 
-function isPassable(map: gen.MapData, xy: rl.Coords): boolean {
-    const [x, y] = xy
-
-    const tiles = array.filter(map.tiles, t => t.position[0] === x && t.position[1] === y)
+function isPassable(map: gen.MapData, xy: geo.Point): boolean {
+    const tiles = array.filter(map.tiles, t => t.position.equal(xy))
     for (const tile of tiles) {
         if (!tile.passable) {
             return false
         }
     }
 
-    const fixtures = array.filter(map.fixtures, t => t.position[0] === x && t.position[1] === y)
+    const fixtures = array.filter(map.fixtures, t => t.position.equal(xy))
     for (const fixture of fixtures) {
         if (!fixture.passable) {
             return false
@@ -114,9 +115,8 @@ function isPassable(map: gen.MapData, xy: rl.Coords): boolean {
 function drawFrame(renderer: gfx.Renderer, map: gen.MapData) {
     // center the grid around the player
     const playerCoords = map.player.position
-    const centerX = Math.floor((renderer.canvas.width - tileSize) / 2)
-    const centerY = Math.floor((renderer.canvas.height - tileSize) / 2)
-    const offset: rl.Coords = [centerX - playerCoords[0] * tileSize, centerY - playerCoords[1] * tileSize]
+    const center = new geo.Point(Math.floor((renderer.canvas.width - tileSize) / 2), Math.floor((renderer.canvas.height - tileSize) / 2))
+    const offset = center.subPoint(playerCoords.mulScalar(rl.tileSize))
 
     handleResize(renderer.canvas)
 
@@ -136,27 +136,21 @@ function drawFrame(renderer: gfx.Renderer, map: gen.MapData) {
     renderer.flush()
 }
 
-function drawThing(renderer: gfx.Renderer, offset: rl.Coords, th: rl.Thing) {
-    if (!th.texture) {
-        console.log(th)
-        throw new Error(`texture is not set for ${th.name} - image: ${th.image}`);
+function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
+    if (!th.renderData) {
+        throw new Error(`renderData is not set for ${th.name} with image: ${th.image}`)
     }
 
-    if (th.textureLayer === null) {
-        console.log(th)
-        throw new Error(`textureLayer is not set for ${th.name} - image ${th.image}`)
-    }
-
-    const [x, y] = th.position
-    const [ox, oy] = offset
+    const { x, y } = th.position
+    const { x: ox, y: oy } = offset
 
     const sprite: gfx.Sprite = {
         position: [x * tileSize + ox, y * tileSize + oy],
         color: [1, 1, 1, 1],
         width: tileSize,
         height: tileSize,
-        texture: th.texture,
-        layer: th.textureLayer
+        texture: th.renderData.texture,
+        layer: th.renderData.textureLayer
     }
 
     renderer.drawSprite(sprite)
@@ -175,15 +169,13 @@ async function main() {
     const canvas = dom.byId("canvas") as HTMLCanvasElement
     const renderer = new gfx.Renderer(canvas)
 
-    const player: rl.Player = {
+    const player = new rl.Player({
         name: "Player",
-        position: [0, 0],
+        position: new geo.Point(0, 0),
         passable: false,
         transparent: true,
-        image: "./assets/char.png",
-        texture: null,
-        textureLayer: null
-    }
+        image: "./assets/char.png"
+    })
 
     const map = await generateMap(player, renderer, 32, 32)
     const keys = new input.Keys()

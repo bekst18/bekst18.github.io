@@ -3,37 +3,117 @@
  */
 import * as array from "../shared/array.js"
 
-type Coords = [number, number]
+export class Point {
+    constructor(public x: number, public y: number) { }
+
+    equal(pt: Point): boolean {
+        return this.x === pt.x && this.y === pt.y
+    }
+
+    addScalar(x: number): Point {
+        return new Point(this.x + x, this.y + x)
+    }
+
+    subScalar(x: number): Point {
+        return new Point(this.x - x, this.y - x)
+    }
+
+    mulScalar(x: number): Point {
+        return new Point(this.x * x, this.y * x)
+    }
+
+    divScalar(x: number): Point {
+        return new Point(this.x / x, this.y / x)
+    }
+
+    addPoint(pt: Point): Point {
+        return new Point(this.x + pt.x, this.y + pt.y)
+    }
+
+    subPoint(pt: Point): Point {
+        return new Point(this.x - pt.x, this.y - pt.y)
+    }
+
+    mulPoint(pt: Point): Point {
+        return new Point(this.x * pt.x, this.y * pt.y)
+    }
+
+    divPoint(pt: Point): Point {
+        return new Point(this.x / pt.x, this.y / pt.y)
+    }
+
+    floor(): Point {
+        return new Point(Math.floor(this.x), Math.floor(this.y))
+    }
+
+    ciel(): Point {
+        return new Point(Math.ceil(this.x), Math.ceil(this.y))
+    }
+
+    round(): Point {
+        return new Point(Math.round(this.x), Math.round(this.y))
+    }
+
+    sign(): Point {
+        return new Point(Math.sign(this.x), Math.sign(this.y))
+    }
+
+    clone(): Point {
+        return new Point(this.x, this.y)
+    }
+}
 
 export class AABB {
-    constructor(readonly min: Coords, readonly max: Coords) { }
+    constructor(readonly min: Point, readonly max: Point) { }
 
     get width() {
-        return this.max[0] - this.min[0]
+        return this.max.x - this.min.x
     }
 
     get height() {
-        return this.max[1] - this.min[1]
+        return this.max.y - this.min.y
     }
 
     get area() {
         return this.width * this.height
     }
 
+    get center(): Point {
+        return new Point(this.min.x + this.width / 2, this.min.y + this.height / 2)
+    }
+
     combine(aabb: AABB): AABB {
-        const min = [Math.min(this.min[0], aabb.min[0]), Math.min(this.min[1], aabb.min[1])] as Coords
-        const max = [Math.max(this.max[0], aabb.max[0]), Math.max(this.max[1], aabb.max[1])] as Coords
+        const min = new Point(Math.min(this.min.x, aabb.min.x), Math.min(this.min.y, aabb.min.y))
+        const max = new Point(Math.max(this.max.x, aabb.max.x), Math.max(this.max.y, aabb.max.y))
         const r = new AABB(min, max)
         return r
     }
 
     overlaps(aabb: AABB): boolean {
         return (
-            this.max[0] >= aabb.min[0] &&
-            this.max[1] >= aabb.min[1] &&
-            this.min[0] <= aabb.max[0] &&
-            this.min[1] <= aabb.max[1]
+            this.max.x >= aabb.min.x &&
+            this.max.y >= aabb.min.y &&
+            this.min.x <= aabb.max.x &&
+            this.min.y <= aabb.max.y
         )
+    }
+
+    translate(offset: Point): AABB {
+        return new AABB(this.min.addPoint(offset), this.max.addPoint(offset))
+    }
+
+    scale(s: number): AABB {
+        return new AABB(this.min.mulScalar(s), this.max.mulScalar(s))
+    }
+
+    buffer(padding: number): AABB {
+        const min = new Point(this.min.x - padding, this.min.y - padding)
+        const max = new Point(this.max.x + padding, this.max.y + padding)
+        return new AABB(min, max)
+    }
+
+    shrink(amount: number): AABB {
+        return this.buffer(-amount)
     }
 
     clone(): AABB {
