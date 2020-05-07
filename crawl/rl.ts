@@ -41,12 +41,12 @@ export class Thing {
 
     clone(): Thing {
         return new Thing({
-            position: this.position,
+            position: this.position.clone(),
             passable: this.passable,
             transparent: this.transparent,
             name: this.name,
             image: this.image,
-            renderData: this.renderData
+            renderData: Object.assign({}, this.renderData)
         })
     }
 }

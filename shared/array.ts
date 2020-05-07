@@ -97,13 +97,10 @@ export function all<T>(a: Iterable<T>, f: (x: T) => boolean) {
  * @param a iterable
  * @param f mapping function to execute on each element
  */
-export function map<T, U>(a: Iterable<T>, f: (x: T) => U): U[] {
-    const r: U[] = []
+export function *map<T, U>(a: Iterable<T>, f: (x: T) => U): Iterable<U> {
     for (const x of a) {
-        r.push(f(x))
+        yield f(x)
     }
-
-    return r
 }
 
 /**

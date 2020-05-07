@@ -1,17 +1,4 @@
-/**
- * A rectangular area
- */
-export interface Rect {
-    x: number,
-    y: number,
-    width: number,
-    height: number
-}
-
-/**
- * 2d coords
- */
-export type Coords = [number, number]
+import * as geo from "../shared/geo2d.js"
 
 /**
  * a generic 2d array of data
@@ -47,8 +34,8 @@ export class Grid<T> {
         return this.inBounds(x, y) && this.inBounds(x + width - 1, y + height - 1)
     }
 
-    rectInBounds(rect: Rect): boolean {
-        return this.regionInBounds(rect.x, rect.y, rect.width, rect.height)
+    aabbInBounds(aabb: geo.AABB): boolean {
+        return this.regionInBounds(aabb.min.x, aabb.min.y, aabb.width, aabb.height)
     }
 
     /**
@@ -66,8 +53,8 @@ export class Grid<T> {
      * return flattened index for coordinates
      * @param xy coordinates to flatten
      */
-    flatCoords(xy: Coords): number {
-        const [x, y] = xy
+    flatPoint(xy: geo.Point): number {
+        const { x, y } = xy
         return this.flat(x, y)
     }
 
@@ -95,8 +82,8 @@ export class Grid<T> {
      * access item at specified coordinates
      * @param xy coordinates to access
      */
-    atCoords(xy: Coords): T {
-        const [x, y] = xy
+    atPoint(xy: geo.Point): T {
+        const {x, y} = xy
         return this.at(x, y)
     }
 
@@ -121,11 +108,11 @@ export class Grid<T> {
 
     /**
      * set item at specified coordinates to specified value
-     * @param xy coords
+     * @param xy point
      * @param value value to set
      */
-    setCoords(xy: Coords, value: T): void {
-        const [x, y] = xy
+    setPoint(xy: geo.Point, value: T): void {
+        const { x, y } = xy
         this.set(x, y, value)
     }
 
@@ -137,36 +124,36 @@ export class Grid<T> {
      * @param height height of scan region
      * @param f function to call for each x/y coordinate
      */
-    *scanRegion(x0: number, y0: number, width: number, height: number): Iterable<[number, number, T]> {
+    *scanRegion(x0: number, y0: number, width: number, height: number): Iterable<[T, number, number]> {
         const r = x0 + width
         const b = y0 + height
 
         for (let y = y0; y < b; ++y) {
             for (let x = x0; x < r; ++x) {
-                yield [x, y, this.at(x, y)]
+                yield [this.at(x, y), x, y]
             }
         }
     }
 
     /**
      * scan the specified region of the array
-     * @param rect rect containing area to scan
+     * @param aabb aabb containing area to scan
      * @param f function to call for each x/y coordinate
      */
-    scanRect(rect: Rect): Iterable<[number, number, T]> {
-        return this.scanRegion(rect.x, rect.y, rect.width, rect.height)
+    scanAABB(aabb: geo.AABB): Iterable<[T, number, number]> {
+        return this.scanRegion(aabb.min.x, aabb.min.y, aabb.width, aabb.height)
     }
 
     /**
      * scan the entire grid
      * @param f function to call for each x/y coordinate
      */
-    scan(): Iterable<[number, number, T]> {
+    scan(): Iterable<[T, number, number]> {
         return this.scanRegion(0, 0, this.width, this.height)
     }
 
     /**
-     * iterate over all things in grid
+     * iterate over all data in grid
      */
     *[Symbol.iterator]() {
         for (const x of this.data) {
@@ -191,8 +178,8 @@ export class Grid<T> {
     /**
     * iterate over a specified region
     */
-    iterRect(rect: Rect) {
-        return this.iterRegion(rect.x, rect.y, rect.width, rect.height)
+    iterAABB(aabb: geo.AABB) {
+        return this.iterRegion(aabb.min.x, aabb.min.y, aabb.width, aabb.height)
     }
 
     /**
@@ -205,10 +192,18 @@ export class Grid<T> {
     }
 
     /**
-     * construct a new grid by applying a function to every element in this grid
+    * copy a portion of this grid into a new grid
+    */
+    viewAABB(aabb: geo.AABB): Grid<T> {
+        const v = this.view(aabb.min.x, aabb.min.y, aabb.width, aabb.height)
+        return v
+    }
+
+    /**
+     * construct an array by applying a function to every element in this grid
      * @param f mapping function
      */
-    map<U>(f: (v: T, x: number, y: number) => U): Grid<U> {
+    map<U>(f: (v: T, x: number, y: number) => U): U[] {
         const data: U[] = []
         for (let y = 0; y < this.height; ++y) {
             for (let x = 0; x < this.width; ++x) {
@@ -217,6 +212,15 @@ export class Grid<T> {
             }
         }
 
+        return data
+    }
+
+    /**
+     * construct a grid by applying a function to every element in this grid
+     * @param f mapping function
+     */
+    map2<U>(f: (v: T, x: number, y: number) => U): Grid<U> {
+        const data = this.map(f)
         return new Grid<U>(this.width, this.height, data)
     }
 
@@ -224,12 +228,12 @@ export class Grid<T> {
      * find the coordinates of an element in the grid that meets the specified criteria
      * @param f predicate function
      */
-    findCoords(f: (v: T) => boolean): (Coords | null) {
+    findPoint(f: (v: T) => boolean): (geo.Point | null) {
         for (let y = 0; y < this.height; ++y) {
             for (let x = 0; x < this.width; ++x) {
                 const v = this.at(x, y)
                 if (f(v)) {
-                    return [x, y]
+                    return new geo.Point(x, y)
                 }
             }
         }
@@ -246,7 +250,7 @@ export class Grid<T> {
  * @param y destination y offset
  */
 export function copy<T>(src: Grid<T>, dst: Grid<T>, dx: number, dy: number) {
-    for (const [x, y, v] of src.scan()) {
+    for (const [v, x, y] of src.scan()) {
         dst.set(x + dx, y + dy, v)
     }
 }
@@ -266,11 +270,17 @@ export function copyRegion<T>(
     src: Grid<T>, sx: number, sy: number, width: number, height: number,
     dst: Grid<T>, dx: number, dy: number) {
 
-    for (const [x, y, v] of src.scanRegion(sx, sy, width, height)) {
+    for (const [v, x, y] of src.scanRegion(sx, sy, width, height)) {
         dst.set(x + dx, y + dy, v)
     }
 }
 
+/**
+ * Generate a grid of specified width and height by invoking function for every element
+ * @param width width of grid
+ * @param height height of grid
+ * @param f function to invoke to get value for every x,y coordinate of grid
+ */
 export function generate<T>(width: number, height: number, f: (x: number, y: number) => T): Grid<T> {
     const data: T[] = []
     for (let y = 0; y < height; ++y) {

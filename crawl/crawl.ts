@@ -9,7 +9,7 @@ import * as geo from "../shared/geo2d.js"
 const tileSize = 24
 
 async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: number, height: number): Promise<gen.MapData> {
-    const map = gen.generateMap(player, width, height)
+    const map = gen.generateMap(width, height)
 
     // bake all 24x24 tile images to a single array texture
     // store mapping from image url to index
@@ -18,7 +18,7 @@ async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: num
     imageUrls.push(...map.fixtures.map(t => t.image))
     imageUrls.push(map.stairsUp.image)
     imageUrls.push(map.stairsDown.image)
-    imageUrls.push(map.player.image)
+    imageUrls.push(player.image)
     imageUrls = imageUrls.filter(url => url)
     imageUrls = array.distinct(imageUrls)
 
@@ -42,7 +42,7 @@ async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: num
     map.fixtures.forEach(initRenderData)
     initRenderData(map.stairsUp)
     initRenderData(map.stairsDown)
-    initRenderData(map.player)
+    initRenderData(player)
 
     return map
 }
@@ -61,14 +61,13 @@ function appendErrorMessage(error: string) {
     errorsDiv.appendChild(div)
 }
 
-function tick(renderer: gfx.Renderer, keys: input.Keys, map: gen.MapData) {
-    handleInput(map, keys)
-    drawFrame(renderer, map)
-    requestAnimationFrame(() => tick(renderer, keys, map))
+function tick(renderer: gfx.Renderer, keys: input.Keys, player: rl.Player, map: gen.MapData) {
+    handleInput(player, map, keys)
+    drawFrame(renderer, player, map)
+    requestAnimationFrame(() => tick(renderer, keys, player, map))
 }
 
-function handleInput(map: gen.MapData, keys: input.Keys) {
-    const player = map.player
+function handleInput(player: rl.Player, map: gen.MapData, keys: input.Keys) {
     const position = player.position.clone()
 
     if (keys.pressed("w")) {
@@ -112,9 +111,9 @@ function isPassable(map: gen.MapData, xy: geo.Point): boolean {
     return true
 }
 
-function drawFrame(renderer: gfx.Renderer, map: gen.MapData) {
+function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) {
     // center the grid around the player
-    const playerCoords = map.player.position
+    const playerCoords = player.position
     const center = new geo.Point(Math.floor((renderer.canvas.width - tileSize) / 2), Math.floor((renderer.canvas.height - tileSize) / 2))
     const offset = center.subPoint(playerCoords.mulScalar(rl.tileSize))
 
@@ -131,7 +130,7 @@ function drawFrame(renderer: gfx.Renderer, map: gen.MapData) {
 
     drawThing(renderer, offset, map.stairsUp)
     drawThing(renderer, offset, map.stairsDown)
-    drawThing(renderer, offset, map.player)
+    drawThing(renderer, offset, player)
 
     renderer.flush()
 }
@@ -178,8 +177,9 @@ async function main() {
     })
 
     const map = await generateMap(player, renderer, 32, 32)
+    player.position = map.entry.clone()
     const keys = new input.Keys()
-    requestAnimationFrame(() => tick(renderer, keys, map))
+    requestAnimationFrame(() => tick(renderer, keys, player, map))
 }
 
 main()

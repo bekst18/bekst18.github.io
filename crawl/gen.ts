@@ -1,7 +1,11 @@
+/**
+ * map generation library
+ */
 import * as rl from "./rl.js"
 import * as geo from "../shared/geo2d.js"
-import * as rand from "../shared/rand.js"
+import * as grid from "../shared/grid.js"
 import * as array from "../shared/array.js"
+import * as rand from "../shared/rand.js"
 
 /**
  * components of a generated map area
@@ -11,175 +15,167 @@ export interface MapData {
     fixtures: rl.Fixture[]
     stairsUp: rl.Fixture
     stairsDown: rl.Fixture
-    player: rl.Player
+    entry: geo.Point
 }
 
-enum RoomType {
-    Hallway,
-    Room
+interface DungeonTileset {
+    wall: rl.Tile,
+    floor: rl.Tile,
+    door: rl.Fixture,
+    stairsUp: rl.Fixture
+    stairsDown: rl.Fixture
 }
 
-interface RoomMap {
-    width: number,
-    height: number,
-    rooms: Room[]
+const tileset: DungeonTileset = {
+    wall: new rl.Tile({
+        position: new geo.Point(0, 0),
+        name: "Brick Wall",
+        image: "./assets/wall.png",
+        passable: false,
+        transparent: false
+    }),
+    floor: new rl.Tile({
+        position: new geo.Point(0, 0),
+        name: "Floor",
+        image: "./assets/floor.png",
+        passable: true,
+        transparent: true
+    }),
+    door: new rl.Fixture({
+        position: new geo.Point(0, 0),
+        name: "A Closed Wooden Door",
+        image: "./assets/closed.png",
+        passable: true,
+        transparent: true
+    }),
+    stairsUp: new rl.Thing({
+        position: new geo.Point(0, 0),
+        name: "Stairs Up",
+        image: "./assets/up.png",
+        passable: false,
+        transparent: false,
+    }),
+    stairsDown: new rl.Thing({
+        position: new geo.Point(0, 0),
+        name: "Stairs Down",
+        image: "./assets/down.png",
+        passable: false,
+        transparent: false,
+    }),
 }
 
-class Room {
-    public depth: number = 0
-
-    constructor(readonly type: RoomType, public tiles: rl.Tile[], public aabb: geo.AABB) { }
-
-    clone(): Room {
-        const room = new Room(
-            this.type,
-            this.tiles.map(t => t.clone()),
-            this.aabb.clone()
-        )
-
-        return room
-    }
-
-    // translate the room (in-place)
-    translate(offset: geo.Point) {
-        this.aabb = this.aabb.translate(offset)
-        for (const tile of this.tiles) {
-            tile.position = tile.position.addPoint(offset)
-        }
-    }
+enum CellType {
+    Exterior,
+    Interior,
+    Wall,
+    Door
 }
 
-const wall = new rl.Tile({
-    position: new geo.Point(0, 0),
-    name: "Brick Wall",
-    image: "./assets/wall.png",
-    passable: false,
-    transparent: false
-})
+type CellGrid = grid.Grid<CellType>
 
-const interior = new rl.Tile({
-    position: new geo.Point(0, 0),
-    name: "Floor",
-    image: "./assets/floor.png",
-    passable: true,
-    transparent: true
-})
+interface RoomTemplate {
+    cells: CellGrid
+    interiorPt: geo.Point
+}
 
-const door = new rl.Fixture({
-    position: new geo.Point(0, 0),
-    name: "A Closed Wooden Door",
-    image: "./assets/closed.png",
-    passable: true,
-    transparent: true
-})
+export function generateMap(width: number, height: number): MapData {
+    const cells = generateCellGrid(width, height)
 
-const stairsUp = new rl.Thing({
-    position: new geo.Point(0, 0),
-    name: "Stairs Up",
-    image: "./assets/up.png",
-    passable: false,
-    transparent: false,
-})
+    // generate tiles and fixtures from cells
+    const tiles: rl.Tile[] = []
+    const fixtures: rl.Fixture[] = []
 
-const stairsDown = new rl.Thing({
-    position: new geo.Point(0, 0),
-    name: "Stairs Down",
-    image: "./assets/down.png",
-    passable: false,
-    transparent: false,
-})
-
-export function generateMap(player: rl.Player, width: number, height: number): MapData {
-    const map: MapData = {
-        tiles: [],
-        fixtures: [],
-        stairsUp: stairsUp.clone(),
-        stairsDown: stairsDown.clone(),
-        player: player
-    }
-
-    // create some pre-sized rooms and hallways for placement
-    const roomTemplates = [5, 7, 9, 11].map(size => createRoom(RoomType.Room, size, size))
-    const hallTemplates = []
-    hallTemplates.push(...[5, 5, 7, 9, 11].map(length => createRoom(RoomType.Hallway, length, 3)))
-    hallTemplates.push(...[5, 5, 7, 9, 11].map(length => createRoom(RoomType.Hallway, 3, length)))
-
-    const roomStack: Room[] = []
-    const roomMap: RoomMap = {
-        rooms: [],
-        width: width,
-        height: height
-    }
-
-    // place initial room
-    {
-        const room = rand.choose(roomTemplates).clone()
-        const offset = new geo.Point(
-            rand.int(0, width - room.aabb.width),
-            rand.int(0, height - room.aabb.height),
-        )
-
-        room.translate(offset)
-        roomStack.push(room)
-        roomMap.rooms.push(room)
-    }
-
-    // attempt to tunnel from room to room for as long as we can
-    while (roomStack.length !== 0) {
-        const room = array.pop(roomStack)
-        const templates = room.type === RoomType.Hallway ? roomTemplates : hallTemplates
-        const placement = tryTunnel(roomMap, templates, room)
-        if (placement == null) {
+    for (const [v, x, y] of cells.scan()) {
+        if (v === null) {
             continue
         }
 
-        const [nextRoom, pt] = placement
+        switch (v) {
+            case CellType.Exterior:
+                break
 
-        // remove wall at join point
-        room.tiles = room.tiles.filter(t => !t.position.equal(pt))
-        nextRoom.tiles = nextRoom.tiles.filter(t => !t.position.equal(pt))
+            case CellType.Interior: {
+                const tile = tileset.floor.clone()
+                tile.position.x = x
+                tile.position.y = y
+                tiles.push(tile)
+            }
+                break
 
-        // add shared door at join point
-        const newDoor = door.clone()
-        newDoor.position = pt.clone()
-        map.fixtures.push(newDoor)
+            case CellType.Wall: {
+                const tile = tileset.wall.clone()
+                tile.position.x = x
+                tile.position.y = y
+                tiles.push(tile)
+            }
+                break
 
-        nextRoom.depth = room.depth + 1
-        roomStack.push(room)
-        roomStack.push(nextRoom)
-        roomMap.rooms.push(nextRoom)
+            case CellType.Door: {
+                const tile = tileset.door.clone()
+                tile.position.x = x
+                tile.position.y = y
+                fixtures.push(tile)
+            }
+                break
+        }
     }
 
-    // place player and up stairs
-    const firstRoom = roomMap.rooms.reduce((x, y) => x.depth < y.depth ? x : y)
-    const stairsUpPosition = towardCenter(firstRoom.aabb, rand.choose([...scanEdge(firstRoom.aabb)].filter(pt => !map.fixtures.some(f => f.position.equal(pt)))))
-    firstRoom.tiles = firstRoom.tiles.filter(t => !t.position.equal(stairsUpPosition))
-    map.stairsUp.position = stairsUpPosition
-    map.player.position = towardCenter(firstRoom.aabb, stairsUpPosition)
-
-    // place down stairs
-    const lastRoom = roomMap.rooms.reduce((x, y) => x.depth > y.depth ? x : y)
-    const stairsDownPosition = towardCenter(lastRoom.aabb, rand.choose([...scanEdge(lastRoom.aabb)].filter(pt => !map.fixtures.some(f => f.position.equal(pt)))))
-    lastRoom.tiles = lastRoom.tiles.filter(t => !t.position.equal(stairsDownPosition))
-    map.stairsDown.position = stairsDownPosition
-
-    for (const room of roomMap.rooms) {
-        map.tiles.push(...room.tiles)
+    const entry = cells.findPoint(t => t === CellType.Interior) || new geo.Point(0, 0)
+    return {
+        tiles: tiles,
+        fixtures: fixtures,
+        stairsUp: tileset.stairsUp.clone(),
+        stairsDown: tileset.stairsDown.clone(),
+        entry: entry
     }
- 
-    return map
 }
 
-function tryTunnel(roomMap: RoomMap, templates: Room[], room: Room): [Room, geo.Point] | null {
-    const pts = [...scanEdge(room.aabb)]
-    rand.shuffle(pts)
+function generateCellGrid(width: number, height: number): CellGrid {
+    const cells = grid.generate(width, height, () => CellType.Exterior)
+
+    // generate room templates
+    const roomTemplates = generateRoomTemplates()
+    const hallTemplates = generateHallTemplates()
+    const stack: geo.Point[] = []
+
+    // place initial room
+    {
+        rand.shuffle(roomTemplates)
+        const template = roomTemplates[0]
+
+        const pt = new geo.Point(
+            rand.int(0, width - template.cells.width + 1),
+            rand.int(0, height - template.cells.height + 1))
+
+        const interiorPt = placeTemplate(cells, template, pt)
+        stack.push(interiorPt)
+    }
+
+    while (stack.length > 0) {
+        const interiorPt = array.pop(stack)
+        const templates = stack.length % 2 == 0 ? roomTemplates : hallTemplates
+        const nextInteriorPt = tryTunnelFrom(cells, templates, interiorPt)
+        if (nextInteriorPt) {
+            stack.push(interiorPt)
+            stack.push(nextInteriorPt)
+        }
+    }
+
+    return cells
+}
+
+function tryTunnelFrom(cells: CellGrid, templates: RoomTemplate[], interiorPt: geo.Point): geo.Point | null {
+    const tunnelablePts = [...array.filter(visitRoomCoords(cells, interiorPt), pt => findExteriorNeighbor(cells, pt) !== null)]
+    rand.shuffle(tunnelablePts)
     rand.shuffle(templates)
 
-    for (const pt of pts) {
+    for (const tpt of tunnelablePts) {
         for (const template of templates) {
-            const room = tryConnect(roomMap, template, pt)
-            if (room) {
-                return [room, pt]
+            const interiorPt = tryTunnelTo(cells, tpt, template)
+            if (interiorPt) {
+                // place door at tunnel point
+                cells.setPoint(tpt, CellType.Door)
+                return interiorPt
             }
         }
     }
@@ -187,154 +183,190 @@ function tryTunnel(roomMap: RoomMap, templates: Room[], room: Room): [Room, geo.
     return null
 }
 
-function tryConnect(roomMap: RoomMap, template: Room, pt0: geo.Point): (Room | null) {
-    const pts = [...scanEdge(template.aabb)]
-    const aabb = template.aabb.shrink(1)
-    rand.shuffle(pts)
+function tryTunnelTo(cells: CellGrid, tpt1: geo.Point, template: RoomTemplate): geo.Point | null {
+    // find tunnel points of template
+    const tunnelablePts = [...array.filter(visitRoomCoords(template.cells, template.interiorPt), pt => findExteriorNeighbor(cells, pt) !== null)]
+    rand.shuffle(tunnelablePts)
 
-    for (const pt1 of pts) {
-        const translation = pt0.subPoint(pt1)
-        if (!canPlaceRoom(roomMap, aabb.translate(translation))) {
-            continue
+    for (const tpt2 of tunnelablePts) {
+        const offset = tpt1.subPoint(tpt2)
+        if (isValidPlacement(template.cells, cells, offset)) {
+            return placeTemplate(cells, template, offset)
         }
-
-        // place room and return
-        const room = template.clone()
-        room.translate(translation)
-
-        return room
     }
 
     return null
 }
 
-function canPlaceRoom(roomMap: RoomMap, aabb: geo.AABB): boolean {
-    const { width: mapWidth, height: mapHeight } = roomMap
-
-    // note - exteriors can overlap, but not interiors
-    return (
-        aabb.min.x >= 0 && aabb.min.y >= 0 &&
-        aabb.max.x < mapWidth && aabb.max.y < mapHeight &&
-        roomMap.rooms.every(room => !room.aabb.shrink(1).overlaps(aabb)))
+function placeTemplate(cells: CellGrid, template: RoomTemplate, offset: geo.Point): geo.Point {
+    grid.copy(template.cells, cells, offset.x, offset.y)
+    return template.interiorPt.addPoint(offset)
 }
 
-function createRoom(type: RoomType, width: number, height: number): Room {
-    const tiles: rl.Tile[] = []
-    const aabb = new geo.AABB(new geo.Point(0, 0), new geo.Point(width, height))
-
-    for (const { x, y } of scanInterior(aabb)) {
-        const tile = interior.clone()
-        tile.position = new geo.Point(x, y)
-        tiles.push(tile)
-    }
-
-    for (const { x, y } of scanBorder(aabb)) {
-        const tile = wall.clone()
-        tile.position = new geo.Point(x, y)
-        tiles.push(tile)
-    }
-
-    return new Room(type, tiles, new geo.AABB(new geo.Point(0, 0), new geo.Point(width, height)))
+function generateRoomTemplates(): RoomTemplate[] {
+    const templates = [5, 7, 9, 11, 13].map(x => generateRoomTemplate(x, x))
+    return templates
 }
 
-function* scan(width: number, height: number): Iterable<geo.Point> {
-    const pt = new geo.Point(0, 0)
-    for (let y = 0; y < height; ++y) {
-        pt.y = y
-        for (let x = 0; x < width; ++x) {
-            pt.x = x
-            yield pt.clone()
+function generateHallTemplates(): RoomTemplate[] {
+    const templates: RoomTemplate[] = []
+    templates.push(...[5, 7, 9, 11].map(x => generateRoomTemplate(x, 3)))
+    templates.push(...[5, 7, 9, 11].map(x => generateRoomTemplate(3, x)))
+    return templates
+}
+
+function generateNSHallTemplates(): RoomTemplate[] {
+    const templates = [5, 7, 9, 11].map(x => generateRoomTemplate(3, x))
+    return templates
+}
+
+function generateRoomTemplate(width: number, height: number): RoomTemplate {
+    const interiorPoint = new geo.Point(width / 2, height / 2).floor()
+    const cells = grid.generate(
+        width,
+        height,
+        (x, y) => x === 0 || x === width - 1 || y === 0 || y === height - 1 ? CellType.Wall : CellType.Interior)
+
+    return {
+        interiorPt: interiorPoint,
+        cells: cells
+    }
+}
+
+function findInteriorNeighbor(cells: CellGrid, pt: geo.Point): geo.Point | null {
+    for (const [t, npt] of visitNeighbors(cells, pt)) {
+        if (t === CellType.Interior) {
+            return npt
+        }
+    }
+
+    return null
+}
+
+function findExteriorNeighbor(cells: CellGrid, pt: geo.Point): geo.Point | null {
+    for (const [t, npt] of visitNeighbors(cells, pt)) {
+        if (t === CellType.Exterior) {
+            return npt
+        }
+    }
+
+    return null
+}
+
+function isTunnelable(cells: CellGrid, pt: geo.Point): boolean {
+    const interior = findInteriorNeighbor(cells, pt) !== null
+    const exterior = findExteriorNeighbor(cells, pt) !== null
+    return interior && exterior
+}
+
+function* visitNeighbors(cells: CellGrid, pt: geo.Point): Iterable<[CellType, geo.Point]> {
+    cells.assertBounds(pt.x, pt.y)
+
+    // w
+    if (pt.x > 0) {
+        const w = new geo.Point(pt.x - 1, pt.y)
+        yield [cells.atPoint(w), w]
+    }
+
+    // s
+    if (pt.y < cells.height - 1) {
+        const s = new geo.Point(pt.x, pt.y + 1)
+        yield [cells.atPoint(s), s]
+    }
+
+    // e
+    if (pt.x < cells.width - 1) {
+        const e = new geo.Point(pt.x + 1, pt.y)
+        yield [cells.atPoint(e), e]
+    }
+
+    // n
+    if (pt.y > 0) {
+        const n = new geo.Point(pt.x, pt.y - 1)
+        yield [cells.atPoint(n), n]
+    }
+}
+
+function* visitRoom(cells: CellGrid, pt0: geo.Point): Iterable<[CellType, geo.Point]> {
+    const explored = cells.map2(() => false)
+    const stack = [pt0]
+
+    while (stack.length > 0) {
+        const pt = array.pop(stack)
+        explored.setPoint(pt, true)
+        const t = cells.atPoint(pt)
+        yield [t, pt]
+
+        // if this is a wall, do not explore neighbors
+        if (t === CellType.Wall) {
+            continue
+        }
+
+        // otherwise, explore neighbors, pushing onto stack those that are unexplored
+        for (const [_, npt] of visitNeighbors(cells, pt)) {
+            if (explored.atPoint(npt)) {
+                continue
+            }
+
+            stack.push(npt)
         }
     }
 }
 
-function* scanRect(rect: geo.AABB): Iterable<geo.Point> {
-    // scan all border positions of the rectangle
-    for (let y = rect.min.y; y < rect.max.y; ++y) {
-        for (let x = rect.min.x; x < rect.max.x; ++x) {
-            const pt = new geo.Point(x, y)
-            yield pt
+function visitRoomCoords(cells: CellGrid, pt0: geo.Point): Iterable<geo.Point> {
+    return array.map(visitRoom(cells, pt0), x => x[1])
+}
+
+function* visitInterior(cells: CellGrid, pt0: geo.Point): Iterable<[CellType, geo.Point]> {
+    const explored = cells.map2(() => false)
+    const stack = [pt0]
+
+    while (stack.length > 0) {
+        const pt = array.pop(stack)
+        explored.setPoint(pt, true)
+        const t = cells.atPoint(pt)
+        yield [t, pt]
+
+        // if this is a wall, do not explore neighbors
+        if (t === CellType.Wall) {
+            continue
+        }
+
+        // otherwise, explore neighbors, pushing onto stack those that are unexplored
+        for (const [t, npt] of visitNeighbors(cells, pt)) {
+            if (explored.atPoint(npt)) {
+                continue
+            }
+
+            if (t !== CellType.Interior) {
+                continue
+            }
+
+            stack.push(npt)
         }
     }
 }
 
-function scanInterior(rect: geo.AABB): Iterable<geo.Point> {
-    // scan all interior positions of the rectangle
-    return scanRect(rect.shrink(1))
-}
-
-function scanEdge(rect: geo.AABB): Iterable<geo.Point> {
-    // scan non-corner border of rect
-    return array.filter(scanBorder(rect), pt => !isCorner(rect, pt))
-}
-
-function isCorner(rect: geo.AABB, pt: geo.Point) {
-    const l = rect.min.x
-    const t = rect.min.y
-    const r = rect.max.x - 1
-    const b = rect.max.y - 1
-
-    return (
-        (pt.x === l && pt.y === t) ||
-        (pt.x === l && pt.y === b) ||
-        (pt.x === r && pt.y === b) ||
-        (pt.x === r && pt.y === t))
-}
-
-function* scanBorder(rect: geo.AABB): Iterable<geo.Point> {
-    // left
-    for (let y = rect.min.y; y < rect.max.y - 1; ++y) {
-        const pt = new geo.Point(rect.min.x, y)
-        yield pt
+function isValidPlacement(src: CellGrid, dst: CellGrid, offset: geo.Point): boolean {
+    if (!dst.regionInBounds(offset.x, offset.y, src.width, src.height)) {
+        return false
     }
 
-    // bottom
-    for (let x = rect.min.x; x < rect.max.x - 1; ++x) {
-        const pt = new geo.Point(x, rect.max.y - 1)
-        yield pt
+    for (const [st, x, y] of src.scan()) {
+        // rules:
+        // can place wall over wall
+        // can place anything over exterior
+        const dt = dst.at(x + offset.x, y + offset.y)
+        if (dt === CellType.Exterior) {
+            continue
+        }
+
+        if (dt === CellType.Wall && st === CellType.Wall) {
+            continue
+        }
+
+        return false
     }
 
-    // right
-    for (let y = rect.max.y - 1; y > rect.min.y; --y) {
-        const pt = new geo.Point(rect.max.x - 1, y)
-        yield pt
-    }
-
-    // top
-    for (let x = rect.max.x - 1; x > rect.min.x; --x) {
-        const pt = new geo.Point(x, rect.min.y)
-        yield pt
-    }
-}
-
-function* scanLeft(rect: geo.AABB): Iterable<geo.Point> {
-    for (let y = rect.min.y; y < rect.max.y; ++y) {
-        const pt = new geo.Point(rect.min.x, y)
-        yield pt
-    }
-}
-
-function* scanBottom(rect: geo.AABB): Iterable<geo.Point> {
-    for (let x = rect.min.x; x < rect.max.x; ++x) {
-        const pt = new geo.Point(x, rect.max.y - 1)
-        yield pt
-    }
-}
-
-function* scanRight(rect: geo.AABB): Iterable<geo.Point> {
-    for (let y = rect.min.y; y < rect.max.y; ++y) {
-        const pt = new geo.Point(rect.max.x - 1, y)
-        yield pt
-    }
-}
-
-function* scanTop(rect: geo.AABB): Iterable<geo.Point> {
-    for (let x = rect.min.x; x < rect.max.x; ++x) {
-        const pt = new geo.Point(x, rect.min.y)
-        yield pt
-    }
-}
-
-function towardCenter(rect: geo.AABB, pt: geo.Point): geo.Point {
-    return pt.addPoint(rect.center.subPoint(pt).sign())
+    return true
 }
