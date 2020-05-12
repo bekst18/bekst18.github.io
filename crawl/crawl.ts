@@ -113,11 +113,11 @@ function isPassable(map: gen.MapData, xy: geo.Point): boolean {
 
 function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) {
     // center the grid around the player
+    handleResize(renderer.canvas)
+
     const playerCoords = player.position
     const center = new geo.Point(Math.floor((renderer.canvas.width - tileSize) / 2), Math.floor((renderer.canvas.height - tileSize) / 2))
     const offset = center.subPoint(playerCoords.mulScalar(rl.tileSize))
-
-    handleResize(renderer.canvas)
 
     // draw various layers of sprites
     for (const tile of map.tiles) {
@@ -178,6 +178,7 @@ async function main() {
     const map = await generateMap(player, renderer, 16, 16)
     player.position = map.entry.clone()
     const keys = new input.Keys()
+
     requestAnimationFrame(() => tick(renderer, keys, player, map))
 }
 

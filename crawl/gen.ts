@@ -86,7 +86,7 @@ interface Room {
 export function generateMap(width: number, height: number): MapData {
     const [cells, rooms] = generateCellGrid(width, height)
 
-    const firstRoom = rooms.reduce((x, y) => x.depth < y.depth ? x : x)
+    const firstRoom = rooms.reduce((x, y) => x.depth < y.depth ? x : y)
     const stairsUp = tileset.stairsUp.clone()
     const stairsUpPosition = array.find(visitInteriorCoords(cells, firstRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsUpPosition) {
@@ -94,13 +94,13 @@ export function generateMap(width: number, height: number): MapData {
     }
     stairsUp.position = stairsUpPosition
 
-    const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : x)
+    const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
     const stairsDown = tileset.stairsDown.clone()
     const stairsDownPosition = array.find(visitInteriorCoords(cells, lastRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsDownPosition) {
         throw new Error("Failed to place stairs down")
     }
-    stairsDown.position = stairsDownPosition 
+    stairsDown.position = stairsDownPosition
 
     // generate tiles and fixtures from cells
     const tiles: rl.Tile[] = []

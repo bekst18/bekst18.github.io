@@ -30,13 +30,15 @@ void main() {
 
 const spriteFragmentSrc = `#version 300 es
 precision highp float;
+precision highp sampler2D;
 precision highp sampler2DArray;
 
 uniform bool lit;
-uniform bool array_texture;
+uniform bool use_array_texture;
 uniform mediump vec2 viewport_size;
 uniform float light_radius;
-uniform sampler2DArray sampler;
+uniform sampler2D sampler;
+uniform sampler2DArray array_sampler;
 
 in vec2 frag_position;
 in vec4 frag_color;
@@ -56,8 +58,10 @@ void main() {
 
     out_color = frag_color;
 
-    if (array_texture) {
-        out_color *= texture(sampler, frag_uvw);
+    if (use_array_texture) {
+        out_color *= texture(array_sampler, frag_uvw);
+    } else {
+        out_color *= texture(sampler, frag_uvw.xy);
     }
 
     out_color *= vec4(l, l, l, 1);
@@ -127,7 +131,7 @@ export class Sprite {
     public texture: Texture | null = null
     public flags: SpriteFlags = SpriteFlags.None
 
-    constructor(options: SpriteOptions) {
+    constructor(options: SpriteOptions = {}) {
         if (options.position) {
             this.position = options.position
         }
@@ -177,12 +181,14 @@ export class Renderer {
     private shadowMapTexture: WebGLTexture
     private shadowMapFramebuffer: WebGLFramebuffer
     private readonly spriteLitUniformLocation: WebGLUniformLocation
-    private readonly spriteArrayTextureUniformLocation: WebGLUniformLocation
+    private readonly spriteUseArrayTextureUniformLocation: WebGLUniformLocation
     private readonly spriteSamplerUniformLocation: WebGLUniformLocation
+    private readonly spriteArraySamplerUniformLocation: WebGLUniformLocation
     private readonly spriteViewportSizeUniformLocation: WebGLUniformLocation
     private readonly spriteLightRadiusUniformLocation: WebGLUniformLocation
     private readonly shadowViewportSizeUniformLocation: WebGLUniformLocation
     private readonly sampler: WebGLSampler
+    private readonly arraySampler: WebGLSampler
     private readonly vertexBuffer: WebGLBuffer
     private readonly indexBuffer: WebGLBuffer
     private readonly spriteVao: WebGLVertexArrayObject
@@ -205,8 +211,9 @@ export class Renderer {
         this.spriteProgram = glu.compileProgram(gl, spriteVertexSrc, spriteFragmentSrc)
 
         this.spriteLitUniformLocation = glu.getUniformLocation(gl, this.spriteProgram, "lit")
-        this.spriteArrayTextureUniformLocation = glu.getUniformLocation(gl, this.spriteProgram, "array_texture")
+        this.spriteUseArrayTextureUniformLocation = glu.getUniformLocation(gl, this.spriteProgram, "use_array_texture")
         this.spriteSamplerUniformLocation = glu.getUniformLocation(gl, this.spriteProgram, "sampler")
+        this.spriteArraySamplerUniformLocation = glu.getUniformLocation(gl, this.spriteProgram, "array_sampler")
         this.spriteViewportSizeUniformLocation = glu.getUniformLocation(gl, this.spriteProgram, "viewport_size")
         this.spriteLightRadiusUniformLocation = glu.getUniformLocation(gl, this.spriteProgram, "light_radius")
         this.shadowViewportSizeUniformLocation = glu.getUniformLocation(gl, this.shadowProgram, "viewport_size")
@@ -218,6 +225,13 @@ export class Renderer {
 
         // setup sampler
         this.sampler = glu.createSampler(gl)
+        gl.samplerParameteri(this.sampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+        gl.samplerParameteri(this.sampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+        gl.samplerParameteri(this.sampler, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE)
+        gl.samplerParameteri(this.sampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+        gl.samplerParameteri(this.sampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+        this.arraySampler = glu.createSampler(gl)
         gl.samplerParameteri(this.sampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
         gl.samplerParameteri(this.sampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
         gl.samplerParameteri(this.sampler, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE)
@@ -247,6 +261,19 @@ export class Renderer {
         }
     }
 
+    async loadTexture(url: string): Promise<Texture> {
+        // each image must be the same size
+        const gl = this.gl
+        const texture = await glu.loadTexture(gl, url)
+        gl.generateMipmap(gl.TEXTURE_2D_ARRAY)
+        this.textureId++
+
+        return {
+            id: this.textureId,
+            texture: texture
+        }
+    }
+
     drawSprite(sprite: Sprite) {
         // add sprite to array
         this.sprites.push(sprite)
@@ -256,7 +283,7 @@ export class Renderer {
         this.checkResize()
         this.batchSprites()
         this.drawSprites(lightRadius)
-        this.drawShadows()
+        // this.drawShadows()
 
         // clear sprites and batches
         this.sprites = []
@@ -390,15 +417,36 @@ export class Renderer {
         gl.uniform1f(this.spriteLightRadiusUniformLocation, lightRadius)
         gl.bindVertexArray(this.spriteVao)
 
+        gl.activeTexture(gl.TEXTURE0)
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, null)
+        gl.bindTexture(gl.TEXTURE_2D, null)
+        gl.bindSampler(0, this.sampler)
+
+        gl.activeTexture(gl.TEXTURE1)
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, null)
+        gl.bindTexture(gl.TEXTURE_2D, null)
+        gl.bindSampler(1, this.sampler)
+
+        gl.uniform1i(this.spriteSamplerUniformLocation, 0)
+        gl.uniform1i(this.spriteArraySamplerUniformLocation, 1)
+
         // draw each batch
         for (const batch of this.batches) {
-            gl.activeTexture(gl.TEXTURE0)
-            gl.bindTexture(gl.TEXTURE_2D_ARRAY, batch.texture?.texture ?? null)
-            gl.bindSampler(0, this.sampler)
-            gl.uniform1i(this.spriteSamplerUniformLocation, 0)
+            const useArrayTexture = batch.flags & SpriteFlags.ArrayTexture ? true : false
+            const texture = batch.texture?.texture ?? null
+
+            if (useArrayTexture) {
+                gl.activeTexture(gl.TEXTURE1)
+                gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture)
+
+            } else {
+                gl.activeTexture(gl.TEXTURE0)
+                gl.bindTexture(gl.TEXTURE_2D, texture)
+            }
+
             gl.uniform1i(this.spriteLitUniformLocation, batch.flags & SpriteFlags.Lit ? 1 : 0)
-            gl.uniform1i(this.spriteArrayTextureUniformLocation, batch.flags & SpriteFlags.ArrayTexture ? 1 : 0)
-            gl.drawElements(gl.TRIANGLES, batch.numSprites * 6, gl.UNSIGNED_SHORT, batch.offset * 6)
+            gl.uniform1i(this.spriteUseArrayTextureUniformLocation, useArrayTexture ? 1 : 0)
+            gl.drawElements(gl.TRIANGLES, batch.numSprites * 6, gl.UNSIGNED_SHORT, batch.offset * 6 * 2)
         }
     }
 
@@ -498,7 +546,6 @@ function createShadowVao(
 }
 
 function createShadowMapTexture(gl: WebGL2RenderingContext, width: number, height: number): WebGLTexture {
-    console.log("NEW SHADOW MAP")
     const texture = glu.createTexture(gl)
     gl.bindTexture(gl.TEXTURE_2D, texture)
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
