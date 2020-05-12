@@ -2,8 +2,10 @@
  * rogue-like library
  */
 import * as geo from "../shared/geo2d"
+import * as gfx from "./gfx.js"
 
 export const tileSize = 24
+export const lightRadius = 3
 
 export interface ThingOptions {
     position: geo.Point
@@ -15,7 +17,7 @@ export interface ThingOptions {
 }
 
 export interface RenderData {
-    texture: WebGLTexture
+    texture: gfx.Texture
     textureLayer: number
 }
 

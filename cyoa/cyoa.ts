@@ -1,3 +1,4 @@
+import * as dom from "../shared/dom.js"
 import * as util from "../shared/util.js"
 
 init()
@@ -38,11 +39,11 @@ function init() {
 }
 
 function initLoadUi() {
-    const fileDropBox = util.byId("fileDropBox") as HTMLDivElement
-    const fileInput = util.byId("fileInput") as HTMLInputElement
-    const fileButton = util.byId("fileButton") as HTMLButtonElement
-    const urlInput = util.byId("urlInput") as HTMLInputElement
-    const loadButton = util.byId("urlButton") as HTMLButtonElement
+    const fileDropBox = dom.byId("fileDropBox") as HTMLDivElement
+    const fileInput = dom.byId("fileInput") as HTMLInputElement
+    const fileButton = dom.byId("fileButton") as HTMLButtonElement
+    const urlInput = dom.byId("urlInput") as HTMLInputElement
+    const loadButton = dom.byId("urlButton") as HTMLButtonElement
 
     fileButton.addEventListener("click", () => {
         fileInput.click()
@@ -77,11 +78,11 @@ function initLoadUi() {
 }
 
 function initPlayUi() {
-    const choices = util.byId("choices")
-    const tryAgain = util.byId("tryAgain")
-    const nextPassage  = util.byId("nextPassage")
+    const choices = dom.byId("choices")
+    const tryAgain = dom.byId("tryAgain")
+    const nextPassage  = dom.byId("nextPassage")
 
-    util.delegate(choices, "click", ".choice", (ev) => {
+    dom.delegate(choices, "click", ".choice", (ev) => {
         if (!state.currentModule) {
             return
         }
@@ -90,7 +91,7 @@ function initPlayUi() {
             return
         }
 
-        const choiceIdx = util.getElementIndex(ev.target as Element)
+        const choiceIdx = dom.getElementIndex(ev.target as Element)
         const choice = state.currentPassage.choices[choiceIdx]
         handleChoice(state.currentModule, choice)
     })
@@ -177,13 +178,13 @@ async function processFiles(files: FileList) {
 
 function loadModule(module: Module) {
     state.currentModule = module
-    const loadUi = util.byId("loadUi");
-    const playUi = util.byId("playUi");
+    const loadUi = dom.byId("loadUi");
+    const playUi = dom.byId("playUi");
     loadUi.hidden = true;
     playUi.hidden = false;
 
     // load module title
-    const moduleTitle = util.byId("moduleTitle")
+    const moduleTitle = dom.byId("moduleTitle")
     moduleTitle.textContent = module.title
 
     // load initial passage
@@ -192,25 +193,25 @@ function loadModule(module: Module) {
 }
 
 function loadPassage(passage: Passage) {
-    const passageTitle = util.byId("passageTitle")
-    const passageBody = util.byId("passageBody")
-    const choicesDiv = util.byId("choices")
-    util.removeAllChildren(choicesDiv)
+    const passageTitle = dom.byId("passageTitle")
+    const passageBody = dom.byId("passageBody")
+    const choicesDiv = dom.byId("choices")
+    dom.removeAllChildren(choicesDiv)
 
     passageTitle.textContent = passage.title
     passageBody.textContent = passage.body
 
-    const template = util.byId("choiceTemplate") as HTMLTemplateElement
+    const template = dom.byId("choiceTemplate") as HTMLTemplateElement
     for (const choice of passage.choices) {
         const fragment = template.content.cloneNode(true) as DocumentFragment
-        const choiceDiv = util.bySelector(fragment, ".choice") as HTMLElement
+        const choiceDiv = dom.bySelector(fragment, ".choice") as HTMLElement
         choiceDiv.textContent = choice.body
         choicesDiv.appendChild(fragment)
     }
 
-    const tryAgain = util.byId("tryAgain")
-    const end = util.byId("end")
-    const nextPassage = util.byId("nextPassage")
+    const tryAgain = dom.byId("tryAgain")
+    const end = dom.byId("end")
+    const nextPassage = dom.byId("nextPassage")
 
     nextPassage.hidden = true
     if (passage.choices.length == 0) {
@@ -225,17 +226,17 @@ function loadPassage(passage: Passage) {
 }
 
 function loadTransition(choice: Choice) {
-    const passageTitle = util.byId("passageTitle")
-    const passageBody = util.byId("passageBody")
-    const choicesDiv = util.byId("choices")
-    util.removeAllChildren(choicesDiv)
+    const passageTitle = dom.byId("passageTitle")
+    const passageBody = dom.byId("passageBody")
+    const choicesDiv = dom.byId("choices")
+    dom.removeAllChildren(choicesDiv)
 
     passageTitle.textContent = ""
     passageBody.textContent = choice.transition
 
-    const tryAgain = util.byId("tryAgain")
-    const end = util.byId("end")
-    const nextPassage = util.byId("nextPassage")
+    const tryAgain = dom.byId("tryAgain")
+    const end = dom.byId("end")
+    const nextPassage = dom.byId("nextPassage")
 
     if (choice.passageId) {
         nextPassage.hidden = false
@@ -251,8 +252,8 @@ function loadTransition(choice: Choice) {
 }
 
 function clearErrorMessages() {
-    const errorsDiv = util.byId("errors")
-    util.removeAllChildren(errorsDiv)
+    const errorsDiv = dom.byId("errors")
+    dom.removeAllChildren(errorsDiv)
 }
 
 function validateModule(module: Module): boolean {
@@ -326,7 +327,7 @@ function validateChoice(module: Module, choice: Choice): boolean {
 
 function appendErrorMessage(error: string) {
     console.log(error)
-    const errorsDiv = util.byId("errors");
+    const errorsDiv = dom.byId("errors");
     const div = document.createElement("div");
     div.classList.add("error-message")
     div.textContent = error

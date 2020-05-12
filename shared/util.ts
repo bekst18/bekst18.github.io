@@ -24,3 +24,18 @@ export function bench(name: string, f: () => void) {
     // console.log(`${endTime}: end ${name} ms`)
     console.log(`${name} elapsed ${endTime - startTime} ms`)
 }
+
+/**
+ * compare two primitive objects
+ * @param x first object to compare
+ * @param y second object to compare
+ */
+export function compare<T>(x: T, y: T): number {
+    if (x < y) {
+        return -1
+    } else if (x > y) {
+        return 1
+    }
+
+    return 0
+}

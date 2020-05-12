@@ -78,8 +78,29 @@ interface RoomTemplate {
     interiorPt: geo.Point
 }
 
+interface Room {
+    interiorPt: geo.Point
+    depth: number,
+}
+
 export function generateMap(width: number, height: number): MapData {
-    const cells = generateCellGrid(width, height)
+    const [cells, rooms] = generateCellGrid(width, height)
+
+    const firstRoom = rooms.reduce((x, y) => x.depth < y.depth ? x : x)
+    const stairsUp = tileset.stairsUp.clone()
+    const stairsUpPosition = array.find(visitInteriorCoords(cells, firstRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
+    if (!stairsUpPosition) {
+        throw new Error("Failed to place stairs up")
+    }
+    stairsUp.position = stairsUpPosition
+
+    const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : x)
+    const stairsDown = tileset.stairsDown.clone()
+    const stairsDownPosition = array.find(visitInteriorCoords(cells, lastRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
+    if (!stairsDownPosition) {
+        throw new Error("Failed to place stairs down")
+    }
+    stairsDown.position = stairsDownPosition 
 
     // generate tiles and fixtures from cells
     const tiles: rl.Tile[] = []
@@ -120,48 +141,59 @@ export function generateMap(width: number, height: number): MapData {
         }
     }
 
-    const entry = cells.findPoint(t => t === CellType.Interior) || new geo.Point(0, 0)
     return {
         tiles: tiles,
         fixtures: fixtures,
-        stairsUp: tileset.stairsUp.clone(),
-        stairsDown: tileset.stairsDown.clone(),
-        entry: entry
+        stairsUp: stairsUp,
+        stairsDown: stairsDown,
+        entry: firstRoom.interiorPt
     }
 }
 
-function generateCellGrid(width: number, height: number): CellGrid {
+function generateCellGrid(width: number, height: number): [CellGrid, Room[]] {
     const cells = grid.generate(width, height, () => CellType.Exterior)
 
     // generate room templates
-    const roomTemplates = generateRoomTemplates()
-    const hallTemplates = generateHallTemplates()
-    const stack: geo.Point[] = []
+    const templates = generateRoomTemplates()
+    const stack: Room[] = []
+    const rooms: Room[] = []
 
     // place initial room
     {
-        rand.shuffle(roomTemplates)
-        const template = roomTemplates[0]
+        rand.shuffle(templates)
+        const template = templates[0]
 
         const pt = new geo.Point(
             rand.int(0, width - template.cells.width + 1),
             rand.int(0, height - template.cells.height + 1))
 
         const interiorPt = placeTemplate(cells, template, pt)
-        stack.push(interiorPt)
+        const room = {
+            interiorPt,
+            depth: 0
+        }
+
+        stack.push(room)
+        rooms.push(room)
     }
 
     while (stack.length > 0) {
-        const interiorPt = array.pop(stack)
-        const templates = stack.length % 2 == 0 ? roomTemplates : hallTemplates
-        const nextInteriorPt = tryTunnelFrom(cells, templates, interiorPt)
+        const room = array.pop(stack)
+        const nextInteriorPt = tryTunnelFrom(cells, templates, room.interiorPt)
+
         if (nextInteriorPt) {
-            stack.push(interiorPt)
-            stack.push(nextInteriorPt)
+            const nextRoom = {
+                interiorPt: nextInteriorPt,
+                depth: room.depth + 1
+            }
+
+            stack.push(room)
+            stack.push(nextRoom)
+            rooms.push(nextRoom)
         }
     }
 
-    return cells
+    return [cells, rooms]
 }
 
 function tryTunnelFrom(cells: CellGrid, templates: RoomTemplate[], interiorPt: geo.Point): geo.Point | null {
@@ -204,19 +236,9 @@ function placeTemplate(cells: CellGrid, template: RoomTemplate, offset: geo.Poin
 }
 
 function generateRoomTemplates(): RoomTemplate[] {
-    const templates = [5, 7, 9, 11, 13].map(x => generateRoomTemplate(x, x))
-    return templates
-}
-
-function generateHallTemplates(): RoomTemplate[] {
-    const templates: RoomTemplate[] = []
-    templates.push(...[5, 7, 9, 11].map(x => generateRoomTemplate(x, 3)))
-    templates.push(...[5, 7, 9, 11].map(x => generateRoomTemplate(3, x)))
-    return templates
-}
-
-function generateNSHallTemplates(): RoomTemplate[] {
-    const templates = [5, 7, 9, 11].map(x => generateRoomTemplate(3, x))
+    const lengths = [3, 5, 7, 9, 11, 13]
+    const pairs = lengths.map(x => lengths.map(y => [x, y])).flat().filter(a => a[0] > 3 || a[1] > 3)
+    const templates = pairs.map(a => generateRoomTemplate(a[0], a[1]))
     return templates
 }
 
@@ -251,12 +273,6 @@ function findExteriorNeighbor(cells: CellGrid, pt: geo.Point): geo.Point | null 
     }
 
     return null
-}
-
-function isTunnelable(cells: CellGrid, pt: geo.Point): boolean {
-    const interior = findInteriorNeighbor(cells, pt) !== null
-    const exterior = findExteriorNeighbor(cells, pt) !== null
-    return interior && exterior
 }
 
 function* visitNeighbors(cells: CellGrid, pt: geo.Point): Iterable<[CellType, geo.Point]> {
@@ -315,6 +331,10 @@ function* visitRoom(cells: CellGrid, pt0: geo.Point): Iterable<[CellType, geo.Po
 
 function visitRoomCoords(cells: CellGrid, pt0: geo.Point): Iterable<geo.Point> {
     return array.map(visitRoom(cells, pt0), x => x[1])
+}
+
+function visitInteriorCoords(cells: CellGrid, pt0: geo.Point): Iterable<geo.Point> {
+    return array.map(visitInterior(cells, pt0), x => x[1])
 }
 
 function* visitInterior(cells: CellGrid, pt0: geo.Point): Iterable<[CellType, geo.Point]> {

@@ -132,7 +132,7 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
     drawThing(renderer, offset, map.stairsDown)
     drawThing(renderer, offset, player)
 
-    renderer.flush()
+    renderer.flush(rl.lightRadius * tileSize)
 }
 
 function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
@@ -140,17 +140,16 @@ function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
         throw new Error(`renderData is not set for ${th.name} with image: ${th.image}`)
     }
 
-    const { x, y } = th.position
-    const { x: ox, y: oy } = offset
-
-    const sprite: gfx.Sprite = {
-        position: [x * tileSize + ox, y * tileSize + oy],
+    const spritePosition = th.position.mulScalar(tileSize).addPoint(offset)
+    const sprite = new gfx.Sprite({
+        position: spritePosition,
         color: [1, 1, 1, 1],
         width: tileSize,
         height: tileSize,
         texture: th.renderData.texture,
-        layer: th.renderData.textureLayer
-    }
+        layer: th.renderData.textureLayer,
+        flags: gfx.SpriteFlags.Lit | gfx.SpriteFlags.ArrayTexture
+    })
 
     renderer.drawSprite(sprite)
 }
@@ -176,7 +175,7 @@ async function main() {
         image: "./assets/char.png"
     })
 
-    const map = await generateMap(player, renderer, 32, 32)
+    const map = await generateMap(player, renderer, 16, 16)
     player.position = map.entry.clone()
     const keys = new input.Keys()
     requestAnimationFrame(() => tick(renderer, keys, player, map))

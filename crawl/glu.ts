@@ -136,7 +136,7 @@ export function createVertexArray(gl: WebGL2RenderingContext): WebGLVertexArrayO
  * create a texture object, throw an exception on failure
  * @param gl gl context
  */
-export function createTexture(gl: WebGL2RenderingContext): WebGLVertexArrayObject {
+export function createTexture(gl: WebGL2RenderingContext): WebGLTexture {
     const texture = gl.createTexture()
     if (!texture) {
         throw new Error("failed to create texture object")
@@ -149,7 +149,7 @@ export function createTexture(gl: WebGL2RenderingContext): WebGLVertexArrayObjec
  * create a sampler object, throw an exception on failure
  * @param gl gl context
  */
-export function createSampler(gl: WebGL2RenderingContext): WebGLVertexArrayObject {
+export function createSampler(gl: WebGL2RenderingContext): WebGLSampler {
     const sampler = gl.createSampler()
     if (!sampler) {
         throw new Error("failed to create sampler object")
@@ -170,6 +170,19 @@ export async function loadTexture(gl: WebGL2RenderingContext, url: string): Prom
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image)
     gl.generateMipmap(gl.TEXTURE_2D)
     return texture
+}
+
+/**
+ * Create a framebuffer object, throw exception on failure
+ * @param gl gl context
+ */
+export function createFramebuffer(gl: WebGL2RenderingContext): WebGLFramebuffer {
+    const framebuffer = gl.createFramebuffer()
+    if (!framebuffer) {
+        throw new Error("Failed to create framebuffer object")
+    }
+
+    return framebuffer
 }
 
 /* shader fragments */
