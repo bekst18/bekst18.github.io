@@ -5,7 +5,7 @@ import * as geo from "../shared/geo2d"
 import * as gfx from "./gfx.js"
 
 export const tileSize = 24
-export const lightRadius = 64
+export const lightRadius = 8
 
 export interface ThingOptions {
     position: geo.Point

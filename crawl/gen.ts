@@ -6,6 +6,7 @@ import * as geo from "../shared/geo2d.js"
 import * as grid from "../shared/grid.js"
 import * as array from "../shared/array.js"
 import * as rand from "../shared/rand.js"
+import { scan } from "../shared/imaging.js"
 
 /**
  * components of a generated map area
@@ -76,10 +77,12 @@ type CellGrid = grid.Grid<CellType>
 interface RoomTemplate {
     cells: CellGrid
     interiorPt: geo.Point
+    tunnelPts: geo.Point[]
 }
 
 interface Room {
     interiorPt: geo.Point
+    tunnelPts: geo.Point[]
     depth: number,
 }
 
@@ -167,26 +170,16 @@ function generateCellGrid(width: number, height: number): [CellGrid, Room[]] {
             rand.int(0, width - template.cells.width + 1),
             rand.int(0, height - template.cells.height + 1))
 
-        const interiorPt = placeTemplate(cells, template, pt)
-        const room = {
-            interiorPt,
-            depth: 0
-        }
-
+        const room = placeTemplate(cells, template, pt)
         stack.push(room)
         rooms.push(room)
     }
 
     while (stack.length > 0) {
         const room = array.pop(stack)
-        const nextInteriorPt = tryTunnelFrom(cells, templates, room.interiorPt)
+        const nextRoom = tryTunnelFrom(cells, templates, room)
 
-        if (nextInteriorPt) {
-            const nextRoom = {
-                interiorPt: nextInteriorPt,
-                depth: room.depth + 1
-            }
-
+        if (nextRoom) {
             stack.push(room)
             stack.push(nextRoom)
             rooms.push(nextRoom)
@@ -196,31 +189,31 @@ function generateCellGrid(width: number, height: number): [CellGrid, Room[]] {
     return [cells, rooms]
 }
 
-function tryTunnelFrom(cells: CellGrid, templates: RoomTemplate[], interiorPt: geo.Point): geo.Point | null {
-    const tunnelablePts = [...array.filter(visitRoomCoords(cells, interiorPt), pt => findExteriorNeighbor(cells, pt) !== null)]
-    rand.shuffle(tunnelablePts)
+function tryTunnelFrom(cells: CellGrid, templates: RoomTemplate[], room: Room): Room | null {
     rand.shuffle(templates)
 
-    for (const tpt of tunnelablePts) {
+    while (room.tunnelPts.length > 0) {
+        const tpt = array.pop(room.tunnelPts)
+        console.log(tpt)
         for (const template of templates) {
-            const interiorPt = tryTunnelTo(cells, tpt, template)
-            if (interiorPt) {
+            const nextRoom = tryTunnelTo(cells, tpt, template)
+            if (nextRoom) {
                 // place door at tunnel point
+                room.tunnelPts = room.tunnelPts.filter(pt => !pt.equal(tpt))
                 cells.setPoint(tpt, CellType.Door)
-                return interiorPt
+                nextRoom.depth = room.depth + 1
+                return nextRoom
             }
         }
+
     }
 
     return null
 }
 
-function tryTunnelTo(cells: CellGrid, tpt1: geo.Point, template: RoomTemplate): geo.Point | null {
+function tryTunnelTo(cells: CellGrid, tpt1: geo.Point, template: RoomTemplate): Room | null {
     // find tunnel points of template
-    const tunnelablePts = [...array.filter(visitRoomCoords(template.cells, template.interiorPt), pt => findExteriorNeighbor(cells, pt) !== null)]
-    rand.shuffle(tunnelablePts)
-
-    for (const tpt2 of tunnelablePts) {
+    for (const tpt2 of template.tunnelPts) {
         const offset = tpt1.subPoint(tpt2)
         if (isValidPlacement(template.cells, cells, offset)) {
             return placeTemplate(cells, template, offset)
@@ -230,28 +223,45 @@ function tryTunnelTo(cells: CellGrid, tpt1: geo.Point, template: RoomTemplate): 
     return null
 }
 
-function placeTemplate(cells: CellGrid, template: RoomTemplate, offset: geo.Point): geo.Point {
+function placeTemplate(cells: CellGrid, template: RoomTemplate, offset: geo.Point): Room {
     grid.copy(template.cells, cells, offset.x, offset.y)
-    return template.interiorPt.addPoint(offset)
+
+    // find tunnelable points
+    const interiorPt = template.interiorPt.addPoint(offset)
+    const tunnelPts = template.tunnelPts.map(pt => pt.addPoint(offset)).filter(pt => findExteriorNeighbor(cells, pt) !== null)
+    rand.shuffle(tunnelPts)
+
+    return {
+        interiorPt,
+        tunnelPts,
+        depth: 0
+    }
 }
 
 function generateRoomTemplates(): RoomTemplate[] {
-    const lengths = [3, 5, 7, 9, 11, 13]
+    const lengths = [5, 7, 9, 11, 13, 15]
     const pairs = lengths.map(x => lengths.map(y => [x, y])).flat().filter(a => a[0] > 3 || a[1] > 3)
     const templates = pairs.map(a => generateRoomTemplate(a[0], a[1]))
     return templates
 }
 
 function generateRoomTemplate(width: number, height: number): RoomTemplate {
-    const interiorPoint = new geo.Point(width / 2, height / 2).floor()
+    const interiorPt = new geo.Point(width / 2, height / 2).floor()
     const cells = grid.generate(
         width,
         height,
         (x, y) => x === 0 || x === width - 1 || y === 0 || y === height - 1 ? CellType.Wall : CellType.Interior)
 
+    const tunnelPts: geo.Point[] = []
+    tunnelPts.push(...grid.scan(1, 0, width - 2, 1))
+    tunnelPts.push(...grid.scan(0, 1, 1, height - 2))
+    tunnelPts.push(...grid.scan(1, height - 1, width - 2, 1))
+    tunnelPts.push(...grid.scan(width - 1, 1, 1, height - 2))
+
     return {
-        interiorPt: interiorPoint,
-        cells: cells
+        interiorPt,
+        cells,
+        tunnelPts
     }
 }
 

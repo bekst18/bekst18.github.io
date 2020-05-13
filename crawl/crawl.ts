@@ -191,7 +191,7 @@ async function main() {
         image: "./assets/char.png"
     })
 
-    const map = await generateMap(player, renderer, 16, 16)
+    const map = await generateMap(player, renderer, 64, 64)
     player.position = map.entry.clone()
     const inp = new input.Input(canvas)
 

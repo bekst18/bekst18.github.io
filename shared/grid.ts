@@ -83,7 +83,7 @@ export class Grid<T> {
      * @param xy coordinates to access
      */
     atPoint(xy: geo.Point): T {
-        const {x, y} = xy
+        const { x, y } = xy
         return this.at(x, y)
     }
 
@@ -291,4 +291,15 @@ export function generate<T>(width: number, height: number, f: (x: number, y: num
 
     const grd = new Grid<T>(width, height, data)
     return grd
+}
+
+export function* scan(x0: number, y0: number, width: number, height: number): Iterable<geo.Point> {
+    const r = x0 + width
+    const b = y0 + height
+
+    for (let x = x0; x < r; ++x) {
+        for (let y = y0; y < b; ++y) {
+            yield new geo.Point(x, y)
+        }
+    }
 }
