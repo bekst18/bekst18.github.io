@@ -7,13 +7,29 @@ export enum KeyState {
     Down
 }
 
-export class Keys {
+export class Input {
+    private _click: boolean = false
+    private _clickX: number = 0
+    private _clickY: number = 0
     private prevKeys: Map<string, KeyState> = new Map<string, KeyState>()
     private keys: Map<string, KeyState> = new Map<string, KeyState>()
 
-    constructor() {
-        document.addEventListener("keydown", (ev) => this.handleKeyDown(ev))
-        document.addEventListener("keyup", (ev) => this.handleKeyUp(ev))
+    constructor(canvas: HTMLCanvasElement) {
+        canvas.addEventListener("keydown", (ev) => this.handleKeyDown(ev))
+        canvas.addEventListener("keyup", (ev) => this.handleKeyUp(ev))
+        canvas.addEventListener("click", (ev) => this.handleClick(ev))
+    }
+
+    get click(): boolean {
+        return this._click
+    }
+
+    get clickX(): number {
+        return this._clickX
+    }
+
+    get clickY(): number {
+        return this._clickY
     }
 
     get(key: string): KeyState {
@@ -25,7 +41,7 @@ export class Keys {
         return kst
     }
 
-    private getPrev(key: string) : KeyState {
+    private getPrev(key: string): KeyState {
         const kst = this.prevKeys.get(key)
         if (!kst) {
             return KeyState.Up
@@ -50,7 +66,7 @@ export class Keys {
         return this.getPrev(key) === KeyState.Down && this.get(key) === KeyState.Down
     }
 
-    released(key: string) : boolean {
+    released(key: string): boolean {
         return this.getPrev(key) === KeyState.Down && this.get(key) === KeyState.Up
     }
 
@@ -58,9 +74,14 @@ export class Keys {
      * update key states, determining which are being held, released etc...
      * this should be done AFTER current input is checked
      */
-    update(): void {
+    flush(): void {
         // process event list, updating key state
         this.prevKeys = new Map<string, KeyState>(this.keys)
+
+        // reset click info
+        this._click = false
+        this._clickX = 0
+        this._clickY = 0
     }
 
     private handleKeyDown(ev: KeyboardEvent) {
@@ -69,5 +90,11 @@ export class Keys {
 
     private handleKeyUp(ev: KeyboardEvent) {
         this.keys.set(ev.key, KeyState.Up)
+    }
+
+    private handleClick(ev: MouseEvent) {
+        this._click = true;
+        this._clickX = ev.clientX
+        this._clickY = ev.clientY
     }
 }

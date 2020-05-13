@@ -61,28 +61,44 @@ function appendErrorMessage(error: string) {
     errorsDiv.appendChild(div)
 }
 
-function tick(renderer: gfx.Renderer, keys: input.Keys, player: rl.Player, map: gen.MapData) {
-    handleInput(player, map, keys)
+function tick(renderer: gfx.Renderer, inp: input.Input, player: rl.Player, map: gen.MapData) {
+    handleInput(renderer.canvas, player, map, inp)
     drawFrame(renderer, player, map)
-    requestAnimationFrame(() => tick(renderer, keys, player, map))
+    requestAnimationFrame(() => tick(renderer, inp, player, map))
 }
 
-function handleInput(player: rl.Player, map: gen.MapData, keys: input.Keys) {
+function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapData, inp: input.Input) {
     const position = player.position.clone()
+    
+    if (inp.click) {
+        const center = new geo.Point(canvas.width / 2, canvas.height / 2)
+        const mousePosition = new geo.Point(inp.clickX, inp.clickY)
+        const dxy = mousePosition.subPoint(center)
+        const sgn = dxy.sign()
+        const abs = dxy.abs()
 
-    if (keys.pressed("w")) {
+        if (abs.x > tileSize / 2 && abs.x >= abs.y) {
+            position.x += sgn.x
+        }
+
+        if (abs.y > tileSize / 2 && abs.y > abs.x) {
+            position.y += sgn.y
+        }
+    }
+
+    if (inp.pressed("w")) {
         position.y -= 1
     }
 
-    if (keys.pressed("s")) {
+    if (inp.pressed("s")) {
         position.y += 1
     }
 
-    if (keys.pressed("a")) {
+    if (inp.pressed("a")) {
         position.x -= 1
     }
 
-    if (keys.pressed("d")) {
+    if (inp.pressed("d")) {
         position.x += 1
     }
 
@@ -90,7 +106,7 @@ function handleInput(player: rl.Player, map: gen.MapData, keys: input.Keys) {
         player.position = position
     }
 
-    keys.update()
+    inp.flush()
 }
 
 function isPassable(map: gen.MapData, xy: geo.Point): boolean {
@@ -148,7 +164,7 @@ function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
         height: tileSize,
         texture: th.renderData.texture,
         layer: th.renderData.textureLayer,
-        flags: gfx.SpriteFlags.Lit | gfx.SpriteFlags.ArrayTexture
+        flags: gfx.SpriteFlags.Lit | gfx.SpriteFlags.ArrayTexture | gfx.SpriteFlags.CastsShadows
     })
 
     renderer.drawSprite(sprite)
@@ -177,9 +193,9 @@ async function main() {
 
     const map = await generateMap(player, renderer, 16, 16)
     player.position = map.entry.clone()
-    const keys = new input.Keys()
+    const inp = new input.Input(canvas)
 
-    requestAnimationFrame(() => tick(renderer, keys, player, map))
+    requestAnimationFrame(() => tick(renderer, inp, player, map))
 }
 
 main()

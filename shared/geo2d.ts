@@ -58,6 +58,14 @@ export class Point {
         return new Point(Math.sign(this.x), Math.sign(this.y))
     }
 
+    abs(): Point {
+        return new Point(Math.abs(this.x), Math.abs(this.y))
+    }
+
+    neg(): Point {
+        return new Point(-this.x, -this.y)
+    }
+
     clone(): Point {
         return new Point(this.x, this.y)
     }
