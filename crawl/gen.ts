@@ -6,7 +6,6 @@ import * as geo from "../shared/geo2d.js"
 import * as grid from "../shared/grid.js"
 import * as array from "../shared/array.js"
 import * as rand from "../shared/rand.js"
-import { scan } from "../shared/imaging.js"
 
 /**
  * components of a generated map area
@@ -194,7 +193,6 @@ function tryTunnelFrom(cells: CellGrid, templates: RoomTemplate[], room: Room): 
 
     while (room.tunnelPts.length > 0) {
         const tpt = array.pop(room.tunnelPts)
-        console.log(tpt)
         for (const template of templates) {
             const nextRoom = tryTunnelTo(cells, tpt, template)
             if (nextRoom) {

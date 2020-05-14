@@ -69,7 +69,7 @@ function tick(renderer: gfx.Renderer, inp: input.Input, player: rl.Player, map: 
 
 function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapData, inp: input.Input) {
     const position = player.position.clone()
-    
+
     if (inp.click) {
         const center = new geo.Point(canvas.width / 2, canvas.height / 2)
         const mousePosition = new geo.Point(inp.clickX, inp.clickY)
@@ -147,6 +147,7 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
     drawThing(renderer, offset, map.stairsUp)
     drawThing(renderer, offset, map.stairsDown)
     drawThing(renderer, offset, player)
+    drawHealthBar(renderer, player, offset)
 
     renderer.flush(rl.lightRadius * tileSize)
 }
@@ -170,6 +171,23 @@ function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
     renderer.drawSprite(sprite)
 }
 
+function drawHealthBar(renderer: gfx.Renderer, player: rl.Player, offset: geo.Point) {
+    const spritePosition = player.position.mulScalar(tileSize).addPoint(offset).subPoint(new geo.Point(0, tileSize / 2))
+    renderer.drawSprite(new gfx.Sprite({
+        position: spritePosition,
+        color: [1, 1, 1, 1],
+        width: player.maxHealth * 4 + 2,
+        height: 8
+    }))
+
+    renderer.drawSprite(new gfx.Sprite({
+        position: spritePosition.addPoint(new geo.Point(1, 1)),
+        color: [1, 0, 0, 1],
+        width: player.health * 4,
+        height: 6,
+    }))
+}
+
 function handleResize(canvas: HTMLCanvasElement) {
     if (canvas.width === canvas.clientWidth && canvas.height === canvas.clientHeight) {
         return
@@ -188,7 +206,8 @@ async function main() {
         position: new geo.Point(0, 0),
         passable: false,
         transparent: true,
-        image: "./assets/char.png"
+        image: "./assets/char.png",
+        maxHealth: 6
     })
 
     const map = await generateMap(player, renderer, 64, 64)

@@ -55,4 +55,19 @@ export class Thing {
 
 export class Tile extends Thing { }
 export class Fixture extends Thing { }
-export class Player extends Thing { }
+
+export interface PlayerOptions extends ThingOptions {
+    maxHealth: number,
+    health?: number
+}
+
+export class Player extends Thing {
+    public maxHealth: number = 0
+    public health: number = 0
+
+    constructor(options: PlayerOptions) {
+        super(options)
+        this.maxHealth = options.maxHealth
+        this.health = options.health ?? this.maxHealth
+    }
+}

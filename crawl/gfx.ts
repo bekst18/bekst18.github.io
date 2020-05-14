@@ -99,8 +99,6 @@ void main() {
     out_color = vec4(1,0,0,1);
 }
 `
-const shadowWidth = 1024
-
 export enum SpriteFlags {
     None = 0,
     Lit = 1 << 0,
@@ -282,19 +280,19 @@ export class Renderer {
     flush(lightRadius: number) {
         this.checkSize()
 
-        // draw shadow sprite
-        const sprite = new Sprite({
-            position: new geo.Point(0, 0),
-            width: 1024,
-            height: 1024,
-            color: [1, 1, 1, 1],
-            texture: this.shadowMapTexture,
-            flags: SpriteFlags.Flip
-        })
-
-        this.drawSprite(sprite)
+        // DEBUG: draw shadow sprite
+        // const sprite = new Sprite({
+        //     position: new geo.Point(0, 0),
+        //     width: 1024,
+        //     height: 1024,
+        //     color: [1, 1, 1, 1],
+        //     texture: this.shadowMapTexture,
+        //     flags: SpriteFlags.Flip
+        // })
+        // this.drawSprite(sprite)
+        
         this.batchSprites()
-        this.drawShadows()
+        // this.drawShadows()
         this.drawSprites(lightRadius)
 
         // clear sprites and batches
