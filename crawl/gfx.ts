@@ -3,7 +3,6 @@
  */
 import * as glu from "./glu.js"
 import * as geo from "../shared/geo2d.js"
-import * as util from "../shared/util.js"
 
 export type Color = [number, number, number, number]
 
@@ -23,9 +22,9 @@ out vec3 frag_uvw;
 void main() {
     frag_uvw = in_uvw;
     frag_color = in_color;
-    frag_position = in_position;
+    frag_position = in_position.xy;
     vec2 position = vec2(in_position.x / viewport_size.x * 2.f - 1.f, -in_position.y / viewport_size.y * 2.f + 1.f);
-    gl_Position = vec4(position, 0, 1);
+    gl_Position = vec4(position, 0, 1.f);
 }`
 
 const spriteFragmentSrc = `#version 300 es
@@ -107,7 +106,7 @@ export enum SpriteFlags {
     Flip = 1 << 3
 }
 
-function get_sprite_render_flags(flags: SpriteFlags): SpriteFlags {
+function getSpriteRenderFlags(flags: SpriteFlags): SpriteFlags {
     return flags & (SpriteFlags.Lit | SpriteFlags.ArrayTexture | SpriteFlags.CastsShadows)
 }
 
@@ -166,19 +165,12 @@ export class Sprite {
     }
 }
 
+// vertex layout:
+// xy uvw rgba (all float32)
 const elemsPerSpriteVertex = 9
 const spriteVertexStride = elemsPerSpriteVertex * 4
 
-interface SpriteBatch {
-    texture: Texture | null
-    flags: SpriteFlags
-    offset: number
-    numSprites: number
-}
-
 export class Renderer {
-    // vertex layout:
-    // xy uvw rgba (all float32)
     public readonly gl: WebGL2RenderingContext
     private readonly shadowProgram: WebGLProgram
     private readonly spriteProgram: WebGLProgram
@@ -198,7 +190,6 @@ export class Renderer {
     private readonly shadowVao: WebGLVertexArrayObject
     private readonly white1x1Texture: Texture
     private sprites: Sprite[] = []
-    private batches: SpriteBatch[] = []
     private vertices: Float32Array = new Float32Array()
     private indices: Uint16Array = new Uint16Array()
     private viewportWidth: number = 0
@@ -207,6 +198,7 @@ export class Renderer {
 
     constructor(readonly canvas: HTMLCanvasElement) {
         this.gl = glu.createContext(canvas)
+
         const gl = this.gl
 
         this.shadowProgram = glu.compileProgram(gl, shadowVertexSrc, shadowFragmentSrc)
@@ -290,14 +282,13 @@ export class Renderer {
         //     flags: SpriteFlags.Flip
         // })
         // this.drawSprite(sprite)
-        
+
         this.batchSprites()
         // this.drawShadows()
         this.drawSprites(lightRadius)
 
         // clear sprites and batches
         this.sprites = []
-        this.batches = []
     }
 
     private batchSprites() {
@@ -306,60 +297,6 @@ export class Renderer {
             if (!sprite.texture) {
                 sprite.texture = this.white1x1Texture
             }
-        }
-
-        // sort sprites
-        const sprites = this.sprites
-        sprites.sort((s1, s2) => {
-            const id1 = s1.texture?.id ?? 0
-            const id2 = s2.texture?.id ?? 0
-            if (id1 < id2) {
-                return -1
-            }
-
-            if (id1 > id2) {
-                return 1
-            }
-
-            const renderFlags1 = get_sprite_render_flags(s1.flags)
-            const renderFlags2 = get_sprite_render_flags(s2.flags)
-            return util.compare(renderFlags1, renderFlags2)
-        })
-
-        let batch: SpriteBatch = {
-            flags: SpriteFlags.None,
-            texture: null,
-            offset: 0,
-            numSprites: 0
-        }
-
-        for (let i = 0; i < sprites.length; ++i) {
-            const sprite = sprites[i]
-            const renderFlags = get_sprite_render_flags(sprite.flags)
-            if (
-                (sprite.texture?.id ?? 0) !== (batch.texture?.id ?? 0) ||
-                renderFlags !== batch.flags) {
-                // append current batch if it contains any sprites
-                if (batch.numSprites > 0) {
-                    this.batches.push(batch)
-                }
-
-                // begin new batch
-                const offset = batch.offset + batch.numSprites
-                batch = {
-                    flags: renderFlags,
-                    texture: sprite.texture,
-                    offset: offset,
-                    numSprites: 0
-                }
-            }
-
-            batch.numSprites++
-        }
-
-        // append final batch if it contains any sprites
-        if (batch.numSprites > 0) {
-            this.batches.push(batch)
         }
 
         // copy vertices and indices to arrays, growing arrays if required
@@ -410,34 +347,36 @@ export class Renderer {
         gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, this.indices.subarray(0, this.sprites.length * 6), gl.DYNAMIC_DRAW)
     }
 
-    private drawShadows() {
-        const gl = this.gl
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowMapFramebuffer)
-        gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
-        gl.clearColor(0, 0, 0, 0)
-        gl.clear(gl.COLOR_BUFFER_BIT)
-        gl.bindVertexArray(this.shadowVao)
-        gl.useProgram(this.shadowProgram)
-        gl.uniform2f(this.shadowViewportSizeUniformLocation, gl.drawingBufferWidth, gl.drawingBufferHeight)
-        gl.bindVertexArray(this.shadowVao)
+    // private drawShadows() {
+    //     const gl = this.gl
+    //     gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowMapFramebuffer)
+    //     gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
+    //     gl.clearColor(0, 0, 0, 0)
+    //     gl.clear(gl.COLOR_BUFFER_BIT)
+    //     gl.bindVertexArray(this.shadowVao)
+    //     gl.useProgram(this.shadowProgram)
+    //     gl.uniform2f(this.shadowViewportSizeUniformLocation, gl.drawingBufferWidth, gl.drawingBufferHeight)
+    //     gl.bindVertexArray(this.shadowVao)
 
-        // draw each shadow casting batch
-        for (const batch of this.batches) {
-            if (!(batch.flags & SpriteFlags.CastsShadows)) {
-                continue
-            }
+    //     // draw each shadow casting batch
+    //     for (const batch of this.batches) {
+    //         if (!(batch.flags & SpriteFlags.CastsShadows)) {
+    //             continue
+    //         }
 
-            gl.drawElements(gl.TRIANGLES, batch.numSprites * 6, gl.UNSIGNED_SHORT, batch.offset * 6 * 2)
-        }
-    }
+    //         gl.drawElements(gl.TRIANGLES, batch.numSprites * 6, gl.UNSIGNED_SHORT, batch.offset * 6 * 2)
+    //     }
+    // }
 
     private drawSprites(lightRadius: number) {
         // draw the batched sprites
         const gl = this.gl
+        gl.enable(gl.BLEND)
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null)
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
         gl.clearColor(0, 0, 0, 1)
-        gl.clear(gl.COLOR_BUFFER_BIT)
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
         gl.useProgram(this.spriteProgram)
         gl.uniform2f(this.spriteViewportSizeUniformLocation, gl.drawingBufferWidth, gl.drawingBufferHeight)
         gl.uniform1f(this.spriteLightRadiusUniformLocation, lightRadius)
@@ -457,23 +396,74 @@ export class Renderer {
         gl.uniform1i(this.spriteArraySamplerUniformLocation, 1)
 
         // draw each batch
-        for (const batch of this.batches) {
-            const useArrayTexture = batch.flags & SpriteFlags.ArrayTexture ? true : false
-            const texture = batch.texture?.texture ?? null
+        {
+            let offset = 0
+            let numSprites = 0
+            let renderFlags = SpriteFlags.None
+            let textureId = -1
+            for (const sprite of this.sprites) {
+                if (!sprite.texture) {
+                    throw new Error("No texture assigned (default should have been applied)")
+                }
 
-            if (useArrayTexture) {
-                gl.activeTexture(gl.TEXTURE1)
-                gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture)
+                const spriteRenderFlags = getSpriteRenderFlags(sprite.flags)
+                const renderFlagBreak = renderFlags !== spriteRenderFlags
+                const textureBreak = textureId !== sprite.texture.id
 
-            } else {
-                gl.activeTexture(gl.TEXTURE0)
-                gl.bindTexture(gl.TEXTURE_2D, texture)
+                // draw current batch
+                if (renderFlagBreak || textureBreak) {
+                    if (numSprites > 0) {
+                        console.log(numSprites)
+                        gl.drawElements(gl.TRIANGLES, numSprites * 6, gl.UNSIGNED_SHORT, offset * 6 * 2)
+                    }
+
+                    offset += numSprites
+                    numSprites = 0
+                }
+
+                if (renderFlags !== spriteRenderFlags) {
+                    renderFlags = spriteRenderFlags
+                    gl.uniform1i(this.spriteLitUniformLocation, renderFlags & SpriteFlags.Lit ? 1 : 0)
+                    gl.uniform1i(this.spriteUseArrayTextureUniformLocation, renderFlags & SpriteFlags.ArrayTexture ? 1 : 0)
+                }
+
+                if (textureId !== sprite.texture.id) {
+                    textureId = sprite.texture.id
+                    if (renderFlags & SpriteFlags.ArrayTexture) {
+                        gl.activeTexture(gl.TEXTURE1)
+                        gl.bindTexture(gl.TEXTURE_2D_ARRAY, sprite.texture.texture)
+
+                    } else {
+                        gl.activeTexture(gl.TEXTURE0)
+                        gl.bindTexture(gl.TEXTURE_2D, sprite.texture.texture)
+                    }
+                }
+
+                ++numSprites
             }
 
-            gl.uniform1i(this.spriteLitUniformLocation, batch.flags & SpriteFlags.Lit ? 1 : 0)
-            gl.uniform1i(this.spriteUseArrayTextureUniformLocation, useArrayTexture ? 1 : 0)
-            gl.drawElements(gl.TRIANGLES, batch.numSprites * 6, gl.UNSIGNED_SHORT, batch.offset * 6 * 2)
+            if (numSprites > 0) {
+                gl.drawElements(gl.TRIANGLES, numSprites * 6, gl.UNSIGNED_SHORT, offset * 6 * 2)
+            }
         }
+
+        // for (const batch of this.batches) {
+        //     const useArrayTexture = batch.flags & SpriteFlags.ArrayTexture ? true : false
+        //     const texture = batch.texture?.texture ?? null
+
+        //     if (useArrayTexture) {
+        //         gl.activeTexture(gl.TEXTURE1)
+        //         gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture)
+
+        //     } else {
+        //         gl.activeTexture(gl.TEXTURE0)
+        //         gl.bindTexture(gl.TEXTURE_2D, texture)
+        //     }
+
+        //     gl.uniform1i(this.spriteLitUniformLocation, batch.flags & SpriteFlags.Lit ? 1 : 0)
+        //     gl.uniform1i(this.spriteUseArrayTextureUniformLocation, useArrayTexture ? 1 : 0)
+        //     gl.drawElements(gl.TRIANGLES, batch.numSprites * 6, gl.UNSIGNED_SHORT, batch.offset * 6 * 2)
+        // }
     }
 
     private createTexture(): Texture {
@@ -489,20 +479,24 @@ export class Renderer {
     private pushVertex(offset: number, x: number, y: number, u: number, v: number, w: number, r: number, g: number, b: number, a: number) {
         // position
         this.vertices[offset] = x
-        this.vertices[offset + 1] = y
+        this.vertices[++offset] = y
+        
         // uv
-        this.vertices[offset + 2] = u
-        this.vertices[offset + 3] = v
-        this.vertices[offset + 4] = w
+        this.vertices[++offset] = u
+        this.vertices[++offset] = v
+        this.vertices[++offset] = w
+
         // color
-        this.vertices[offset + 5] = r
-        this.vertices[offset + 6] = g
-        this.vertices[offset + 7] = b
-        this.vertices[offset + 8] = a
+        this.vertices[++offset] = r
+        this.vertices[++offset] = g
+        this.vertices[++offset] = b
+        this.vertices[++offset] = a
     }
 
     private checkSize() {
         const canvas = this.canvas
+        const gl = this.gl
+
         if (canvas.width !== canvas.clientWidth && canvas.height !== canvas.clientHeight) {
             canvas.width = canvas.clientWidth
             canvas.height = canvas.clientHeight
@@ -513,10 +507,9 @@ export class Renderer {
         }
 
         this.viewportWidth = canvas.width
-        this.viewportHeight = canvas.height
+        this.viewportHeight = canvas.height        
 
-        // setup shadowmapping texture and framebuffer
-        const gl = this.gl
+        // setup shadowmapping texture and shadow framebuffer
         gl.bindTexture(gl.TEXTURE_2D, this.shadowMapTexture.texture)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -541,7 +534,7 @@ function createSpriteVao(
     gl.enableVertexAttribArray(positionAttribIdx)
     gl.enableVertexAttribArray(uvwAttribIdx)
     gl.enableVertexAttribArray(colorAttribIdx)
-    gl.vertexAttribPointer(positionAttribIdx, 2, gl.FLOAT, false, spriteVertexStride, 0)
+    gl.vertexAttribPointer(positionAttribIdx, 3, gl.FLOAT, false, spriteVertexStride, 0)
     gl.vertexAttribPointer(uvwAttribIdx, 3, gl.FLOAT, false, spriteVertexStride, 8)
     gl.vertexAttribPointer(colorAttribIdx, 4, gl.FLOAT, false, spriteVertexStride, 20)
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer)

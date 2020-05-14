@@ -4,8 +4,8 @@ import * as dom from "../shared/dom.js"
 /**
  * create webgl2 rendering context
  */
-export function createContext(canvas: HTMLCanvasElement): WebGL2RenderingContext {
-    const gl = canvas.getContext("webgl2")
+export function createContext(canvas: HTMLCanvasElement, options?: WebGLContextAttributes): WebGL2RenderingContext {
+    const gl = canvas.getContext("webgl2", options)
     if (!gl) {
         throw new Error("Failed to not initialize webgl 2.0. Confirm that your browser is up to date and has support.")
     }
@@ -143,6 +143,19 @@ export function createTexture(gl: WebGL2RenderingContext): WebGLTexture {
     }
 
     return texture
+}
+
+/**
+ * create a renderbuffer object, throw an exception on failure
+ * @param gl gl context
+ */
+export function createRenderbuffer(gl: WebGL2RenderingContext): WebGLRenderbuffer {
+    const buffer = gl.createRenderbuffer()
+    if (!buffer) {
+        throw new Error("Failed to create renderbuffer object")
+    }
+
+    return buffer
 }
 
 /**

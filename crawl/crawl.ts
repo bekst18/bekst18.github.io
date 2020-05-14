@@ -135,6 +135,8 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
     const center = new geo.Point(Math.floor((renderer.canvas.width - tileSize) / 2), Math.floor((renderer.canvas.height - tileSize) / 2))
     const offset = center.subPoint(playerCoords.mulScalar(rl.tileSize))
 
+    // note - drawing order matters - draw from bottom to top
+
     // draw various layers of sprites
     for (const tile of map.tiles) {
         drawThing(renderer, offset, tile)
@@ -175,6 +177,7 @@ function drawHealthBar(renderer: gfx.Renderer, player: rl.Player, offset: geo.Po
     const spritePosition = player.position.mulScalar(tileSize).addPoint(offset).subPoint(new geo.Point(0, tileSize / 2))
     renderer.drawSprite(new gfx.Sprite({
         position: spritePosition,
+        zIndex: .9,
         color: [1, 1, 1, 1],
         width: player.maxHealth * 4 + 2,
         height: 8
@@ -182,6 +185,7 @@ function drawHealthBar(renderer: gfx.Renderer, player: rl.Player, offset: geo.Po
 
     renderer.drawSprite(new gfx.Sprite({
         position: spritePosition.addPoint(new geo.Point(1, 1)),
+        zIndex: .9,
         color: [1, 0, 0, 1],
         width: player.health * 4,
         height: 6,
