@@ -197,11 +197,13 @@ export class Renderer {
     private readonly spriteLightRadiusUniformLocation: WebGLUniformLocation
     private readonly shadowViewportSizeUniformLocation: WebGLUniformLocation
     private readonly sampler: WebGLSampler
+    private readonly arraySampler: WebGLSampler
     private readonly vertexBuffer: WebGLBuffer
     private readonly indexBuffer: WebGLBuffer
     private readonly spriteVao: WebGLVertexArrayObject
     private readonly shadowVao: WebGLVertexArrayObject
     private readonly white1x1Texture: Texture
+    private readonly white1x1ArrayTexture: Texture
     private sprites: Sprite[] = []
     private vertices: Float32Array = new Float32Array()
     private indices: Uint16Array = new Uint16Array()
@@ -231,8 +233,19 @@ export class Renderer {
         gl.bindTexture(gl.TEXTURE_2D, this.white1x1Texture.texture)
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8ClampedArray([255, 255, 255, 255]))
 
+        this.white1x1ArrayTexture = this.createTexture()
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.white1x1ArrayTexture.texture)
+        gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA8, 1, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8ClampedArray([255, 255, 255, 255]))
+
         // setup sampler
         this.sampler = glu.createSampler(gl)
+        gl.samplerParameteri(this.sampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
+        gl.samplerParameteri(this.sampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
+        gl.samplerParameteri(this.sampler, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE)
+        gl.samplerParameteri(this.sampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+        gl.samplerParameteri(this.sampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+        this.arraySampler = glu.createSampler(gl)
         gl.samplerParameteri(this.sampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
         gl.samplerParameteri(this.sampler, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR)
         gl.samplerParameteri(this.sampler, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE)
@@ -397,14 +410,12 @@ export class Renderer {
         gl.bindVertexArray(this.spriteVao)
 
         gl.activeTexture(gl.TEXTURE0)
-        gl.bindTexture(gl.TEXTURE_2D_ARRAY, null)
-        gl.bindTexture(gl.TEXTURE_2D, null)
+        gl.bindTexture(gl.TEXTURE_2D, this.white1x1Texture.texture)
         gl.bindSampler(0, this.sampler)
 
         gl.activeTexture(gl.TEXTURE1)
-        gl.bindTexture(gl.TEXTURE_2D_ARRAY, null)
-        gl.bindTexture(gl.TEXTURE_2D, null)
-        gl.bindSampler(1, this.sampler)
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.white1x1ArrayTexture.texture)
+        gl.bindSampler(1, this.arraySampler)
 
         gl.uniform1i(this.spriteSamplerUniformLocation, 0)
         gl.uniform1i(this.spriteArraySamplerUniformLocation, 1)
@@ -443,12 +454,15 @@ export class Renderer {
                 if (textureId !== sprite.texture.id) {
                     textureId = sprite.texture.id
                     if (renderFlags & SpriteFlags.ArrayTexture) {
+                        gl.activeTexture(gl.TEXTURE0)
+                        gl.bindTexture(gl.TEXTURE_2D, this.white1x1Texture.texture)
                         gl.activeTexture(gl.TEXTURE1)
                         gl.bindTexture(gl.TEXTURE_2D_ARRAY, sprite.texture.texture)
-
                     } else {
                         gl.activeTexture(gl.TEXTURE0)
                         gl.bindTexture(gl.TEXTURE_2D, sprite.texture.texture)
+                        gl.activeTexture(gl.TEXTURE1)
+                        gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.white1x1ArrayTexture.texture)
                     }
                 }
 
@@ -459,6 +473,14 @@ export class Renderer {
                 gl.drawElements(gl.TRIANGLES, numSprites * 6, gl.UNSIGNED_SHORT, offset * 6 * 2)
             }
         }
+
+        // clean up state
+        gl.activeTexture(gl.TEXTURE0)
+        gl.bindTexture(gl.TEXTURE_2D, null)
+        gl.bindSampler(0, null)
+        gl.activeTexture(gl.TEXTURE1)
+        gl.bindTexture(gl.TEXTURE_2D_ARRAY, null)
+        gl.bindSampler(1, null)
     }
 
     private createTexture(): Texture {

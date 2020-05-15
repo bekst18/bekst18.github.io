@@ -7,7 +7,7 @@ import * as rl from "./rl.js"
 import * as geo from "../shared/geo2d.js"
 
 const tileSize = 24
-const moveSpeed = 2
+const output = dom.byId("output")
 
 async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: number, height: number): Promise<gen.MapData> {
     const map = gen.generateMap(width, height, player)
@@ -54,20 +54,6 @@ async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: num
     return map
 }
 
-const errorsDiv = dom.byId("errors");
-
-function clearErrorMessages() {
-    dom.removeAllChildren(errorsDiv)
-}
-
-function appendErrorMessage(error: string) {
-    console.log(error)
-    const div = document.createElement("div");
-    div.classList.add("error-message")
-    div.textContent = error
-    errorsDiv.appendChild(div)
-}
-
 function tick(renderer: gfx.Renderer, inp: input.Input, player: rl.Player, map: gen.MapData) {
     handleInput(renderer.canvas, player, map, inp)
     drawFrame(renderer, player, map)
@@ -77,7 +63,7 @@ function tick(renderer: gfx.Renderer, inp: input.Input, player: rl.Player, map: 
 function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapData, inp: input.Input) {
     const position = player.position.clone()
 
-    if (inp.mouseLeftHeld) {
+    if (inp.mouseLeftPressed) {
         const center = new geo.Point(canvas.width / 2, canvas.height / 2)
         const mousePosition = new geo.Point(inp.mouseX, inp.mouseY)
         const dxy = mousePosition.subPoint(center)
@@ -85,25 +71,25 @@ function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapD
         const abs = dxy.abs()
 
         if (abs.x > tileSize / 2 && abs.x >= abs.y) {
-            position.x += sgn.x * moveSpeed
+            position.x += sgn.x
         }
 
         if (abs.y > tileSize / 2 && abs.y > abs.x) {
-            position.y += sgn.y * moveSpeed
+            position.y += sgn.y
         }
 
     }
-    else if (inp.held("w")) {
-        position.y -= moveSpeed
+    else if (inp.pressed("w")) {
+        position.y -= 1
     }
-    else if (inp.held("s")) {
-        position.y += moveSpeed
+    else if (inp.pressed("s")) {
+        position.y += 1
     }
-    else if (inp.held("a")) {
-        position.x -= moveSpeed
+    else if (inp.pressed("a")) {
+        position.x -= 1
     }
-    else if (inp.held("d")) {
-        position.x += moveSpeed
+    else if (inp.pressed("d")) {
+        position.x += 1
     }
 
     if (isPassable(map, position)) {
@@ -114,16 +100,17 @@ function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapD
 }
 
 function isPassable(map: gen.MapData, xy: geo.Point): boolean {
-    const tiles = array.filter(map.tiles, t => t.position.equal(xy))
-    for (const tile of tiles) {
-        if (!tile.passable) {
-            return false
+    // check for aabb overlap
+    for (const th of map) {
+        if (th instanceof rl.Player) {
+            continue
         }
-    }
 
-    const fixtures = array.filter(map.fixtures, t => t.position.equal(xy))
-    for (const fixture of fixtures) {
-        if (!fixture.passable) {
+        if (th.passable) {
+            continue
+        }
+
+        if (th.position.equal(xy)) {
             return false
         }
     }
@@ -135,9 +122,8 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
     // center the grid around the player
     handleResize(renderer.canvas)
 
-    const playerCoords = player.position
     const center = new geo.Point(Math.floor((renderer.canvas.width - tileSize) / 2), Math.floor((renderer.canvas.height - tileSize) / 2))
-    const offset = center.subPoint(playerCoords)
+    const offset = center.subPoint(player.position.mulScalar(rl.tileSize))
 
     // note - drawing order matters - draw from bottom to top
 
@@ -169,7 +155,7 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
 }
 
 function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
-    const spritePosition = th.position.addPoint(offset)
+    const spritePosition = th.position.mulScalar(rl.tileSize).addPoint(offset)
     const sprite = new gfx.Sprite({
         position: spritePosition,
         color: th.color,
@@ -210,6 +196,24 @@ function handleResize(canvas: HTMLCanvasElement) {
     canvas.height = canvas.clientHeight
 }
 
+enum MessageStyle {
+    none,
+    error,
+    warning
+}
+
+function appendMessage(message: string, style: MessageStyle = MessageStyle.none) {
+    const div = document.createElement("div")
+    div.textContent = message
+    div.classList.add("message")
+
+    if (style) {
+        div.classList.add(`message-${MessageStyle[style]}`)
+    }
+
+    output.appendChild(div)
+}
+
 async function main() {
     const canvas = dom.byId("canvas") as HTMLCanvasElement
     const renderer = new gfx.Renderer(canvas)
@@ -224,6 +228,8 @@ async function main() {
     const map = await generateMap(player, renderer, 32, 32)
     const inp = new input.Input(canvas)
 
+    appendMessage("Your adventure begins")
+    appendMessage("This is a test error", MessageStyle.error)
     requestAnimationFrame(() => tick(renderer, inp, player, map))
 }
 

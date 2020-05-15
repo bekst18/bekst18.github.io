@@ -18,7 +18,7 @@ export class MapData {
     stairsDown: rl.Fixture | null = null
     creatures: rl.Creature[] = []
 
-    constructor(public player: rl.Player) {}
+    constructor(public player: rl.Player) { }
 
     /**
       * iterate over all things in map
@@ -142,13 +142,13 @@ export function generateMap(width: number, height: number, player: rl.Player): M
     const [cells, rooms] = generateCellGrid(width, height)
 
     const firstRoom = rooms.reduce((x, y) => x.depth < y.depth ? x : y)
-    map.player.position = firstRoom.interiorPt.mulScalar(rl.tileSize)
+    map.player.position = firstRoom.interiorPt.clone()
     map.stairsUp = new rl.Fixture(tileset.stairsUp)
     const stairsUpPosition = array.find(visitInteriorCoords(cells, firstRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsUpPosition) {
         throw new Error("Failed to place stairs up")
     }
-    map.stairsUp.position = stairsUpPosition.mulScalar(rl.tileSize)
+    map.stairsUp.position = stairsUpPosition.clone()
 
     const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
     map.stairsDown = new rl.Fixture(tileset.stairsDown)
@@ -156,7 +156,7 @@ export function generateMap(width: number, height: number, player: rl.Player): M
     if (!stairsDownPosition) {
         throw new Error("Failed to place stairs down")
     }
-    map.stairsDown.position = stairsDownPosition.mulScalar(rl.tileSize)
+    map.stairsDown.position = stairsDownPosition.clone()
 
     // generate tiles and fixtures from cells
     for (const [v, x, y] of cells.scan()) {
@@ -170,29 +170,29 @@ export function generateMap(width: number, height: number, player: rl.Player): M
 
             case CellType.Interior: {
                 const tile = new rl.Tile(tileset.floor)
-                tile.position.x = x * rl.tileSize
-                tile.position.y = y * rl.tileSize
+                tile.position.x = x
+                tile.position.y = y
                 map.tiles.push(tile)
             }
                 break
 
             case CellType.Wall: {
                 const tile = new rl.Tile(tileset.wall)
-                tile.position.x = x * rl.tileSize
-                tile.position.y = y * rl.tileSize
+                tile.position.x = x
+                tile.position.y = y
                 map.tiles.push(tile)
             }
                 break
 
             case CellType.Door: {
                 const fixture = new rl.Fixture(tileset.door)
-                fixture.position.x = x * rl.tileSize
-                fixture.position.y = y * rl.tileSize
+                fixture.position.x = x
+                fixture.position.y = y
                 map.fixtures.push(fixture)
 
                 const tile = new rl.Tile(tileset.floor)
-                tile.position.x = x * rl.tileSize
-                tile.position.y = y * rl.tileSize
+                tile.position.x = x
+                tile.position.y = y
                 map.tiles.push(tile)
             }
                 break
@@ -201,6 +201,7 @@ export function generateMap(width: number, height: number, player: rl.Player): M
 
     placeMonsters(cells, rooms, map)
     placeTreasures(cells, rooms, map)
+
     return map
 }
 
@@ -238,16 +239,12 @@ function tryPlaceMonster(cells: CellGrid, room: Room, map: MapData): boolean {
             continue
         }
 
-        if (map.fixtures.some(f => f.position.equal(pt))) {
-            continue
-        }
-
-        if (map.creatures.some(c => c.position.equal(pt))) {
+        if (array.any(map, th => th.position.equal(pt) && !th.passable)) {
             continue
         }
 
         const monster = new rl.Creature(rand.choose(creatures))
-        monster.position = pt.mulScalar(rl.tileSize)
+        monster.position = pt.clone()
         map.creatures.push(monster)
 
         return true
@@ -277,16 +274,12 @@ function tryPlaceTreasure(cells: CellGrid, room: Room, map: MapData): boolean {
             continue
         }
 
-        if (map.fixtures.some(f => f.position.equal(pt))) {
-            continue
-        }
-
-        if (map.creatures.some(c => c.position.equal(pt))) {
+        if (array.any(map, th => th.position.equal(pt) && !th.passable)) {
             continue
         }
 
         const chest = new rl.Fixture(treasure)
-        chest.position = pt.mulScalar(rl.tileSize)
+        chest.position = pt.clone()
         map.fixtures.push(chest)
 
         return true
