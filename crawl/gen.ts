@@ -12,11 +12,9 @@ import * as gfx from "./gfx.js"
  * components of a generated map area
  */
 export class MapData {
-    tiles: rl.Tile[] = []
-    fixtures: rl.Fixture[] = []
-    stairsUp: rl.Fixture | null = null
-    stairsDown: rl.Fixture | null = null
-    creatures: rl.Creature[] = []
+    tiles = new Set<rl.Tile>()
+    fixtures = new Set<rl.Fixture>()
+    creatures = new Set<rl.Creature>();
 
     constructor(public player: rl.Player) { }
 
@@ -32,28 +30,32 @@ export class MapData {
             yield fixture
         }
 
-        if (this.stairsUp) {
-            yield this.stairsUp
-        }
-
-        if (this.stairsDown) {
-            yield this.stairsDown
-        }
-
         for (const creature of this.creatures) {
             yield creature
         }
 
         yield this.player
     }
+
+    fixtureAt(xy: geo.Point): rl.Fixture | null {
+        return array.find(this.fixtures, f => f.position.equal(xy)) || null
+    }
+
+    tileAt(xy: geo.Point): rl.Tile | null {
+        return array.find(this.tiles, t => t.position.equal(xy)) || null
+    }
+
+    creatureAt(xy: geo.Point): rl.Creature | null {
+        return array.find(this.creatures, c => c.position.equal(xy)) || null
+    }
 }
 
 interface DungeonTileset {
     wall: rl.Tile,
     floor: rl.Tile,
-    door: rl.Fixture,
-    stairsUp: rl.Fixture
-    stairsDown: rl.Fixture
+    door: rl.Door,
+    stairsUp: rl.StairsUp
+    stairsDown: rl.StairsDown
 }
 
 const tileset: DungeonTileset = {
@@ -69,19 +71,19 @@ const tileset: DungeonTileset = {
         passable: true,
         transparent: true
     }),
-    door: new rl.Fixture({
+    door: new rl.Door({
         name: "A Closed Wooden Door",
         image: "./assets/closed.png",
-        passable: true,
-        transparent: true
+        passable: false,
+        transparent: false
     }),
-    stairsUp: new rl.Thing({
+    stairsUp: new rl.StairsUp({
         name: "Stairs Up",
         image: "./assets/up.png",
         passable: false,
         transparent: false,
     }),
-    stairsDown: new rl.Thing({
+    stairsDown: new rl.StairsDown({
         position: new geo.Point(0, 0),
         name: "Stairs Down",
         image: "./assets/down.png",
@@ -143,20 +145,23 @@ export function generateMap(width: number, height: number, player: rl.Player): M
 
     const firstRoom = rooms.reduce((x, y) => x.depth < y.depth ? x : y)
     map.player.position = firstRoom.interiorPt.clone()
-    map.stairsUp = new rl.Fixture(tileset.stairsUp)
+
+    const stairsUp = new rl.Fixture(tileset.stairsUp)
     const stairsUpPosition = array.find(visitInteriorCoords(cells, firstRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsUpPosition) {
         throw new Error("Failed to place stairs up")
     }
-    map.stairsUp.position = stairsUpPosition.clone()
+    stairsUp.position = stairsUpPosition.clone()
+    map.fixtures.add(stairsUp)
 
     const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
-    map.stairsDown = new rl.Fixture(tileset.stairsDown)
+    const stairsDown = new rl.Fixture(tileset.stairsDown)
     const stairsDownPosition = array.find(visitInteriorCoords(cells, lastRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsDownPosition) {
         throw new Error("Failed to place stairs down")
     }
-    map.stairsDown.position = stairsDownPosition.clone()
+    stairsDown.position = stairsDownPosition.clone()
+    map.fixtures.add(stairsDown)
 
     // generate tiles and fixtures from cells
     for (const [v, x, y] of cells.scan()) {
@@ -172,7 +177,7 @@ export function generateMap(width: number, height: number, player: rl.Player): M
                 const tile = new rl.Tile(tileset.floor)
                 tile.position.x = x
                 tile.position.y = y
-                map.tiles.push(tile)
+                map.tiles.add(tile)
             }
                 break
 
@@ -180,20 +185,20 @@ export function generateMap(width: number, height: number, player: rl.Player): M
                 const tile = new rl.Tile(tileset.wall)
                 tile.position.x = x
                 tile.position.y = y
-                map.tiles.push(tile)
+                map.tiles.add(tile)
             }
                 break
 
             case CellType.Door: {
-                const fixture = new rl.Fixture(tileset.door)
+                const fixture = new rl.Door(tileset.door)
                 fixture.position.x = x
                 fixture.position.y = y
-                map.fixtures.push(fixture)
+                map.fixtures.add(fixture)
 
                 const tile = new rl.Tile(tileset.floor)
                 tile.position.x = x
                 tile.position.y = y
-                map.tiles.push(tile)
+                map.tiles.add(tile)
             }
                 break
         }
@@ -245,7 +250,7 @@ function tryPlaceMonster(cells: CellGrid, room: Room, map: MapData): boolean {
 
         const monster = new rl.Creature(rand.choose(creatures))
         monster.position = pt.clone()
-        map.creatures.push(monster)
+        map.creatures.add(monster)
 
         return true
     }
@@ -280,7 +285,7 @@ function tryPlaceTreasure(cells: CellGrid, room: Room, map: MapData): boolean {
 
         const chest = new rl.Fixture(treasure)
         chest.position = pt.clone()
-        map.fixtures.push(chest)
+        map.fixtures.add(chest)
 
         return true
     }

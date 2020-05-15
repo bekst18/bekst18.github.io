@@ -41,6 +41,9 @@ export class Thing {
 
 export class Tile extends Thing { }
 export class Fixture extends Thing { }
+export class Door extends Fixture { }
+export class StairsUp extends Fixture { }
+export class StairsDown extends Fixture { }
 
 export interface CreatureOptions {
     position?: geo.Point

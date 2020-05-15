@@ -5,9 +5,7 @@ import * as gen from "./gen.js"
 import * as input from "../shared/input.js"
 import * as rl from "./rl.js"
 import * as geo from "../shared/geo2d.js"
-
-const tileSize = 24
-const output = dom.byId("output")
+import * as output from "./output.js"
 
 async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: number, height: number): Promise<gen.MapData> {
     const map = gen.generateMap(width, height, player)
@@ -15,25 +13,16 @@ async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: num
     // bake all 24x24 tile images to a single array texture
     // store mapping from image url to index
     let imageUrls: string[] = []
-    imageUrls.push(...map.tiles.map(t => t.image))
-    imageUrls.push(...map.fixtures.map(t => t.image))
-
-    if (map.stairsUp) {
-        imageUrls.push(map.stairsUp.image)
-    }
-
-    if (map.stairsDown) {
-        imageUrls.push(map.stairsDown.image)
-    }
-
-    imageUrls.push(...map.creatures.map(c => c.image))
+    imageUrls.push(...array.map(map.tiles, t => t.image))
+    imageUrls.push(...array.map(map.fixtures, t => t.image))
+    imageUrls.push(...array.map(map.creatures, c => c.image))
     imageUrls.push(player.image)
     imageUrls = imageUrls.filter(url => url)
     imageUrls = array.distinct(imageUrls)
 
     const layerMap = new Map<string, number>(imageUrls.map((url, i) => [url, i]))
     const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
-    const texture = renderer.bakeTextureArray(tileSize, tileSize, images)
+    const texture = renderer.bakeTextureArray(rl.tileSize, rl.tileSize, images)
 
     for (const th of map) {
         if (!th.image) {
@@ -70,11 +59,11 @@ function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapD
         const sgn = dxy.sign()
         const abs = dxy.abs()
 
-        if (abs.x > tileSize / 2 && abs.x >= abs.y) {
+        if (abs.x > rl.tileSize / 2 && abs.x >= abs.y) {
             position.x += sgn.x
         }
 
-        if (abs.y > tileSize / 2 && abs.y > abs.x) {
+        if (abs.y > rl.tileSize / 2 && abs.y > abs.x) {
             position.y += sgn.y
         }
 
@@ -92,37 +81,42 @@ function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapD
         position.x += 1
     }
 
-    if (isPassable(map, position)) {
-        player.position = position
-    }
-
     inp.flush()
-}
 
-function isPassable(map: gen.MapData, xy: geo.Point): boolean {
-    // check for aabb overlap
-    for (const th of map) {
-        if (th instanceof rl.Player) {
-            continue
-        }
-
-        if (th.passable) {
-            continue
-        }
-
-        if (th.position.equal(xy)) {
-            return false
-        }
+    // no move - flush & exit
+    if (position.equal(player.position)) {
+        return
     }
 
-    return true
+    const tile = map.tileAt(position)
+    if (tile && !tile.passable) {
+        return
+    }
+
+    const fixture = map.fixtureAt(position)
+    if (fixture instanceof rl.Door) {
+        output.info("Door opened")
+        map.fixtures.delete(fixture)
+    } else if (fixture && !fixture.passable) {
+        return
+    }
+
+    const creature = map.creatureAt(position)
+    if (creature && !creature.passable) {
+        return
+    }
+
+    player.position = position
 }
 
 function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) {
     // center the grid around the player
     handleResize(renderer.canvas)
 
-    const center = new geo.Point(Math.floor((renderer.canvas.width - tileSize) / 2), Math.floor((renderer.canvas.height - tileSize) / 2))
+    const center = new geo.Point(
+        Math.floor((renderer.canvas.width - rl.tileSize) / 2), 
+        Math.floor((renderer.canvas.height -rl.tileSize) / 2))
+
     const offset = center.subPoint(player.position.mulScalar(rl.tileSize))
 
     // note - drawing order matters - draw from bottom to top
@@ -136,14 +130,6 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
         drawThing(renderer, offset, fixture)
     }
 
-    if (map.stairsUp) {
-        drawThing(renderer, offset, map.stairsUp)
-    }
-
-    if (map.stairsDown) {
-        drawThing(renderer, offset, map.stairsDown)
-    }
-
     for (const creature of map.creatures) {
         drawThing(renderer, offset, creature)
     }
@@ -151,7 +137,7 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
     drawThing(renderer, offset, player)
     drawHealthBar(renderer, player, offset)
 
-    renderer.flush(rl.lightRadius * tileSize)
+    renderer.flush(rl.lightRadius * rl.tileSize)
 }
 
 function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
@@ -159,8 +145,8 @@ function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
     const sprite = new gfx.Sprite({
         position: spritePosition,
         color: th.color,
-        width: tileSize,
-        height: tileSize,
+        width: rl.tileSize,
+        height: rl.tileSize,
         texture: th.texture,
         layer: th.textureLayer,
         flags: gfx.SpriteFlags.Lit | gfx.SpriteFlags.ArrayTexture | gfx.SpriteFlags.CastsShadows
@@ -171,7 +157,7 @@ function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
 
 function drawHealthBar(renderer: gfx.Renderer, creature: rl.Creature, offset: geo.Point) {
     const width = creature.maxHealth * 4 + 2
-    const spritePosition = creature.position.mulScalar(tileSize).addPoint(offset).subPoint(new geo.Point(0, tileSize / 2))
+    const spritePosition = creature.position.mulScalar(rl.tileSize).addPoint(offset).subPoint(new geo.Point(0, rl.tileSize / 2))
     renderer.drawSprite(new gfx.Sprite({
         position: spritePosition,
         color: gfx.Color.white,
@@ -196,24 +182,6 @@ function handleResize(canvas: HTMLCanvasElement) {
     canvas.height = canvas.clientHeight
 }
 
-enum MessageStyle {
-    none,
-    error,
-    warning
-}
-
-function appendMessage(message: string, style: MessageStyle = MessageStyle.none) {
-    const div = document.createElement("div")
-    div.textContent = message
-    div.classList.add("message")
-
-    if (style) {
-        div.classList.add(`message-${MessageStyle[style]}`)
-    }
-
-    output.appendChild(div)
-}
-
 async function main() {
     const canvas = dom.byId("canvas") as HTMLCanvasElement
     const renderer = new gfx.Renderer(canvas)
@@ -225,11 +193,10 @@ async function main() {
         maxHealth: 6
     })
 
-    const map = await generateMap(player, renderer, 32, 32)
+    const map = await generateMap(player, renderer, 128, 128)
     const inp = new input.Input(canvas)
 
-    appendMessage("Your adventure begins")
-    appendMessage("This is a test error", MessageStyle.error)
+    output.write("Your adventure begins")
     requestAnimationFrame(() => tick(renderer, inp, player, map))
 }
 
