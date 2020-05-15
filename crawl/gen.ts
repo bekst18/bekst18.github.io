@@ -142,13 +142,13 @@ export function generateMap(width: number, height: number, player: rl.Player): M
     const [cells, rooms] = generateCellGrid(width, height)
 
     const firstRoom = rooms.reduce((x, y) => x.depth < y.depth ? x : y)
-    map.player.position = firstRoom.interiorPt.clone()
+    map.player.position = firstRoom.interiorPt.mulScalar(rl.tileSize)
     map.stairsUp = new rl.Fixture(tileset.stairsUp)
     const stairsUpPosition = array.find(visitInteriorCoords(cells, firstRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsUpPosition) {
         throw new Error("Failed to place stairs up")
     }
-    map.stairsUp.position = stairsUpPosition
+    map.stairsUp.position = stairsUpPosition.mulScalar(rl.tileSize)
 
     const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
     map.stairsDown = new rl.Fixture(tileset.stairsDown)
@@ -156,7 +156,7 @@ export function generateMap(width: number, height: number, player: rl.Player): M
     if (!stairsDownPosition) {
         throw new Error("Failed to place stairs down")
     }
-    map.stairsDown.position = stairsDownPosition
+    map.stairsDown.position = stairsDownPosition.mulScalar(rl.tileSize)
 
     // generate tiles and fixtures from cells
     for (const [v, x, y] of cells.scan()) {
@@ -170,25 +170,30 @@ export function generateMap(width: number, height: number, player: rl.Player): M
 
             case CellType.Interior: {
                 const tile = new rl.Tile(tileset.floor)
-                tile.position.x = x
-                tile.position.y = y
+                tile.position.x = x * rl.tileSize
+                tile.position.y = y * rl.tileSize
                 map.tiles.push(tile)
             }
                 break
 
             case CellType.Wall: {
                 const tile = new rl.Tile(tileset.wall)
-                tile.position.x = x
-                tile.position.y = y
+                tile.position.x = x * rl.tileSize
+                tile.position.y = y * rl.tileSize
                 map.tiles.push(tile)
             }
                 break
 
             case CellType.Door: {
-                const tile = new rl.Fixture(tileset.door)
-                tile.position.x = x
-                tile.position.y = y
-                map.fixtures.push(tile)
+                const fixture = new rl.Fixture(tileset.door)
+                fixture.position.x = x * rl.tileSize
+                fixture.position.y = y * rl.tileSize
+                map.fixtures.push(fixture)
+
+                const tile = new rl.Tile(tileset.floor)
+                tile.position.x = x * rl.tileSize
+                tile.position.y = y * rl.tileSize
+                map.tiles.push(tile)
             }
                 break
         }
@@ -242,7 +247,7 @@ function tryPlaceMonster(cells: CellGrid, room: Room, map: MapData): boolean {
         }
 
         const monster = new rl.Creature(rand.choose(creatures))
-        monster.position = pt
+        monster.position = pt.mulScalar(rl.tileSize)
         map.creatures.push(monster)
 
         return true
@@ -281,7 +286,7 @@ function tryPlaceTreasure(cells: CellGrid, room: Room, map: MapData): boolean {
         }
 
         const chest = new rl.Fixture(treasure)
-        chest.position = pt
+        chest.position = pt.mulScalar(rl.tileSize)
         map.fixtures.push(chest)
 
         return true

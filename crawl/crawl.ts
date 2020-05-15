@@ -7,7 +7,7 @@ import * as rl from "./rl.js"
 import * as geo from "../shared/geo2d.js"
 
 const tileSize = 24
-const moveSpeed = 1
+const moveSpeed = 2
 
 async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: number, height: number): Promise<gen.MapData> {
     const map = gen.generateMap(width, height, player)
@@ -85,28 +85,25 @@ function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapD
         const abs = dxy.abs()
 
         if (abs.x > tileSize / 2 && abs.x >= abs.y) {
-            position.x += sgn.x
+            position.x += sgn.x * moveSpeed
         }
 
         if (abs.y > tileSize / 2 && abs.y > abs.x) {
-            position.y += sgn.y
+            position.y += sgn.y * moveSpeed
         }
-    }
 
-    if (inp.pressed("w")) {
-        position.y -= 1
     }
-
-    if (inp.pressed("s")) {
-        position.y += 1
+    else if (inp.held("w")) {
+        position.y -= moveSpeed
     }
-
-    if (inp.pressed("a")) {
-        position.x -= 1
+    else if (inp.held("s")) {
+        position.y += moveSpeed
     }
-
-    if (inp.pressed("d")) {
-        position.x += 1
+    else if (inp.held("a")) {
+        position.x -= moveSpeed
+    }
+    else if (inp.held("d")) {
+        position.x += moveSpeed
     }
 
     if (isPassable(map, position)) {
@@ -140,7 +137,7 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
 
     const playerCoords = player.position
     const center = new geo.Point(Math.floor((renderer.canvas.width - tileSize) / 2), Math.floor((renderer.canvas.height - tileSize) / 2))
-    const offset = center.subPoint(playerCoords.mulScalar(rl.tileSize))
+    const offset = center.subPoint(playerCoords)
 
     // note - drawing order matters - draw from bottom to top
 
@@ -172,7 +169,7 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
 }
 
 function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
-    const spritePosition = th.position.mulScalar(tileSize).addPoint(offset)
+    const spritePosition = th.position.addPoint(offset)
     const sprite = new gfx.Sprite({
         position: spritePosition,
         color: th.color,
