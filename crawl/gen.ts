@@ -38,15 +38,15 @@ export class MapData {
     }
 
     fixtureAt(xy: geo.Point): rl.Fixture | null {
-        return array.find(this.fixtures, f => f.position.equal(xy)) || null
+        return array.find(this.fixtures, f => (f.position?.equal(xy)) ?? false) || null
     }
 
     tileAt(xy: geo.Point): rl.Tile | null {
-        return array.find(this.tiles, t => t.position.equal(xy)) || null
+        return array.find(this.tiles, t => (t.position?.equal(xy)) ?? false) || null
     }
 
     creatureAt(xy: geo.Point): rl.Creature | null {
-        return array.find(this.creatures, c => c.position.equal(xy)) || null
+        return array.find(this.creatures, c => (c.position?.equal(xy)) ?? false) || null
     }
 }
 
@@ -175,29 +175,25 @@ export function generateMap(width: number, height: number, player: rl.Player): M
 
             case CellType.Interior: {
                 const tile = new rl.Tile(tileset.floor)
-                tile.position.x = x
-                tile.position.y = y
+                tile.position = new geo.Point(x, y)
                 map.tiles.add(tile)
             }
                 break
 
             case CellType.Wall: {
                 const tile = new rl.Tile(tileset.wall)
-                tile.position.x = x
-                tile.position.y = y
+                tile.position = new geo.Point(x, y)
                 map.tiles.add(tile)
             }
                 break
 
             case CellType.Door: {
                 const fixture = new rl.Door(tileset.door)
-                fixture.position.x = x
-                fixture.position.y = y
+                fixture.position = new geo.Point(x, y)
                 map.fixtures.add(fixture)
 
                 const tile = new rl.Tile(tileset.floor)
-                tile.position.x = x
-                tile.position.y = y
+                tile.position = new geo.Point(x, y)
                 map.tiles.add(tile)
             }
                 break
@@ -244,7 +240,7 @@ function tryPlaceMonster(cells: CellGrid, room: Room, map: MapData): boolean {
             continue
         }
 
-        if (array.any(map, th => th.position.equal(pt) && !th.passable)) {
+        if (array.any(map, th => (th.position?.equal(pt) ?? false) && !th.passable)) {
             continue
         }
 
@@ -279,7 +275,7 @@ function tryPlaceTreasure(cells: CellGrid, room: Room, map: MapData): boolean {
             continue
         }
 
-        if (array.any(map, th => th.position.equal(pt) && !th.passable)) {
+        if (array.any(map, th => (th.position?.equal(pt) ?? false) && !th.passable)) {
             continue
         }
 

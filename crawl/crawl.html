@@ -8,8 +8,26 @@
 </head>
 <body>
     <div id="container">
+        <div id="ui" class="button-group">
+            <button id="statsButton" type="button">Stats</button>
+            <button id="inventoryButton" type="button">Inventory</button>
+        </div>
         <canvas id="canvas" tabindex="1"></canvas>
         <div id="output"></div>
+        <div id="modalBackground" hidden></div>
+        <div id="statsDialog" class="dialog" tabindex="0" hidden>
+            <h1>Character Stats</h1>
+            <table id="statsTable">
+                <thead></thead>
+                <tbody>
+                <tr><td>Health:</td><td id="statsHealth"></td></tr>
+                <tr><td>Attack:</td><td id="statsAttack"></td></tr>
+                <tr><td>Defense:</td><td id="statsDefense"></td></tr>
+                <tr><td>Agility:</td><td id="statsAgility"></td></tr>
+            </tbody>
+            </table>
+            <button id="statsCloseButton" class="dialog-close-button mt-3" type="button">Close</button>
+        </div>
     </div>
     <script type="module" src="crawl.js"></script>
 </body>

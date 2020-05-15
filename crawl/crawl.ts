@@ -7,6 +7,11 @@ import * as rl from "./rl.js"
 import * as geo from "../shared/geo2d.js"
 import * as output from "./output.js"
 
+const canvas = dom.byId("canvas") as HTMLCanvasElement
+const modalBackground = dom.byId("modalBackground") as HTMLDivElement
+const statsDialog = dom.byId("statsDialog") as HTMLDivElement
+const statsCloseButton = dom.byId("statsCloseButton") as HTMLDivElement
+
 async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: number, height: number): Promise<gen.MapData> {
     const map = gen.generateMap(width, height, player)
 
@@ -50,6 +55,10 @@ function tick(renderer: gfx.Renderer, inp: input.Input, player: rl.Player, map: 
 }
 
 function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapData, inp: input.Input) {
+    if (!player.position) {
+        return
+    }
+
     const position = player.position.clone()
 
     if (inp.mouseLeftPressed) {
@@ -79,6 +88,8 @@ function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapD
     }
     else if (inp.pressed("d")) {
         position.x += 1
+    } else if (inp.pressed("z")) {
+        showStats(player)
     }
 
     inp.flush()
@@ -110,12 +121,16 @@ function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapD
 }
 
 function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) {
+    if (!player.position) {
+        return
+    }
+
     // center the grid around the player
     handleResize(renderer.canvas)
 
     const center = new geo.Point(
-        Math.floor((renderer.canvas.width - rl.tileSize) / 2), 
-        Math.floor((renderer.canvas.height -rl.tileSize) / 2))
+        Math.floor((renderer.canvas.width - rl.tileSize) / 2),
+        Math.floor((renderer.canvas.height - rl.tileSize) / 2))
 
     const offset = center.subPoint(player.position.mulScalar(rl.tileSize))
 
@@ -141,6 +156,11 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
 }
 
 function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
+    // don't draw things that aren't positioned
+    if (!th.position) {
+        return
+    }
+
     const spritePosition = th.position.mulScalar(rl.tileSize).addPoint(offset)
     const sprite = new gfx.Sprite({
         position: spritePosition,
@@ -156,6 +176,10 @@ function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
 }
 
 function drawHealthBar(renderer: gfx.Renderer, creature: rl.Creature, offset: geo.Point) {
+    if (!creature.position) {
+        return
+    }
+    
     const width = creature.maxHealth * 4 + 2
     const spritePosition = creature.position.mulScalar(rl.tileSize).addPoint(offset).subPoint(new geo.Point(0, rl.tileSize / 2))
     renderer.drawSprite(new gfx.Sprite({
@@ -182,8 +206,43 @@ function handleResize(canvas: HTMLCanvasElement) {
     canvas.height = canvas.clientHeight
 }
 
+function showDialog(dialog: HTMLDivElement) {
+    modalBackground.hidden = false
+    dialog.hidden = false
+    dialog.focus()
+}
+
+function hideDialog(dialog: HTMLDivElement) {
+    modalBackground.hidden = true
+    dialog.hidden = true
+    canvas.focus()
+}
+
+function showStats(player: rl.Player) {
+    const healthSpan = dom.byId("statsHealth") as HTMLSpanElement
+    const attackSpan = dom.byId("statsAttack") as HTMLSpanElement
+    const defenseSpan = dom.byId("statsDefense") as HTMLSpanElement
+    const agilitySpan = dom.byId("statsAgility") as HTMLSpanElement
+
+    healthSpan.textContent = `${player.health} / ${player.maxHealth}`
+    attackSpan.textContent = `${player.attack}`
+    defenseSpan.textContent = `${player.defense}`
+    agilitySpan.textContent = `${player.agility}`
+
+    showDialog(statsDialog)
+}
+
+function toggleStats(player: rl.Player) {
+    if (statsDialog.hidden) {
+        showStats(player)
+    } else {
+        hideDialog(statsDialog)
+    }
+}
+
 async function main() {
-    const canvas = dom.byId("canvas") as HTMLCanvasElement
+    const statsButton = dom.byId("statsButton") as HTMLButtonElement
+
     const renderer = new gfx.Renderer(canvas)
 
     const player = new rl.Player({
@@ -198,6 +257,15 @@ async function main() {
 
     output.write("Your adventure begins")
     requestAnimationFrame(() => tick(renderer, inp, player, map))
+
+    statsButton.addEventListener("click", () => toggleStats(player))
+    statsCloseButton.addEventListener("click", () => hideDialog(statsDialog))
+
+    statsDialog.addEventListener("keypress", (ev)=> {
+        if (ev.key.toUpperCase() === "Z") {
+            hideDialog(statsDialog)
+        }
+    })
 }
 
 main()
