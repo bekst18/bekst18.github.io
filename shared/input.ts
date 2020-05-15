@@ -8,28 +8,22 @@ export enum KeyState {
 }
 
 export class Input {
-    private _click: boolean = false
-    private _clickX: number = 0
-    private _clickY: number = 0
+    private _mouseLeft: KeyState = KeyState.Up
+    private _prevMouseLeft: KeyState = KeyState.Up
+    private _mouseX: number = 0
+    private _mouseY: number = 0
     private prevKeys: Map<string, KeyState> = new Map<string, KeyState>()
     private keys: Map<string, KeyState> = new Map<string, KeyState>()
 
     constructor(canvas: HTMLCanvasElement) {
-        canvas.addEventListener("keydown", (ev) => this.handleKeyDown(ev))
-        canvas.addEventListener("keyup", (ev) => this.handleKeyUp(ev))
-        canvas.addEventListener("click", (ev) => this.handleClick(ev))
-    }
-
-    get click(): boolean {
-        return this._click
-    }
-
-    get clickX(): number {
-        return this._clickX
-    }
-
-    get clickY(): number {
-        return this._clickY
+        canvas.addEventListener("keydown", ev => this.handleKeyDown(ev))
+        canvas.addEventListener("keyup", ev => this.handleKeyUp(ev))
+        canvas.addEventListener("mousedown", ev => this.handleMouseDown(ev))
+        canvas.addEventListener("mouseup", ev => this.handleMouseUp(ev))
+        canvas.addEventListener("mousemove", ev => this.handleMouseMove(ev))
+        canvas.addEventListener("touchstart", ev => this.handleTouchStart(ev))
+        canvas.addEventListener("touchend", ev => this.handleTouchEnd(ev))
+        canvas.addEventListener("touchmove", ev => this.handleTouchMove(ev))
     }
 
     get(key: string): KeyState {
@@ -70,6 +64,35 @@ export class Input {
         return this.getPrev(key) === KeyState.Down && this.get(key) === KeyState.Up
     }
 
+    // mouse
+    get mouseX(): number {
+        return this._mouseX
+    }
+
+    get mouseY(): number {
+        return this._mouseY
+    }
+
+    get mouseLeftUp(): boolean {
+        return this._mouseLeft === KeyState.Up
+    }
+
+    get mouseLeftDown(): boolean {
+        return this._mouseLeft == KeyState.Down;
+    }
+
+    get mouseLeftPressed(): boolean {
+        return this._prevMouseLeft === KeyState.Up && this._mouseLeft === KeyState.Down
+    }
+
+    get mouseLeftHeld(): boolean {
+        return this._prevMouseLeft === KeyState.Down && this._mouseLeft === KeyState.Down
+    }
+
+    get mouseLeftReleased(): boolean {
+        return this._prevMouseLeft === KeyState.Down && this._mouseLeft === KeyState.Up
+    }
+
     /**
      * update key states, determining which are being held, released etc...
      * this should be done AFTER current input is checked
@@ -77,11 +100,7 @@ export class Input {
     flush(): void {
         // process event list, updating key state
         this.prevKeys = new Map<string, KeyState>(this.keys)
-
-        // reset click info
-        this._click = false
-        this._clickX = 0
-        this._clickY = 0
+        this._prevMouseLeft = this._mouseLeft
     }
 
     private handleKeyDown(ev: KeyboardEvent) {
@@ -92,9 +111,42 @@ export class Input {
         this.keys.set(ev.key, KeyState.Up)
     }
 
-    private handleClick(ev: MouseEvent) {
-        this._click = true;
-        this._clickX = ev.clientX
-        this._clickY = ev.clientY
+    private handleMouseDown(ev: MouseEvent) {
+        switch (ev.button) {
+            case 0:
+                this._mouseLeft = KeyState.Down
+                break
+        }
+    }
+
+    private handleMouseUp(ev: MouseEvent) {
+        switch (ev.button) {
+            case 0:
+                this._mouseLeft = KeyState.Up
+                break;
+        }
+    }
+
+    private handleMouseMove(ev: MouseEvent) {
+        this._mouseX = ev.clientX
+        this._mouseY = ev.clientY
+    }
+
+    private handleTouchStart(ev: TouchEvent) {
+        // prevent default here will stop sinulated mouse events
+        ev.preventDefault()
+        this._mouseLeft = KeyState.Down
+    }
+
+    private handleTouchEnd(ev: TouchEvent) {
+        // prevent default here will stop sinulated mouse events
+        ev.preventDefault()
+        this._mouseLeft = KeyState.Up
+    }
+
+    private handleTouchMove(ev: TouchEvent) {
+        // prevent default here will stop sinulated mouse events
+        this._mouseX = ev.touches[0].clientX
+        this._mouseY = ev.touches[0].clientY
     }
 }

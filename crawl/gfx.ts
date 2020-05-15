@@ -4,7 +4,20 @@
 import * as glu from "./glu.js"
 import * as geo from "../shared/geo2d.js"
 
-export type Color = [number, number, number, number]
+export class Color {
+    constructor(public r: number, public g: number, public b: number, public a: number) { }
+
+    clone(): Color {
+        return new Color(this.r, this.g, this.b, this.a)
+    }
+
+    public static white = new Color(1, 1, 1, 1)
+    public static black = new Color(0, 0, 0, 1)
+    public static gray = new Color(.5, .5, .5, 1)
+    public static red = new Color(1, 0, 0, 1)
+    public static green = new Color(0, 1, 0, 1)
+    public static blue = new Color(0, 0, 1, 1)
+}
 
 const spriteVertexSrc = `#version 300 es
 precision mediump float;
@@ -130,7 +143,7 @@ export class Sprite {
     public width: number = 0
     public height: number = 0
     public layer: number = 0
-    public color: Color = [1, 1, 1, 1]
+    public color: Color = Color.white.clone()
     public texture: Texture | null = null
     public flags: SpriteFlags = SpriteFlags.None
 
@@ -296,6 +309,7 @@ export class Renderer {
         for (const sprite of this.sprites) {
             if (!sprite.texture) {
                 sprite.texture = this.white1x1Texture
+                sprite.flags = sprite.flags & ~SpriteFlags.ArrayTexture
             }
         }
 
@@ -319,16 +333,16 @@ export class Renderer {
             let baseIndex = i * 4
             const flip = (sprite.flags & SpriteFlags.Flip) === SpriteFlags.Flip
 
-            this.pushVertex(elemOffset, sprite.position.x, sprite.position.y, 0, flip ? 1 : 0, sprite.layer, sprite.color[0], sprite.color[1], sprite.color[2], sprite.color[3])
+            this.pushVertex(elemOffset, sprite.position.x, sprite.position.y, 0, flip ? 1 : 0, sprite.layer, sprite.color)
             elemOffset += elemsPerSpriteVertex
 
-            this.pushVertex(elemOffset, sprite.position.x, sprite.position.y + sprite.height, 0, flip ? 0 : 1, sprite.layer, sprite.color[0], sprite.color[1], sprite.color[2], sprite.color[3])
+            this.pushVertex(elemOffset, sprite.position.x, sprite.position.y + sprite.height, 0, flip ? 0 : 1, sprite.layer, sprite.color)
             elemOffset += elemsPerSpriteVertex
 
-            this.pushVertex(elemOffset, sprite.position.x + sprite.width, sprite.position.y + sprite.height, 1, flip ? 0 : 1, sprite.layer, sprite.color[0], sprite.color[1], sprite.color[2], sprite.color[3])
+            this.pushVertex(elemOffset, sprite.position.x + sprite.width, sprite.position.y + sprite.height, 1, flip ? 0 : 1, sprite.layer, sprite.color)
             elemOffset += elemsPerSpriteVertex
 
-            this.pushVertex(elemOffset, sprite.position.x + sprite.width, sprite.position.y, 1, flip ? 1 : 0, sprite.layer, sprite.color[0], sprite.color[1], sprite.color[2], sprite.color[3])
+            this.pushVertex(elemOffset, sprite.position.x + sprite.width, sprite.position.y, 1, flip ? 1 : 0, sprite.layer, sprite.color)
             elemOffset += elemsPerSpriteVertex
 
             this.indices[indexOffset] = baseIndex
@@ -413,7 +427,6 @@ export class Renderer {
                 // draw current batch
                 if (renderFlagBreak || textureBreak) {
                     if (numSprites > 0) {
-                        console.log(numSprites)
                         gl.drawElements(gl.TRIANGLES, numSprites * 6, gl.UNSIGNED_SHORT, offset * 6 * 2)
                     }
 
@@ -446,24 +459,6 @@ export class Renderer {
                 gl.drawElements(gl.TRIANGLES, numSprites * 6, gl.UNSIGNED_SHORT, offset * 6 * 2)
             }
         }
-
-        // for (const batch of this.batches) {
-        //     const useArrayTexture = batch.flags & SpriteFlags.ArrayTexture ? true : false
-        //     const texture = batch.texture?.texture ?? null
-
-        //     if (useArrayTexture) {
-        //         gl.activeTexture(gl.TEXTURE1)
-        //         gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture)
-
-        //     } else {
-        //         gl.activeTexture(gl.TEXTURE0)
-        //         gl.bindTexture(gl.TEXTURE_2D, texture)
-        //     }
-
-        //     gl.uniform1i(this.spriteLitUniformLocation, batch.flags & SpriteFlags.Lit ? 1 : 0)
-        //     gl.uniform1i(this.spriteUseArrayTextureUniformLocation, useArrayTexture ? 1 : 0)
-        //     gl.drawElements(gl.TRIANGLES, batch.numSprites * 6, gl.UNSIGNED_SHORT, batch.offset * 6 * 2)
-        // }
     }
 
     private createTexture(): Texture {
@@ -476,21 +471,21 @@ export class Renderer {
         return texture
     }
 
-    private pushVertex(offset: number, x: number, y: number, u: number, v: number, w: number, r: number, g: number, b: number, a: number) {
+    private pushVertex(offset: number, x: number, y: number, u: number, v: number, w: number, color: Color) {
         // position
         this.vertices[offset] = x
         this.vertices[++offset] = y
-        
+
         // uv
         this.vertices[++offset] = u
         this.vertices[++offset] = v
         this.vertices[++offset] = w
 
         // color
-        this.vertices[++offset] = r
-        this.vertices[++offset] = g
-        this.vertices[++offset] = b
-        this.vertices[++offset] = a
+        this.vertices[++offset] = color.r
+        this.vertices[++offset] = color.g
+        this.vertices[++offset] = color.b
+        this.vertices[++offset] = color.a
     }
 
     private checkSize() {
@@ -507,7 +502,7 @@ export class Renderer {
         }
 
         this.viewportWidth = canvas.width
-        this.viewportHeight = canvas.height        
+        this.viewportHeight = canvas.height
 
         // setup shadowmapping texture and shadow framebuffer
         gl.bindTexture(gl.TEXTURE_2D, this.shadowMapTexture.texture)

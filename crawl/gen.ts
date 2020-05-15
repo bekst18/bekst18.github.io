@@ -6,16 +6,46 @@ import * as geo from "../shared/geo2d.js"
 import * as grid from "../shared/grid.js"
 import * as array from "../shared/array.js"
 import * as rand from "../shared/rand.js"
+import * as gfx from "./gfx.js"
 
 /**
  * components of a generated map area
  */
-export interface MapData {
-    tiles: rl.Tile[]
-    fixtures: rl.Fixture[]
-    stairsUp: rl.Fixture
-    stairsDown: rl.Fixture
-    entry: geo.Point
+export class MapData {
+    tiles: rl.Tile[] = []
+    fixtures: rl.Fixture[] = []
+    stairsUp: rl.Fixture | null = null
+    stairsDown: rl.Fixture | null = null
+    creatures: rl.Creature[] = []
+
+    constructor(public player: rl.Player) {}
+
+    /**
+      * iterate over all things in map
+    */
+    public *[Symbol.iterator](): Generator<rl.Thing> {
+        for (const tile of this.tiles) {
+            yield tile
+        }
+
+        for (const fixture of this.fixtures) {
+            yield fixture
+        }
+
+        if (this.stairsUp) {
+            yield this.stairsUp
+        }
+
+        if (this.stairsDown) {
+            yield this.stairsDown
+        }
+
+        for (const creature of this.creatures) {
+            yield creature
+        }
+
+        yield this.player
+    }
 }
 
 interface DungeonTileset {
@@ -28,28 +58,24 @@ interface DungeonTileset {
 
 const tileset: DungeonTileset = {
     wall: new rl.Tile({
-        position: new geo.Point(0, 0),
         name: "Brick Wall",
         image: "./assets/wall.png",
         passable: false,
         transparent: false
     }),
     floor: new rl.Tile({
-        position: new geo.Point(0, 0),
         name: "Floor",
-        image: "./assets/floor.png",
+        color: new gfx.Color(.2, .2, .2, 1),
         passable: true,
         transparent: true
     }),
     door: new rl.Fixture({
-        position: new geo.Point(0, 0),
         name: "A Closed Wooden Door",
         image: "./assets/closed.png",
         passable: true,
         transparent: true
     }),
     stairsUp: new rl.Thing({
-        position: new geo.Point(0, 0),
         name: "Stairs Up",
         image: "./assets/up.png",
         passable: false,
@@ -63,6 +89,32 @@ const tileset: DungeonTileset = {
         transparent: false,
     }),
 }
+
+const creatures = [
+    new rl.Creature({
+        name: "Rat",
+        maxHealth: 3,
+        image: "./assets/rat.png",
+    }),
+    new rl.Creature({
+        name: "Bat",
+        maxHealth: 3,
+        image: "./assets/bat.png",
+    }),
+    new rl.Creature({
+        name: "Green Slime",
+        maxHealth: 3,
+        color: gfx.Color.green,
+        image: "./assets/slime.png",
+    }),
+    new rl.Creature({
+        name: "Skeleton",
+        maxHealth: 5,
+        image: "./assets/skeleton.png",
+    })
+]
+
+const treasure = new rl.Fixture({ name: "Chest", passable: true, transparent: true, image: "./assets/chest.png" })
 
 enum CellType {
     Exterior,
@@ -85,29 +137,28 @@ interface Room {
     depth: number,
 }
 
-export function generateMap(width: number, height: number): MapData {
+export function generateMap(width: number, height: number, player: rl.Player): MapData {
+    const map = new MapData(player)
     const [cells, rooms] = generateCellGrid(width, height)
 
     const firstRoom = rooms.reduce((x, y) => x.depth < y.depth ? x : y)
-    const stairsUp = tileset.stairsUp.clone()
+    map.player.position = firstRoom.interiorPt.clone()
+    map.stairsUp = new rl.Fixture(tileset.stairsUp)
     const stairsUpPosition = array.find(visitInteriorCoords(cells, firstRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsUpPosition) {
         throw new Error("Failed to place stairs up")
     }
-    stairsUp.position = stairsUpPosition
+    map.stairsUp.position = stairsUpPosition
 
     const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
-    const stairsDown = tileset.stairsDown.clone()
+    map.stairsDown = new rl.Fixture(tileset.stairsDown)
     const stairsDownPosition = array.find(visitInteriorCoords(cells, lastRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsDownPosition) {
         throw new Error("Failed to place stairs down")
     }
-    stairsDown.position = stairsDownPosition
+    map.stairsDown.position = stairsDownPosition
 
     // generate tiles and fixtures from cells
-    const tiles: rl.Tile[] = []
-    const fixtures: rl.Fixture[] = []
-
     for (const [v, x, y] of cells.scan()) {
         if (v === null) {
             continue
@@ -118,39 +169,127 @@ export function generateMap(width: number, height: number): MapData {
                 break
 
             case CellType.Interior: {
-                const tile = tileset.floor.clone()
+                const tile = new rl.Tile(tileset.floor)
                 tile.position.x = x
                 tile.position.y = y
-                tiles.push(tile)
+                map.tiles.push(tile)
             }
                 break
 
             case CellType.Wall: {
-                const tile = tileset.wall.clone()
+                const tile = new rl.Tile(tileset.wall)
                 tile.position.x = x
                 tile.position.y = y
-                tiles.push(tile)
+                map.tiles.push(tile)
             }
                 break
 
             case CellType.Door: {
-                const tile = tileset.door.clone()
+                const tile = new rl.Fixture(tileset.door)
                 tile.position.x = x
                 tile.position.y = y
-                fixtures.push(tile)
+                map.fixtures.push(tile)
             }
                 break
         }
     }
 
-    return {
-        tiles: tiles,
-        fixtures: fixtures,
-        stairsUp: stairsUp,
-        stairsDown: stairsDown,
-        entry: firstRoom.interiorPt
+    placeMonsters(cells, rooms, map)
+    placeTreasures(cells, rooms, map)
+    return map
+}
+
+function placeMonsters(cells: CellGrid, rooms: Room[], map: MapData) {
+    // iterate over rooms, decide whether to place a monster in each room
+    const encounterChance = 1
+    const secondEncounterChance = .3
+    const thirdEncounterChance = .2
+
+    for (const room of rooms) {
+        if (!rand.chance(encounterChance)) {
+            continue
+        }
+
+        tryPlaceMonster(cells, room, map)
+
+        if (!rand.chance(secondEncounterChance)) {
+            continue
+        }
+
+        tryPlaceMonster(cells, room, map)
+
+        if (!rand.chance(thirdEncounterChance)) {
+            continue
+        }
+
+        tryPlaceMonster(cells, room, map)
     }
 }
+
+function tryPlaceMonster(cells: CellGrid, room: Room, map: MapData): boolean {
+    // attempt to place monster
+    for (const [t, pt] of visitInterior(cells, room.interiorPt)) {
+        if (t !== CellType.Interior) {
+            continue
+        }
+
+        if (map.fixtures.some(f => f.position.equal(pt))) {
+            continue
+        }
+
+        if (map.creatures.some(c => c.position.equal(pt))) {
+            continue
+        }
+
+        const monster = new rl.Creature(rand.choose(creatures))
+        monster.position = pt
+        map.creatures.push(monster)
+
+        return true
+    }
+
+    return false
+}
+
+function placeTreasures(cells: CellGrid, rooms: Room[], map: MapData) {
+    // iterate over rooms, decide whether to place a monster in each room
+    const treasureChance = .5
+
+    for (const room of rooms) {
+        if (!rand.chance(treasureChance)) {
+            continue
+        }
+
+        tryPlaceTreasure(cells, room, map)
+    }
+}
+
+
+function tryPlaceTreasure(cells: CellGrid, room: Room, map: MapData): boolean {
+    // attempt to place monster
+    for (const [t, pt] of visitInterior(cells, room.interiorPt)) {
+        if (t !== CellType.Interior) {
+            continue
+        }
+
+        if (map.fixtures.some(f => f.position.equal(pt))) {
+            continue
+        }
+
+        if (map.creatures.some(c => c.position.equal(pt))) {
+            continue
+        }
+
+        const chest = new rl.Fixture(treasure)
+        chest.position = pt
+        map.fixtures.push(chest)
+
+        return true
+    }
+
+    return false
+}
+
 
 function generateCellGrid(width: number, height: number): [CellGrid, Room[]] {
     const cells = grid.generate(width, height, () => CellType.Exterior)

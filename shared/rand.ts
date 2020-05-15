@@ -30,4 +30,12 @@ export function shuffle<T>(a: Array<T>) {
     }
 
     return a;
-};
+}
+
+/**
+ * returns true x% of the time
+ * @param x true chance
+ */
+export function chance(x: number): boolean {
+    return Math.random() < x
+}

@@ -7,17 +7,26 @@ import * as rl from "./rl.js"
 import * as geo from "../shared/geo2d.js"
 
 const tileSize = 24
+const moveSpeed = 1
 
 async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: number, height: number): Promise<gen.MapData> {
-    const map = gen.generateMap(width, height)
+    const map = gen.generateMap(width, height, player)
 
     // bake all 24x24 tile images to a single array texture
     // store mapping from image url to index
     let imageUrls: string[] = []
     imageUrls.push(...map.tiles.map(t => t.image))
     imageUrls.push(...map.fixtures.map(t => t.image))
-    imageUrls.push(map.stairsUp.image)
-    imageUrls.push(map.stairsDown.image)
+
+    if (map.stairsUp) {
+        imageUrls.push(map.stairsUp.image)
+    }
+
+    if (map.stairsDown) {
+        imageUrls.push(map.stairsDown.image)
+    }
+
+    imageUrls.push(...map.creatures.map(c => c.image))
     imageUrls.push(player.image)
     imageUrls = imageUrls.filter(url => url)
     imageUrls = array.distinct(imageUrls)
@@ -26,23 +35,21 @@ async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: num
     const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
     const texture = renderer.bakeTextureArray(tileSize, tileSize, images)
 
-    const initRenderData = (th: rl.Thing) => {
+    for (const th of map) {
+        if (!th.image) {
+            th.textureLayer = -1
+            th.texture = null
+            continue
+        }
+
         const layer = layerMap.get(th.image)
         if (layer === undefined) {
             throw new Error(`texture index not found for ${th.image}`)
         }
 
-        th.renderData = {
-            texture: texture,
-            textureLayer: layer
-        }
+        th.texture = texture
+        th.textureLayer = layer
     }
-
-    map.tiles.forEach(initRenderData)
-    map.fixtures.forEach(initRenderData)
-    initRenderData(map.stairsUp)
-    initRenderData(map.stairsDown)
-    initRenderData(player)
 
     return map
 }
@@ -70,9 +77,9 @@ function tick(renderer: gfx.Renderer, inp: input.Input, player: rl.Player, map: 
 function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapData, inp: input.Input) {
     const position = player.position.clone()
 
-    if (inp.click) {
+    if (inp.mouseLeftHeld) {
         const center = new geo.Point(canvas.width / 2, canvas.height / 2)
-        const mousePosition = new geo.Point(inp.clickX, inp.clickY)
+        const mousePosition = new geo.Point(inp.mouseX, inp.mouseY)
         const dxy = mousePosition.subPoint(center)
         const sgn = dxy.sign()
         const abs = dxy.abs()
@@ -146,8 +153,18 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
         drawThing(renderer, offset, fixture)
     }
 
-    drawThing(renderer, offset, map.stairsUp)
-    drawThing(renderer, offset, map.stairsDown)
+    if (map.stairsUp) {
+        drawThing(renderer, offset, map.stairsUp)
+    }
+
+    if (map.stairsDown) {
+        drawThing(renderer, offset, map.stairsDown)
+    }
+
+    for (const creature of map.creatures) {
+        drawThing(renderer, offset, creature)
+    }
+
     drawThing(renderer, offset, player)
     drawHealthBar(renderer, player, offset)
 
@@ -155,40 +172,35 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
 }
 
 function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
-    if (!th.renderData) {
-        throw new Error(`renderData is not set for ${th.name} with image: ${th.image}`)
-    }
-
     const spritePosition = th.position.mulScalar(tileSize).addPoint(offset)
     const sprite = new gfx.Sprite({
         position: spritePosition,
-        color: [1, 1, 1, 1],
+        color: th.color,
         width: tileSize,
         height: tileSize,
-        texture: th.renderData.texture,
-        layer: th.renderData.textureLayer,
+        texture: th.texture,
+        layer: th.textureLayer,
         flags: gfx.SpriteFlags.Lit | gfx.SpriteFlags.ArrayTexture | gfx.SpriteFlags.CastsShadows
     })
 
     renderer.drawSprite(sprite)
 }
 
-function drawHealthBar(renderer: gfx.Renderer, player: rl.Player, offset: geo.Point) {
-    const spritePosition = player.position.mulScalar(tileSize).addPoint(offset).subPoint(new geo.Point(0, tileSize / 2))
+function drawHealthBar(renderer: gfx.Renderer, creature: rl.Creature, offset: geo.Point) {
+    const width = creature.maxHealth * 4 + 2
+    const spritePosition = creature.position.mulScalar(tileSize).addPoint(offset).subPoint(new geo.Point(0, tileSize / 2))
     renderer.drawSprite(new gfx.Sprite({
         position: spritePosition,
-        zIndex: .9,
-        color: [1, 1, 1, 1],
-        width: player.maxHealth * 4 + 2,
+        color: gfx.Color.white,
+        width: width,
         height: 8
     }))
 
     renderer.drawSprite(new gfx.Sprite({
         position: spritePosition.addPoint(new geo.Point(1, 1)),
-        zIndex: .9,
-        color: [1, 0, 0, 1],
-        width: player.health * 4,
-        height: 6,
+        color: gfx.Color.red,
+        width: width - 2,
+        height: 6
     }))
 }
 
@@ -208,14 +220,11 @@ async function main() {
     const player = new rl.Player({
         name: "Player",
         position: new geo.Point(0, 0),
-        passable: false,
-        transparent: true,
         image: "./assets/char.png",
         maxHealth: 6
     })
 
-    const map = await generateMap(player, renderer, 64, 64)
-    player.position = map.entry.clone()
+    const map = await generateMap(player, renderer, 32, 32)
     const inp = new input.Input(canvas)
 
     requestAnimationFrame(() => tick(renderer, inp, player, map))

@@ -1,24 +1,19 @@
 /**
  * rogue-like library
  */
-import * as geo from "../shared/geo2d"
+import * as geo from "../shared/geo2d.js"
 import * as gfx from "./gfx.js"
 
 export const tileSize = 24
 export const lightRadius = 8
 
 export interface ThingOptions {
-    position: geo.Point
+    position?: geo.Point
     passable: boolean
     transparent: boolean
     name: string
-    image: string
-    renderData?: RenderData
-}
-
-export interface RenderData {
-    texture: gfx.Texture
-    textureLayer: number
+    image?: string
+    color?: gfx.Color
 }
 
 export class Thing {
@@ -27,47 +22,45 @@ export class Thing {
     transparent: boolean
     name: string
     image: string
-    renderData: RenderData | undefined
+    color = new gfx.Color(1, 1, 1, 1)
+    texture: gfx.Texture | null = null
+    textureLayer: number = -1
 
     constructor(options: ThingOptions) {
-        this.position = options.position
+        this.position = options.position?.clone() ?? new geo.Point(0, 0)
         this.passable = options.passable
         this.transparent = options.transparent
         this.name = options.name
-        this.image = options.image
+        this.image = options.image ?? ""
 
-        if (options.renderData) {
-            this.renderData = options.renderData
+        if (options.color) {
+            this.color = options.color
         }
-    }
-
-    clone(): Thing {
-        return new Thing({
-            position: this.position.clone(),
-            passable: this.passable,
-            transparent: this.transparent,
-            name: this.name,
-            image: this.image,
-            renderData: Object.assign({}, this.renderData)
-        })
     }
 }
 
 export class Tile extends Thing { }
 export class Fixture extends Thing { }
 
-export interface PlayerOptions extends ThingOptions {
-    maxHealth: number,
+export interface CreatureOptions {
+    position?: geo.Point
+    name: string
+    image: string
+    color?: gfx.Color
+    maxHealth: number
     health?: number
 }
 
-export class Player extends Thing {
-    public maxHealth: number = 0
-    public health: number = 0
+export class Creature extends Thing {
+    maxHealth: number
+    health: number
 
-    constructor(options: PlayerOptions) {
-        super(options)
+    constructor(options: CreatureOptions) {
+        super(Object.assign({ passable: false, transparent: false }, options))
         this.maxHealth = options.maxHealth
         this.health = options.health ?? this.maxHealth
     }
+}
+
+export class Player extends Creature {
 }
