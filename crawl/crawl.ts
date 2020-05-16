@@ -54,6 +54,25 @@ function tick(renderer: gfx.Renderer, inp: input.Input, player: rl.Player, map: 
     requestAnimationFrame(() => tick(renderer, inp, player, map))
 }
 
+function getScrollOffset(playerPosition: geo.Point): geo.Point {
+    // convert map point to canvas point, noting that canvas is centered on player
+    const canvasCenter = new geo.Point(canvas.width / 2, canvas.height / 2)
+    const offset = canvasCenter.subPoint(playerPosition.addScalar(.5).mulScalar(rl.tileSize))
+    return offset.floor()
+}
+
+function canvasToMapPoint(playerPosition: geo.Point, cxy: geo.Point) {
+    const scrollOffset = getScrollOffset(playerPosition)
+    const mxy = cxy.subPoint(scrollOffset).divScalar(rl.tileSize)
+    return mxy
+}
+
+function mapToCanvasPoint(playerPosition: geo.Point, mxy: geo.Point) {
+    const scrollOffset = getScrollOffset(playerPosition)
+    const cxy = mxy.mulScalar(rl.tileSize).addPoint(scrollOffset)
+    return cxy
+}
+
 function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapData, inp: input.Input) {
     if (!player.position) {
         return
@@ -62,17 +81,32 @@ function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapD
     const position = player.position.clone()
 
     if (inp.mouseLeftPressed) {
-        const center = new geo.Point(canvas.width / 2, canvas.height / 2)
-        const mousePosition = new geo.Point(inp.mouseX, inp.mouseY)
-        const dxy = mousePosition.subPoint(center)
+        // determine the map coordinates the user clicked on
+        const mxy = canvasToMapPoint(player.position, new geo.Point(inp.mouseX, inp.mouseY)).floor()
+
+        const clickFixture = map.fixtureAt(mxy)
+        if (clickFixture) {
+            output.info(`You see ${clickFixture.name}`)
+            inp.flush()
+            return
+        }
+
+        const clickCreature = map.creatureAt(mxy)
+        if (clickCreature) {
+            output.info(`You see ${clickCreature.name}`)
+            inp.flush()
+            return
+        }
+
+        const dxy = mxy.subPoint(player.position)
         const sgn = dxy.sign()
         const abs = dxy.abs()
 
-        if (abs.x > rl.tileSize / 2 && abs.x >= abs.y) {
+        if (abs.x > 0 && abs.x >= abs.y) {
             position.x += sgn.x
         }
 
-        if (abs.y > rl.tileSize / 2 && abs.y > abs.x) {
+        if (abs.y > 0 && abs.y > abs.x) {
             position.y += sgn.y
         }
 
@@ -125,14 +159,10 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
         return
     }
 
-    // center the grid around the player
     handleResize(renderer.canvas)
 
-    const center = new geo.Point(
-        Math.floor((renderer.canvas.width - rl.tileSize) / 2),
-        Math.floor((renderer.canvas.height - rl.tileSize) / 2))
-
-    const offset = center.subPoint(player.position.mulScalar(rl.tileSize))
+    // center the grid around the playerd
+    const offset = getScrollOffset(player.position)
 
     // note - drawing order matters - draw from bottom to top
 
@@ -179,7 +209,7 @@ function drawHealthBar(renderer: gfx.Renderer, creature: rl.Creature, offset: ge
     if (!creature.position) {
         return
     }
-    
+
     const width = creature.maxHealth * 4 + 2
     const spritePosition = creature.position.mulScalar(rl.tileSize).addPoint(offset).subPoint(new geo.Point(0, rl.tileSize / 2))
     renderer.drawSprite(new gfx.Sprite({
@@ -252,7 +282,7 @@ async function main() {
         maxHealth: 6
     })
 
-    const map = await generateMap(player, renderer, 128, 128)
+    const map = await generateMap(player, renderer, 24, 24)
     const inp = new input.Input(canvas)
 
     output.write("Your adventure begins")
@@ -261,7 +291,7 @@ async function main() {
     statsButton.addEventListener("click", () => toggleStats(player))
     statsCloseButton.addEventListener("click", () => hideDialog(statsDialog))
 
-    statsDialog.addEventListener("keypress", (ev)=> {
+    statsDialog.addEventListener("keypress", (ev) => {
         if (ev.key.toUpperCase() === "Z") {
             hideDialog(statsDialog)
         }

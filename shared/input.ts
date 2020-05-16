@@ -128,8 +128,8 @@ export class Input {
     }
 
     private handleMouseMove(ev: MouseEvent) {
-        this._mouseX = ev.clientX
-        this._mouseY = ev.clientY
+        this._mouseX = ev.offsetX
+        this._mouseY = ev.offsetY
     }
 
     private handleTouchStart(ev: TouchEvent) {
@@ -146,7 +146,10 @@ export class Input {
 
     private handleTouchMove(ev: TouchEvent) {
         // prevent default here will stop sinulated mouse events
-        this._mouseX = ev.touches[0].clientX
-        this._mouseY = ev.touches[0].clientY
+        const rect = (ev.target as HTMLElement).getBoundingClientRect();
+        const offsetX = ev.targetTouches[0].pageX - rect.left;
+        const offsetY = ev.targetTouches[0].pageY - rect.top;
+        this._mouseX = offsetX
+        this._mouseY = offsetY
     }
 }
