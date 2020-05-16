@@ -6,6 +6,7 @@ import * as input from "../shared/input.js"
 import * as rl from "./rl.js"
 import * as geo from "../shared/geo2d.js"
 import * as output from "./output.js"
+import * as things from "./things.js"
 
 const canvas = dom.byId("canvas") as HTMLCanvasElement
 const modalBackground = dom.byId("modalBackground") as HTMLDivElement
@@ -20,7 +21,7 @@ async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: num
     let imageUrls: string[] = []
     imageUrls.push(...array.map(map.tiles, t => t.image))
     imageUrls.push(...array.map(map.fixtures, t => t.image))
-    imageUrls.push(...array.map(map.creatures, c => c.image))
+    imageUrls.push(...array.map(map.monsters, c => c.image))
     imageUrls.push(player.image)
     imageUrls = imageUrls.filter(url => url)
     imageUrls = array.distinct(imageUrls)
@@ -48,10 +49,14 @@ async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: num
     return map
 }
 
-function tick(renderer: gfx.Renderer, inp: input.Input, player: rl.Player, map: gen.MapData) {
-    handleInput(renderer.canvas, player, map, inp)
-    drawFrame(renderer, player, map)
-    requestAnimationFrame(() => tick(renderer, inp, player, map))
+function tick(renderer: gfx.Renderer, inp: input.Input, map: gen.MapData) {
+    for (const monster of map.monsters) {
+        tickMonster(map, monster)
+    }
+
+    handleInput(renderer.canvas, map, inp)
+    drawFrame(renderer, map)
+    requestAnimationFrame(() => tick(renderer, inp, map))
 }
 
 function getScrollOffset(playerPosition: geo.Point): geo.Point {
@@ -73,7 +78,8 @@ function mapToCanvasPoint(playerPosition: geo.Point, mxy: geo.Point) {
     return cxy
 }
 
-function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapData, inp: input.Input) {
+function handleInput(canvas: HTMLCanvasElement, map: gen.MapData, inp: input.Input) {
+    const player = map.player
     if (!player.position) {
         return
     }
@@ -91,7 +97,7 @@ function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapD
             return
         }
 
-        const clickCreature = map.creatureAt(mxy)
+        const clickCreature = map.monsterAt(mxy)
         if (clickCreature) {
             output.info(`You see ${clickCreature.name}`)
             inp.flush()
@@ -146,7 +152,7 @@ function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapD
         return
     }
 
-    const creature = map.creatureAt(position)
+    const creature = map.monsterAt(position)
     if (creature && !creature.passable) {
         return
     }
@@ -154,7 +160,8 @@ function handleInput(canvas: HTMLCanvasElement, player: rl.Player, map: gen.MapD
     player.position = position
 }
 
-function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) {
+function drawFrame(renderer: gfx.Renderer, map: gen.MapData) {
+    const player = map.player
     if (!player.position) {
         return
     }
@@ -175,7 +182,7 @@ function drawFrame(renderer: gfx.Renderer, player: rl.Player, map: gen.MapData) 
         drawThing(renderer, offset, fixture)
     }
 
-    for (const creature of map.creatures) {
+    for (const creature of map.monsters) {
         drawThing(renderer, offset, creature)
     }
 
@@ -253,11 +260,16 @@ function showStats(player: rl.Player) {
     const attackSpan = dom.byId("statsAttack") as HTMLSpanElement
     const defenseSpan = dom.byId("statsDefense") as HTMLSpanElement
     const agilitySpan = dom.byId("statsAgility") as HTMLSpanElement
+    const levelSpan = dom.byId("statsLevel") as HTMLSpanElement
+    const experienceSpan = dom.byId("statsExperience") as HTMLSpanElement
+    const experienceRequirement = rl.getExperienceRequirement(player.level + 1)
 
     healthSpan.textContent = `${player.health} / ${player.maxHealth}`
     attackSpan.textContent = `${player.attack}`
     defenseSpan.textContent = `${player.defense}`
     agilitySpan.textContent = `${player.agility}`
+    levelSpan.textContent = `${player.level}`
+    experienceSpan.textContent = `${player.experience} / ${experienceRequirement}`
 
     showDialog(statsDialog)
 }
@@ -270,23 +282,84 @@ function toggleStats(player: rl.Player) {
     }
 }
 
+function tickMonster(map: gen.MapData, monster: rl.Monster) {
+    // determine whether monster can see player
+    if (!monster.position) {
+        return
+    }
+
+    if (!map.player.position) {
+        return
+    }
+
+    if (canSee(map, monster.position, map.player.position) && monster.state !== rl.MonsterState.aggro) {
+        output.warning(`${monster.name} has spotted you!`)
+        monster.state = rl.MonsterState.aggro
+    }
+
+    if (!canSee(map, monster.position, map.player.position) && monster.state === rl.MonsterState.aggro) {
+        output.warning(`${monster.name} has lost sight of you!`)
+        monster.state = rl.MonsterState.idle
+    }
+}
+
+function canSee(map: gen.MapData, eye: geo.Point, target: geo.Point): boolean {
+    for (const pt of march(eye, target)) {
+        // ignore start point
+        if (pt.equal(eye)) {
+            continue
+        }
+
+        for (const th of map.thingsAt(pt)) {
+            if (!th.transparent) {
+                return false
+            }
+        }
+    }
+
+    return true
+}
+
+function* march(start: geo.Point, end: geo.Point): Generator<geo.Point> {
+    const cur = start.clone()
+    const dy = Math.abs(end.y - start.y);
+    const sy = start.y < end.y ? 1 : -1;
+    const dx = -Math.abs(end.x - start.x);
+    const sx = start.x < end.x ? 1 : -1;
+    let err = dy + dx;
+
+    while (true) {
+        yield cur
+
+        if (cur.equal(end)) {
+            break;
+        }
+
+        const e2 = 2 * err;
+        if (e2 >= dx) {
+            err += dx;
+            cur.y += sy;
+        }
+
+        if (e2 <= dy) {
+            err += dy;
+            cur.x += sx;
+        }
+    }
+}
+
 async function main() {
     const statsButton = dom.byId("statsButton") as HTMLButtonElement
 
     const renderer = new gfx.Renderer(canvas)
 
-    const player = new rl.Player({
-        name: "Player",
-        position: new geo.Point(0, 0),
-        image: "./assets/char.png",
-        maxHealth: 6
-    })
+    const player = things.player.clone()
 
     const map = await generateMap(player, renderer, 24, 24)
     const inp = new input.Input(canvas)
 
     output.write("Your adventure begins")
-    requestAnimationFrame(() => tick(renderer, inp, player, map))
+    requestAnimationFrame(() => tick(renderer, inp, map))
 
     statsButton.addEventListener("click", () => toggleStats(player))
     statsCloseButton.addEventListener("click", () => hideDialog(statsDialog))

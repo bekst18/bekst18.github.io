@@ -66,6 +66,14 @@ export class Point {
         return new Point(-this.x, -this.y)
     }
 
+    max(): number {
+        return Math.max(this.x, this.y)
+    }
+
+    min(): number {
+        return Math.min(this.x, this.y)
+    }
+
     clone(): Point {
         return new Point(this.x, this.y)
     }
@@ -132,6 +140,10 @@ export class AABB {
 enum NodeType {
     Internal,
     Leaf
+}
+
+export class Ray {
+    constructor(public start: Point, public end: Point) { }
 }
 
 interface InternalNode<T> {

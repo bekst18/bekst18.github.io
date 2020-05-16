@@ -6,7 +6,7 @@ import * as geo from "../shared/geo2d.js"
 import * as grid from "../shared/grid.js"
 import * as array from "../shared/array.js"
 import * as rand from "../shared/rand.js"
-import * as gfx from "./gfx.js"
+import * as things from "./things.js"
 
 /**
  * components of a generated map area
@@ -14,7 +14,7 @@ import * as gfx from "./gfx.js"
 export class MapData {
     tiles = new Set<rl.Tile>()
     fixtures = new Set<rl.Fixture>()
-    creatures = new Set<rl.Creature>();
+    monsters = new Set<rl.Monster>();
 
     constructor(public player: rl.Player) { }
 
@@ -30,8 +30,8 @@ export class MapData {
             yield fixture
         }
 
-        for (const creature of this.creatures) {
-            yield creature
+        for (const monster of this.monsters) {
+            yield monster
         }
 
         yield this.player
@@ -45,8 +45,25 @@ export class MapData {
         return array.find(this.tiles, t => (t.position?.equal(xy)) ?? false) || null
     }
 
-    creatureAt(xy: geo.Point): rl.Creature | null {
-        return array.find(this.creatures, c => (c.position?.equal(xy)) ?? false) || null
+    monsterAt(xy: geo.Point): rl.Monster | null {
+        return array.find(this.monsters, c => (c.position?.equal(xy)) ?? false) || null
+    }
+
+    *thingsAt(xy: geo.Point): Generator<rl.Monster | rl.Fixture | rl.Tile> {
+        const fixture = this.fixtureAt(xy)
+        if (fixture) {
+            yield fixture
+        }
+
+        const tile = this.tileAt(xy)
+        if (tile) {
+            yield tile
+        }
+
+        const monster = this.monsterAt(xy)
+        if (monster) {
+            yield monster
+        }
     }
 }
 
@@ -59,64 +76,21 @@ interface DungeonTileset {
 }
 
 const tileset: DungeonTileset = {
-    wall: new rl.Tile({
-        name: "Brick Wall",
-        image: "./assets/wall.png",
-        passable: false,
-        transparent: false
-    }),
-    floor: new rl.Tile({
-        name: "Floor",
-        color: new gfx.Color(.2, .2, .2, 1),
-        passable: true,
-        transparent: true
-    }),
-    door: new rl.Door({
-        name: "A Closed Wooden Door",
-        image: "./assets/closed.png",
-        passable: false,
-        transparent: false
-    }),
-    stairsUp: new rl.StairsUp({
-        name: "Stairs Up",
-        image: "./assets/up.png",
-        passable: false,
-        transparent: false,
-    }),
-    stairsDown: new rl.StairsDown({
-        position: new geo.Point(0, 0),
-        name: "Stairs Down",
-        image: "./assets/down.png",
-        passable: false,
-        transparent: false,
-    }),
+    wall: things.brickWall.clone(),
+    floor: things.floor.clone(),
+    door: things.door.clone(),
+    stairsUp: things.stairsUp.clone(),
+    stairsDown: things.stairsDown.clone()
 }
 
-const creatures = [
-    new rl.Creature({
-        name: "Rat",
-        maxHealth: 3,
-        image: "./assets/rat.png",
-    }),
-    new rl.Creature({
-        name: "Bat",
-        maxHealth: 3,
-        image: "./assets/bat.png",
-    }),
-    new rl.Creature({
-        name: "Green Slime",
-        maxHealth: 3,
-        color: gfx.Color.green,
-        image: "./assets/slime.png",
-    }),
-    new rl.Creature({
-        name: "Skeleton",
-        maxHealth: 5,
-        image: "./assets/skeleton.png",
-    })
+const monsters = [
+    things.bat.clone(),
+    things.skeleton.clone(),
+    things.greenSlime.clone(),
+    things.redSlime.clone(),
+    things.spider.clone(),
+    things.rat.clone()
 ]
-
-const treasure = new rl.Fixture({ name: "Chest", passable: true, transparent: true, image: "./assets/chest.png" })
 
 enum CellType {
     Exterior,
@@ -174,25 +148,25 @@ export function generateMap(width: number, height: number, player: rl.Player): M
                 break
 
             case CellType.Interior: {
-                const tile = new rl.Tile(tileset.floor)
+                const tile = tileset.floor.clone()
                 tile.position = new geo.Point(x, y)
                 map.tiles.add(tile)
             }
                 break
 
             case CellType.Wall: {
-                const tile = new rl.Tile(tileset.wall)
+                const tile = tileset.wall.clone()
                 tile.position = new geo.Point(x, y)
                 map.tiles.add(tile)
             }
                 break
 
             case CellType.Door: {
-                const fixture = new rl.Door(tileset.door)
+                const fixture = tileset.door.clone()
                 fixture.position = new geo.Point(x, y)
                 map.fixtures.add(fixture)
 
-                const tile = new rl.Tile(tileset.floor)
+                const tile = tileset.floor.clone()
                 tile.position = new geo.Point(x, y)
                 map.tiles.add(tile)
             }
@@ -244,9 +218,9 @@ function tryPlaceMonster(cells: CellGrid, room: Room, map: MapData): boolean {
             continue
         }
 
-        const monster = new rl.Creature(rand.choose(creatures))
+        const monster = (rand.choose(monsters)).clone()
         monster.position = pt.clone()
-        map.creatures.add(monster)
+        map.monsters.add(monster)
 
         return true
     }
@@ -279,7 +253,7 @@ function tryPlaceTreasure(cells: CellGrid, room: Room, map: MapData): boolean {
             continue
         }
 
-        const chest = new rl.Fixture(treasure)
+        const chest = things.chest.clone()
         chest.position = pt.clone()
         map.fixtures.add(chest)
 
