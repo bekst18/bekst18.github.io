@@ -117,7 +117,7 @@ export class Map {
     monsters: Layer<rl.Monster>
     containers: Layer<rl.Container>
 
-    constructor(readonly width: number, readonly height: number, readonly player: rl.Player) { 
+    constructor(readonly width: number, readonly height: number, readonly player: rl.Player) {
         this.tiles = new GridLayer(width, height)
         this.fixtures = new SetLayer()
         this.monsters = new SetLayer()
@@ -210,9 +210,9 @@ export function updateVisibility(map: Map, eye: geo.Point, radius: number) {
 function updateVisibilityOctant(map: Map, eye: geo.Point, radius: number, octant: number) {
     const shadows: geo.Point[] = []
 
-    for (let i = 1; i <= radius; ++i) {
-        for (let j = 0; j <= i; ++j) {
-            const octantPoint = new geo.Point(i, j)
+    for (let y = 1; y <= radius; ++y) {
+        for (let x = 0; x <= y; ++x) {
+            const octantPoint = new geo.Point(x, y)
 
             const mapPoint = transformOctant(octantPoint, octant).addPoint(eye)
             if (!map.inBounds(mapPoint)) {
@@ -223,12 +223,8 @@ function updateVisibilityOctant(map: Map, eye: geo.Point, radius: number, octant
                 continue
             }
 
-            const tile = map.tileAt(mapPoint)
-            if (!tile) {
-                continue
-            }
-
-            if (!tile?.transparent) {
+            const opaque = array.any(map.at(mapPoint), th => !th.transparent)
+            if (opaque) {
                 shadows.push(octantPoint)
             }
 
@@ -236,7 +232,9 @@ function updateVisibilityOctant(map: Map, eye: geo.Point, radius: number, octant
                 continue
             }
 
-            tile.visible = rl.Visible.Visible
+            for (const th of map.at(mapPoint)) {
+                th.visible = rl.Visible.Visible
+            }
         }
     }
 }

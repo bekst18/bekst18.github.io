@@ -27,14 +27,14 @@ export const stairsUp = new rl.StairsUp({
     name: "Stairs Up",
     image: "./assets/up.png",
     passable: false,
-    transparent: false,
+    transparent: true,
 })
 
 export const stairsDown = new rl.StairsDown({
     name: "Stairs Down",
     image: "./assets/down.png",
     passable: false,
-    transparent: false,
+    transparent: true,
 })
 
 export const rat = new rl.Monster({

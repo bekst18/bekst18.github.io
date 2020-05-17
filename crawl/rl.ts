@@ -212,7 +212,7 @@ export class Creature extends Thing {
     action: number = 0
 
     constructor(options: CreatureOptions) {
-        super(Object.assign({ passable: false, transparent: false }, options))
+        super(Object.assign({ passable: false, transparent: true }, options))
         this.maxHealth = options.maxHealth
         this.health = options.health ?? this.maxHealth
         this.attack = options.attack
