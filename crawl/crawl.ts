@@ -303,7 +303,7 @@ function drawFrame(renderer: gfx.Renderer, map: maps.Map) {
     drawThing(renderer, offset, player)
     drawHealthBar(renderer, player, offset)
 
-    renderer.flush(rl.lightRadius * rl.tileSize)
+    renderer.flush()
 }
 
 function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
@@ -316,10 +316,9 @@ function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
         return
     }
 
-    const color = th.color
-    console.log(th.visible)
+    const color = th.color.clone()
     if (th.visible === rl.Visibility.Fog) {
-        color.a = .75
+        color.a = .5
     }
 
     const spritePosition = th.position.mulScalar(rl.tileSize).addPoint(offset)
@@ -330,7 +329,7 @@ function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
         height: rl.tileSize,
         texture: th.texture,
         layer: th.textureLayer,
-        flags: gfx.SpriteFlags.Lit | gfx.SpriteFlags.ArrayTexture | gfx.SpriteFlags.CastsShadows
+        flags: gfx.SpriteFlags.ArrayTexture
     })
 
     renderer.drawSprite(sprite)

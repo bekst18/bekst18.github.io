@@ -6,7 +6,7 @@ import * as rand from "../shared/rand.js"
 import * as gfx from "./gfx.js"
 
 export const tileSize = 24
-export const lightRadius = 9
+export const lightRadius = 5
 
 export enum Visibility {
     None,

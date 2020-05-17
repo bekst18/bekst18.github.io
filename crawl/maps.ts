@@ -2,6 +2,7 @@ import * as geo from "../shared/geo2d.js"
 import * as array from "../shared/array.js"
 import * as rl from "./rl.js"
 import * as grid from "../shared/grid.js"
+import * as gfx from "./gfx.js"
 
 /**
  * a layer of things on a map
@@ -192,7 +193,7 @@ export class Map {
 
 function resetVisibility(map: Map) {
     for (const th of map) {
-        if (th.visible) {
+        if (th.visible === rl.Visibility.Visible) {
             th.visible = rl.Visibility.Fog
         }
     }
