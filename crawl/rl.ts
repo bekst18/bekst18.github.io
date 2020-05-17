@@ -157,6 +157,12 @@ export class Shield extends Item {
     }
 }
 
+export type Equippable = Weapon | Armor | Shield
+
+export function isEquippable(item: Item): item is Equippable {
+    return item instanceof Weapon || item instanceof Armor || item instanceof Shield
+}
+
 export interface UsableOptions {
     position?: geo.Point | null
     name: string
@@ -196,6 +202,7 @@ export class Creature extends Thing {
     attack: number
     defense: number
     agility: number
+    action: number = 0
 
     constructor(options: CreatureOptions) {
         super(Object.assign({ passable: false, transparent: false }, options))
@@ -217,6 +224,7 @@ export interface PlayerOptions extends CreatureOptions {
     weapon?: Weapon | null
     armor?: Armor | null
     shield?: Shield | null
+    inventory?: Set<Item>
 }
 
 export class Player extends Creature {
@@ -225,6 +233,7 @@ export class Player extends Creature {
     weapon: Weapon | null
     armor: Armor | null
     shield: Shield | null
+    inventory: Set<Item>
 
     constructor(options: PlayerOptions) {
         super(options)
@@ -238,10 +247,90 @@ export class Player extends Creature {
         this.weapon = options.weapon ?? null
         this.armor = options.armor ?? null
         this.shield = options.shield ?? null
+        this.inventory = options.inventory ? new Set<Item>(options.inventory) : new Set<Item>()
     }
 
     clone(): Player {
         return new Player(this)
+    }
+
+    equip(item: Equippable) {
+        if (!this.inventory.has(item)) {
+            return
+        } else if (item instanceof Weapon) {
+            this.equipWeapon(item)
+        } else if (item instanceof Armor) {
+            this.equipArmor(item)
+        } else if (item instanceof Shield) {
+            this.equipShield(item)
+        }
+    }
+
+    remove(item: Equippable) {
+        if (item === this.weapon) {
+            this.removeWeapon()
+        } else if (item === this.armor) {
+            this.removeArmor()
+        } else if (item === this.shield) {
+            this.removeShield()
+        }
+    }
+
+    equipWeapon(weapon: Weapon) {
+        this.removeWeapon()
+        this.weapon = weapon
+        this.attack += weapon.attack
+    }
+
+    equipArmor(armor: Armor) {
+        this.removeArmor()
+        this.armor = armor
+        this.defense += armor.defense
+    }
+
+    equipShield(shield: Shield) {
+        this.removeShield()
+        this.shield = shield
+        this.defense += shield.defense
+    }
+
+    removeWeapon() {
+        if (!this.weapon) {
+            return
+        }
+
+        this.attack -= this.weapon.attack
+        this.weapon = null
+    }
+
+    removeArmor() {
+        if (!this.armor) {
+            return
+        }
+
+        this.defense -= this.armor.defense
+        this.armor = null
+    }
+
+    removeShield() {
+        if (!this.shield) {
+            return
+        }
+
+        this.defense -= this.shield.defense
+        this.shield = null
+    }
+
+    isEquipped(item: Item): boolean {
+        return this.weapon === item || this.armor === item || this.shield === item
+    }
+
+    delete(item: Item) {
+        if (isEquippable(item)) {
+            this.remove(item)
+        }
+        
+        this.inventory.delete(item)
     }
 }
 
@@ -296,6 +385,24 @@ export class Monster extends Creature {
 
     clone(): Monster {
         return new Monster(this)
+    }
+}
+
+export interface ContainerOptions {
+    position?: geo.Point | null
+    name: string
+    image: string
+    color?: gfx.Color
+    items: Set<Item>
+}
+
+export class Container extends Fixture {
+    readonly items: Set<Item>
+
+    constructor(options: ContainerOptions) {
+        super(Object.assign({ passable: false, transparent: true }, options))
+        this.position = options.position ?? null
+        this.items = new Set<Item>(options.items)
     }
 }
 

@@ -142,10 +142,6 @@ enum NodeType {
     Leaf
 }
 
-export class Ray {
-    constructor(public start: Point, public end: Point) { }
-}
-
 interface InternalNode<T> {
     type: NodeType.Internal
     aabb: AABB

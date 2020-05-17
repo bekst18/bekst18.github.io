@@ -7,65 +7,7 @@ import * as grid from "../shared/grid.js"
 import * as array from "../shared/array.js"
 import * as rand from "../shared/rand.js"
 import * as things from "./things.js"
-
-/**
- * components of a generated map area
- */
-export class MapData {
-    tiles = new Set<rl.Tile>()
-    fixtures = new Set<rl.Fixture>()
-    monsters = new Set<rl.Monster>();
-
-    constructor(public player: rl.Player) { }
-
-    /**
-      * iterate over all things in map
-    */
-    public *[Symbol.iterator](): Generator<rl.Thing> {
-        for (const tile of this.tiles) {
-            yield tile
-        }
-
-        for (const fixture of this.fixtures) {
-            yield fixture
-        }
-
-        for (const monster of this.monsters) {
-            yield monster
-        }
-
-        yield this.player
-    }
-
-    fixtureAt(xy: geo.Point): rl.Fixture | null {
-        return array.find(this.fixtures, f => (f.position?.equal(xy)) ?? false) || null
-    }
-
-    tileAt(xy: geo.Point): rl.Tile | null {
-        return array.find(this.tiles, t => (t.position?.equal(xy)) ?? false) || null
-    }
-
-    monsterAt(xy: geo.Point): rl.Monster | null {
-        return array.find(this.monsters, c => (c.position?.equal(xy)) ?? false) || null
-    }
-
-    *thingsAt(xy: geo.Point): Generator<rl.Monster | rl.Fixture | rl.Tile> {
-        const fixture = this.fixtureAt(xy)
-        if (fixture) {
-            yield fixture
-        }
-
-        const tile = this.tileAt(xy)
-        if (tile) {
-            yield tile
-        }
-
-        const monster = this.monsterAt(xy)
-        if (monster) {
-            yield monster
-        }
-    }
-}
+import * as maps from "./maps.js"
 
 interface DungeonTileset {
     wall: rl.Tile,
@@ -113,14 +55,14 @@ interface Room {
     depth: number,
 }
 
-export function generateMap(width: number, height: number, player: rl.Player): MapData {
-    const map = new MapData(player)
+export function generateMap(width: number, height: number, player: rl.Player): maps.Map {
+    const map = new maps.Map(player)
     const [cells, rooms] = generateCellGrid(width, height)
 
     const firstRoom = rooms.reduce((x, y) => x.depth < y.depth ? x : y)
     map.player.position = firstRoom.interiorPt.clone()
 
-    const stairsUp = new rl.Fixture(tileset.stairsUp)
+    const stairsUp = tileset.stairsUp.clone()
     const stairsUpPosition = array.find(visitInteriorCoords(cells, firstRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsUpPosition) {
         throw new Error("Failed to place stairs up")
@@ -129,7 +71,7 @@ export function generateMap(width: number, height: number, player: rl.Player): M
     map.fixtures.add(stairsUp)
 
     const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
-    const stairsDown = new rl.Fixture(tileset.stairsDown)
+    const stairsDown = tileset.stairsDown.clone()
     const stairsDownPosition = array.find(visitInteriorCoords(cells, lastRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsDownPosition) {
         throw new Error("Failed to place stairs down")
@@ -180,7 +122,7 @@ export function generateMap(width: number, height: number, player: rl.Player): M
     return map
 }
 
-function placeMonsters(cells: CellGrid, rooms: Room[], map: MapData) {
+function placeMonsters(cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
     const encounterChance = 1
     const secondEncounterChance = .3
@@ -207,7 +149,7 @@ function placeMonsters(cells: CellGrid, rooms: Room[], map: MapData) {
     }
 }
 
-function tryPlaceMonster(cells: CellGrid, room: Room, map: MapData): boolean {
+function tryPlaceMonster(cells: CellGrid, room: Room, map: maps.Map): boolean {
     // attempt to place monster
     for (const [t, pt] of visitInterior(cells, room.interiorPt)) {
         if (t !== CellType.Interior) {
@@ -228,7 +170,7 @@ function tryPlaceMonster(cells: CellGrid, room: Room, map: MapData): boolean {
     return false
 }
 
-function placeTreasures(cells: CellGrid, rooms: Room[], map: MapData) {
+function placeTreasures(cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
     const treasureChance = .5
 
@@ -242,7 +184,7 @@ function placeTreasures(cells: CellGrid, rooms: Room[], map: MapData) {
 }
 
 
-function tryPlaceTreasure(cells: CellGrid, room: Room, map: MapData): boolean {
+function tryPlaceTreasure(cells: CellGrid, room: Room, map: maps.Map): boolean {
     // attempt to place monster
     for (const [t, pt] of visitInterior(cells, room.interiorPt)) {
         if (t !== CellType.Interior) {

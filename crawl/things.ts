@@ -208,6 +208,11 @@ export const plateArmor = new rl.Armor({
     defense: 6
 })
 
+export const steelPlateArmor = new rl.Armor({
+    name: "Steel Plate Armor",
+    defense: 7
+})
+
 export const woodenShield = new rl.Shield({
     name: "Wooden Shield",
     defense: 1
@@ -228,9 +233,14 @@ export const towerShield = new rl.Shield({
     defense: 4
 })
 
-export const weakHealingPotion = new rl.Usable({
-    name: "Weak Healing Potion",
+export const weakHealthPotion = new rl.Usable({
+    name: "Weak Health Potion",
     health: 4
+})
+
+export const healthPotion = new rl.Usable({
+    name: "Health Potion",
+    health: 10
 })
 
 export const chest = new rl.Fixture({

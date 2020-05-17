@@ -7,13 +7,69 @@ import * as rl from "./rl.js"
 import * as geo from "../shared/geo2d.js"
 import * as output from "./output.js"
 import * as things from "./things.js"
+import * as maps from "./maps.js"
 
 const canvas = dom.byId("canvas") as HTMLCanvasElement
 const modalBackground = dom.byId("modalBackground") as HTMLDivElement
 const statsDialog = dom.byId("statsDialog") as HTMLDivElement
-const statsCloseButton = dom.byId("statsCloseButton") as HTMLDivElement
+const inventoryDialog = dom.byId("inventoryDialog") as HTMLDivElement
+const containerDialog = dom.byId("containerDialog") as HTMLDivElement
+const inventoryTable = dom.byId("inventoryTable") as HTMLTableElement
+const containerTable = dom.byId("containerTable") as HTMLTableElement
+const inventoryItemTemplate = dom.byId("inventoryItemTemplate") as HTMLTemplateElement
+const containerItemTemplate = dom.byId("containerItemTemplate") as HTMLTemplateElement
 
-async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: number, height: number): Promise<gen.MapData> {
+enum CommandType {
+    Move,
+    Equip,
+    Use,
+    Pass,
+    Open,
+    Attack,
+    ClimbUp,
+    ClimbDown
+}
+
+interface MoveCommand {
+    type: CommandType.Move
+    position: geo.Point
+}
+
+interface EquipCommand {
+    type: CommandType.Equip
+    item: rl.Equippable
+}
+
+interface PassCommand {
+    type: CommandType.Pass
+}
+
+interface UseCommand {
+    type: CommandType.Use
+    item: rl.Usable
+}
+
+interface OpenCommand {
+    type: CommandType.Open
+    fixture: rl.Door
+}
+
+interface AttackCommand {
+    type: CommandType.Attack
+    monster: rl.Monster
+}
+
+interface ClimbUpCommand {
+    type: CommandType.ClimbUp
+}
+
+interface ClimbDownCommand {
+    type: CommandType.ClimbDown
+}
+
+type Command = MoveCommand | EquipCommand | PassCommand | UseCommand | OpenCommand | AttackCommand | ClimbUpCommand | ClimbDownCommand
+
+async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: number, height: number): Promise<maps.Map> {
     const map = gen.generateMap(width, height, player)
 
     // bake all 24x24 tile images to a single array texture
@@ -49,14 +105,47 @@ async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: num
     return map
 }
 
-function tick(renderer: gfx.Renderer, inp: input.Input, map: gen.MapData) {
-    for (const monster of map.monsters) {
-        tickMonster(map, monster)
+function tick(renderer: gfx.Renderer, inp: input.Input, map: maps.Map) {
+    const cmd = handleInput(map, inp)
+    if (cmd) {
+        processTurn(map, cmd)
     }
 
-    handleInput(renderer.canvas, map, inp)
     drawFrame(renderer, map)
     requestAnimationFrame(() => tick(renderer, inp, map))
+}
+
+function processTurn(map: maps.Map, cmd: Command) {
+    // find creature with max agility
+    // everyone moves relative to this rate
+    // everyone gets one action point per round
+    // fastest creature(s) require 1 action point to move
+    // the rest require an amount of action points according to their ratio with the fastest
+    // this all should be repeated until player's turn is processed at which point we should wait for next player move
+    const creatures = array.orderByDesc(array.append<rl.Creature>(map.monsters, map.player), m => m.agility)
+    const maxAgility = creatures.reduce((x, y) => x.agility < y.agility ? x : y).agility
+    const actionPerRound = 1 / maxAgility
+    let playerMoved = false
+
+    while (!playerMoved) {
+        for (const creature of creatures) {
+            if (creature.action < 1) {
+                creature.action += actionPerRound
+                continue
+            }
+
+            creature.action -= 1
+
+            if (creature instanceof rl.Player) {
+                tickPlayer(map, creature, cmd)
+                playerMoved = true
+            }
+
+            if (creature instanceof rl.Monster) {
+                tickMonster(map, creature)
+            }
+        }
+    }
 }
 
 function getScrollOffset(playerPosition: geo.Point): geo.Point {
@@ -78,10 +167,10 @@ function mapToCanvasPoint(playerPosition: geo.Point, mxy: geo.Point) {
     return cxy
 }
 
-function handleInput(canvas: HTMLCanvasElement, map: gen.MapData, inp: input.Input) {
+function handleInput(map: maps.Map, inp: input.Input): Command | null {
     const player = map.player
     if (!player.position) {
-        return
+        return null
     }
 
     const position = player.position.clone()
@@ -94,14 +183,14 @@ function handleInput(canvas: HTMLCanvasElement, map: gen.MapData, inp: input.Inp
         if (clickFixture) {
             output.info(`You see ${clickFixture.name}`)
             inp.flush()
-            return
+            return null
         }
 
         const clickCreature = map.monsterAt(mxy)
         if (clickCreature) {
             output.info(`You see ${clickCreature.name}`)
             inp.flush()
-            return
+            return null
         }
 
         const dxy = mxy.subPoint(player.position)
@@ -130,37 +219,58 @@ function handleInput(canvas: HTMLCanvasElement, map: gen.MapData, inp: input.Inp
         position.x += 1
     } else if (inp.pressed("z")) {
         showStats(player)
+    } else if (inp.pressed("i")) {
+        showInventory(player)
     }
 
     inp.flush()
 
-    // no move - flush & exit
     if (position.equal(player.position)) {
-        return
+        return null
     }
 
     const tile = map.tileAt(position)
     if (tile && !tile.passable) {
-        return
+        output.info(`Can't move that way, blocked by ${tile.name}`)
+        return null
     }
 
     const fixture = map.fixtureAt(position)
     if (fixture instanceof rl.Door) {
-        output.info("Door opened")
-        map.fixtures.delete(fixture)
-    } else if (fixture && !fixture.passable) {
-        return
+        return {
+            type: CommandType.Open,
+            fixture: fixture
+        }
+    } else if (fixture instanceof rl.StairsUp) {
+        return { type: CommandType.ClimbUp }
+    } else if (fixture instanceof rl.StairsDown) {
+        return { type: CommandType.ClimbDown }
+    }
+    else if (fixture && !fixture.passable) {
+        output.info(`Can't move that way, blocked by ${fixture.name}`)
+        return null
     }
 
-    const creature = map.monsterAt(position)
-    if (creature && !creature.passable) {
-        return
+    const container = map.containerAt(position)
+    if (container) {
+
     }
 
-    player.position = position
+    const monster = map.monsterAt(position)
+    if (monster && !monster.passable) {
+        return {
+            type: CommandType.Attack,
+            monster: monster
+        }
+    }
+
+    return {
+        type: CommandType.Move,
+        position: position
+    }
 }
 
-function drawFrame(renderer: gfx.Renderer, map: gen.MapData) {
+function drawFrame(renderer: gfx.Renderer, map: maps.Map) {
     const player = map.player
     if (!player.position) {
         return
@@ -282,7 +392,89 @@ function toggleStats(player: rl.Player) {
     }
 }
 
-function tickMonster(map: gen.MapData, monster: rl.Monster) {
+function showInventory(player: rl.Player) {
+    const tbody = inventoryTable.tBodies[0]
+    dom.removeAllChildren(tbody)
+
+    const items = getSortedInventoryItems(player)
+    for (const item of items) {
+        const fragment = inventoryItemTemplate.content.cloneNode(true) as DocumentFragment
+        const tr = dom.bySelector(fragment, ".item-row")
+        const itemNameTd = dom.bySelector(tr, ".item-name")
+        const equipButton = dom.bySelector(tr, ".inventory-equip-button") as HTMLButtonElement
+        const removeButton = dom.bySelector(tr, ".inventory-remove-button") as HTMLButtonElement
+        const useButton = dom.bySelector(tr, ".inventory-use-button") as HTMLButtonElement
+
+        itemNameTd.textContent = item.name
+        useButton.hidden = !(item instanceof rl.Usable)
+        equipButton.hidden = !rl.isEquippable(item) || player.isEquipped(item)
+        removeButton.hidden = !player.isEquipped(item)
+
+        tbody.appendChild(fragment)
+    }
+
+    showDialog(inventoryDialog)
+}
+
+function getSortedInventoryItems(player: rl.Player): rl.Item[] {
+    const items = array.orderBy(player.inventory, i => i.name)
+    return items
+}
+
+function toggleInventory(player: rl.Player) {
+    if (inventoryDialog.hidden) {
+        showInventory(player)
+    } else {
+        hideDialog(inventoryDialog)
+    }
+}
+
+function tickPlayer(map: maps.Map, player: rl.Player, cmd: Command) {
+    switch (cmd.type) {
+        case CommandType.Open: {
+            output.info("Door opened")
+            map.fixtures.delete(cmd.fixture)
+        }
+            break
+
+        case CommandType.Pass: {
+            output.info("Pass")
+        }
+            break
+
+        case CommandType.Move: {
+            player.position = cmd.position
+        }
+            break
+
+        case CommandType.Equip: {
+            output.error("Equip not yet implemented")
+        }
+            break
+
+        case CommandType.Use: {
+            output.error("Use not yet implemented")
+        }
+            break
+
+        case CommandType.Attack: {
+            output.error("Attack not yet implemented")
+        }
+            break
+
+        case CommandType.ClimbUp: {
+            output.error("Climb up not yet implemented")
+        }
+            break
+
+        case CommandType.ClimbDown: {
+            output.error("Climb down yet implemented")
+        }
+            break
+    }
+}
+
+function tickMonster(map: maps.Map, monster: rl.Monster) {
     // determine whether monster can see player
     if (!monster.position) {
         return
@@ -303,7 +495,7 @@ function tickMonster(map: gen.MapData, monster: rl.Monster) {
     }
 }
 
-function canSee(map: gen.MapData, eye: geo.Point, target: geo.Point): boolean {
+function canSee(map: maps.Map, eye: geo.Point, target: geo.Point): boolean {
     for (const pt of march(eye, target)) {
         // ignore start point
         if (pt.equal(eye)) {
@@ -349,26 +541,151 @@ function* march(start: geo.Point, end: geo.Point): Generator<geo.Point> {
 }
 
 async function main() {
-    const statsButton = dom.byId("statsButton") as HTMLButtonElement
-
     const renderer = new gfx.Renderer(canvas)
 
     const player = things.player.clone()
+    player.inventory.add(things.steelShield.clone())
+    player.inventory.add(things.steelSword.clone())
+    player.inventory.add(things.steelPlateArmor.clone())
+    player.inventory.add(things.weakHealthPotion.clone())
+    player.inventory.add(things.healthPotion.clone())
 
-    const map = await generateMap(player, renderer, 24, 24)
+    const map = await generateMap(player, renderer, 64, 64)
     const inp = new input.Input(canvas)
+
+    initStatsDialog(player)
+    initInventoryDialog(player)
+    initContainerDialog(player)
 
     output.write("Your adventure begins")
     requestAnimationFrame(() => tick(renderer, inp, map))
+}
 
+function initStatsDialog(player: rl.Player) {
+    const statsButton = dom.byId("statsButton") as HTMLButtonElement
+    const closeButton = dom.byId("statsCloseButton") as HTMLDivElement
     statsButton.addEventListener("click", () => toggleStats(player))
-    statsCloseButton.addEventListener("click", () => hideDialog(statsDialog))
+    closeButton.addEventListener("click", () => hideDialog(statsDialog))
 
     statsDialog.addEventListener("keypress", (ev) => {
         if (ev.key.toUpperCase() === "Z") {
             hideDialog(statsDialog)
         }
     })
+}
+
+function initInventoryDialog(player: rl.Player) {
+    const inventoryButton = dom.byId("inventoryButton") as HTMLButtonElement
+    const closeButton = dom.byId("inventoryCloseButton") as HTMLButtonElement
+    inventoryButton.addEventListener("click", () => toggleInventory(player))
+    closeButton.addEventListener("click", () => hideDialog(inventoryDialog))
+
+    inventoryDialog.addEventListener("keypress", (ev) => {
+        if (ev.key.toUpperCase() === "I") {
+            hideDialog(inventoryDialog)
+        }
+    })
+
+    dom.delegate(inventoryDialog, "click", ".inventory-equip-button", (ev) => {
+        const btn = ev.target as HTMLButtonElement
+        const row = btn.closest(".item-row") as HTMLTableRowElement
+        const idx = dom.getElementIndex(row)
+        const item = getSortedInventoryItems(player)[idx]
+        if (!item) {
+            return
+        }
+
+        if (!rl.isEquippable(item)) {
+            return
+        }
+
+        equipItem(player, item)
+        showInventory(player)
+    })
+
+    dom.delegate(inventoryDialog, "click", ".inventory-remove-button", (ev) => {
+        const btn = ev.target as HTMLButtonElement
+        const row = btn.closest(".item-row") as HTMLTableRowElement
+        const idx = dom.getElementIndex(row)
+        const item = getSortedInventoryItems(player)[idx]
+        if (!item) {
+            return
+        }
+
+        if (!rl.isEquippable(item)) {
+            return
+        }
+
+        if (!player.isEquipped(item)) {
+            return
+        }
+
+        removeItem(player, item)
+        showInventory(player)
+    })
+
+    dom.delegate(inventoryDialog, "click", ".inventory-use-button", (ev) => {
+        const btn = ev.target as HTMLButtonElement
+        const row = btn.closest(".item-row") as HTMLTableRowElement
+        const idx = dom.getElementIndex(row)
+        const item = getSortedInventoryItems(player)[idx]
+        if (!item) {
+            return
+        }
+
+        if (!(item instanceof rl.Usable)) {
+            return
+        }
+
+        useItem(player, item)
+        showInventory(player)
+    })
+
+    dom.delegate(inventoryDialog, "click", ".inventory-drop-button", (ev) => {
+        const btn = ev.target as HTMLButtonElement
+        const row = btn.closest(".item-row") as HTMLTableRowElement
+        const idx = dom.getElementIndex(row)
+        const item = getSortedInventoryItems(player)[idx]
+        if (!item) {
+            return
+        }
+
+        dropItem(player, item)
+        showInventory(player)
+    })
+}
+
+function dropItem(player: rl.Player, item: rl.Item): void {
+    player.delete(item)
+    output.info(`${item.name} was dropped`)
+}
+
+function useItem(player: rl.Player, item: rl.Usable): void {
+    const amount = Math.min(item.health, player.maxHealth - player.health)
+    player.health += amount
+    player.delete(item)
+    output.info(`${item.name} restored ${amount} health`)
+}
+
+function equipItem(player: rl.Player, item: rl.Equippable): void {
+    player.equip(item)
+    output.info(`${item.name} was equipped`)
+}
+
+function removeItem(player: rl.Player, item: rl.Equippable): void {
+    player.remove(item)
+    output.info(`${item.name} was removed`)
+}
+
+function initContainerDialog(player: rl.Player) {
+    const closeButton = dom.byId("containerCloseButton") as HTMLDivElement
+    closeButton.addEventListener("click", () => hideDialog(containerDialog))
+    const takeAllButton = dom.byId("containerTakeAllButton") as HTMLDivElement
+    takeAllButton.addEventListener("click", () => takeAll(player))
+}
+
+function takeAll(player: rl.Player) {
+    hideDialog(containerDialog)
 }
 
 main()

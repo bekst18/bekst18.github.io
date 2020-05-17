@@ -20,15 +20,76 @@
             <table id="statsTable">
                 <thead></thead>
                 <tbody>
-                <tr><td>Health:</td><td id="statsHealth"></td></tr>
-                <tr><td>Attack:</td><td id="statsAttack"></td></tr>
-                <tr><td>Defense:</td><td id="statsDefense"></td></tr>
-                <tr><td>Agility:</td><td id="statsAgility"></td></tr>
-                <tr><td>Level:</td><td id="statsLevel"></td></tr>
-                <tr><td>Experience</td></td><td id="statsExperience"></td></tr>
-            </tbody>
+                    <tr>
+                        <td>Health:</td>
+                        <td id="statsHealth"></td>
+                    </tr>
+                    <tr>
+                        <td>Attack:</td>
+                        <td id="statsAttack"></td>
+                    </tr>
+                    <tr>
+                        <td>Defense:</td>
+                        <td id="statsDefense"></td>
+                    </tr>
+                    <tr>
+                        <td>Agility:</td>
+                        <td id="statsAgility"></td>
+                    </tr>
+                    <tr>
+                        <td>Level:</td>
+                        <td id="statsLevel"></td>
+                    </tr>
+                    <tr>
+                        <td>Experience</td>
+                        </td>
+                        <td id="statsExperience"></td>
+                    </tr>
+                </tbody>
             </table>
             <button id="statsCloseButton" class="dialog-close-button mt-3" type="button">Close</button>
+        </div>
+        <div id="inventoryDialog" class="dialog" tabindex="0" hidden>
+            <h1>Inventory</h1>
+            <table id="inventoryTable">
+                <thead></thead>
+                <tbody>
+
+                </tbody>
+            </table>
+            <button id="inventoryCloseButton" class="dialog-close-button mt-3" type="button">Close</button>
+            <template id="inventoryItemTemplate">
+                <tr class="inventory-item-row item-row">
+                    <td class="item-name"></td>
+                    <td>
+                        <div class="button-group">
+                            <button class="inventory-remove-button" type="button">Remove</button>
+                            <button class="inventory-equip-button" type="button">Equip</button>
+                            <button class="inventory-use-button" type="button">Use</button>
+                            <button class="inventory-drop-button" type="button">Drop</button>
+                        </div>
+                    </td>
+                </tr>
+            </template>
+        </div>
+        <div id="containerDialog" class="dialog" tabindex="0" hidden>
+            <h1><span id="containerName"></span> Contents</h1>
+            <table id="containerTable">
+                <thead></thead>
+                <tbody>
+
+                </tbody>
+            </table>
+            <button id="containerTakeAllButton" class="dialog-close-button mt-3" type="button">Take All</button>
+            <button id="containerCloseButton" class="dialog-close-button mt-3" type="button">Close</button>
+            <template id="containerItemTemplate">
+                <tr class="container-item-row item-row">
+                    <td class="item-name"></td>
+                    <td>
+                        <button class="container-take-button" type="button">Take</button>
+                    </td>
+                </tr>
+            </template>
         </div>
     </div>
     <script type="module" src="crawl.js"></script>

@@ -46,7 +46,6 @@ body {
 }
 
 .message-error {
-    font-weight: bold;
     color: red;
 }
 
@@ -60,17 +59,14 @@ body {
 }
 
 .dialog {
+    z-index: 1;
     position: fixed;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     border: lightgray 2px solid;
-    border-radius: .25em;
+    border-radius: .5em;
     background-color: black;
-}
-
-#statsDialog {
-    z-index: 1;
     color: white;
     padding: 1em;
 }
@@ -97,4 +93,12 @@ body {
 button {
     font-weight: bold;
     font-size: large;
+}
+
+#inventoryTable td {
+    padding: .25em;
+}
+
+#containerTable td {
+    padding: .25em;
 }

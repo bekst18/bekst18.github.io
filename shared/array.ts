@@ -97,7 +97,7 @@ export function all<T>(a: Iterable<T>, f: (x: T) => boolean) {
  * @param a iterable
  * @param f mapping function to execute on each element
  */
-export function *map<T, U>(a: Iterable<T>, f: (x: T) => U): Iterable<U> {
+export function* map<T, U>(a: Iterable<T>, f: (x: T) => U): Iterable<U> {
     for (const x of a) {
         yield f(x)
     }
@@ -179,5 +179,57 @@ export function* filter<T>(a: Iterable<T>, f: (x: T) => boolean) {
         if (f(x)) {
             yield x
         }
+    }
+}
+
+/**
+ * sort an array in ascending order based on the value returned by f
+ * @param a array
+ * @param f value selection function
+ */
+export function orderBy<T, U>(a: Iterable<T>, f: (x: T) => U): Array<T> {
+    return [...a].sort((x, y) => f(x) < f(y) ? -1 : 1)
+}
+
+/**
+ * sort an array in descending order based on the value returned by f
+ * @param a array
+ * @param f value selection function
+ */
+export function orderByDesc<T, U>(a: Iterable<T>, f: (x: T) => U): Array<T> {
+    return [...a].sort((x, y) => f(y) < f(x) ? -1 : 1)
+}
+
+/**
+ * identity function, returns itself
+ * @param x value
+ */
+export function identity<T>(x: T): T {
+    return x
+}
+
+/**
+ * append an item to end of iterable
+ * @param a iterable
+ * @param x item to append
+ */
+export function* append<T>(a: Iterable<T>, x: T): Generator<T> {
+    for (const y of a) {
+        yield y
+    }
+
+    yield x
+}
+
+/**
+ * prepend an item to start of iterable
+ * @param a iterable
+ * @param x item to prepend
+ */
+export function* prepend<T>(a: Iterable<T>, x: T): Generator<T> {
+    yield x
+
+    for (const y of a) {
+        yield y
     }
 }
