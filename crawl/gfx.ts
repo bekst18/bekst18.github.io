@@ -76,7 +76,7 @@ void main() {
         out_color *= texture(sampler, frag_uvw.xy);
     }
 
-    // out_color *= vec4(l, l, l, 1);
+    out_color *= vec4(l, l, l, 1);
 }`
 
 const shadowVertexSrc = `#version 300 es

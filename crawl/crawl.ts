@@ -145,6 +145,10 @@ function processTurn(map: maps.Map, cmd: Command) {
                 tickMonster(map, creature)
             }
         }
+
+        if (map.player.position) {
+            maps.updateVisibility(map, map.player.position, rl.lightRadius)
+        }
     }
 }
 
@@ -305,6 +309,10 @@ function drawFrame(renderer: gfx.Renderer, map: maps.Map) {
 function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
     // don't draw things that aren't positioned
     if (!th.position) {
+        return
+    }
+
+    if (th.visible !== rl.Visible.Visible) {
         return
     }
 
@@ -502,7 +510,7 @@ function canSee(map: maps.Map, eye: geo.Point, target: geo.Point): boolean {
             continue
         }
 
-        for (const th of map.thingsAt(pt)) {
+        for (const th of map.at(pt)) {
             if (!th.transparent) {
                 return false
             }
@@ -556,6 +564,12 @@ async function main() {
     initStatsDialog(player)
     initInventoryDialog(player)
     initContainerDialog(player)
+
+    if (!player.position) {
+        throw new Error("Player is not positioned")
+    }
+    
+    maps.updateVisibility(map, player.position, rl.lightRadius)
 
     output.write("Your adventure begins")
     requestAnimationFrame(() => tick(renderer, inp, map))

@@ -6,7 +6,13 @@ import * as rand from "../shared/rand.js"
 import * as gfx from "./gfx.js"
 
 export const tileSize = 24
-export const lightRadius = 5
+export const lightRadius = 9
+
+export enum Visible {
+    None,
+    Fog,
+    Visible
+}
 
 export interface ThingOptions {
     position?: geo.Point | null
@@ -26,6 +32,7 @@ export class Thing {
     color = new gfx.Color(1, 1, 1, 1)
     texture: gfx.Texture | null = null
     textureLayer: number = -1
+    visible: Visible = Visible.None
 
     constructor(options: ThingOptions) {
         this.position = options.position?.clone() ?? null
@@ -329,7 +336,7 @@ export class Player extends Creature {
         if (isEquippable(item)) {
             this.remove(item)
         }
-        
+
         this.inventory.delete(item)
     }
 }

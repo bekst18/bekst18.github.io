@@ -56,7 +56,7 @@ interface Room {
 }
 
 export function generateMap(width: number, height: number, player: rl.Player): maps.Map {
-    const map = new maps.Map(player)
+    const map = new maps.Map(width, height, player)
     const [cells, rooms] = generateCellGrid(width, height)
 
     const firstRoom = rooms.reduce((x, y) => x.depth < y.depth ? x : y)

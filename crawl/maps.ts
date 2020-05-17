@@ -1,18 +1,128 @@
 import * as geo from "../shared/geo2d.js"
-import * as grid from "../shared/grid.js"
 import * as array from "../shared/array.js"
 import * as rl from "./rl.js"
+import * as grid from "../shared/grid.js"
+
+/**
+ * a layer of things on a map
+ */
+export interface Layer<T extends rl.Thing> {
+    add(item: T): void
+    delete(item: T): void
+    has(item: T): boolean
+    at(position: geo.Point): T | null
+    [Symbol.iterator](): Generator<T>
+}
+
+/**
+ * a layer that is based on a set
+ * works well for sparse layers
+ */
+export class SetLayer<T extends rl.Thing> implements Layer<T> {
+    private readonly set = new Set<T>()
+
+    add(item: T): void {
+        if (!item.position) {
+            throw new Error("Item cannot be placed in layer without a position")
+        }
+
+        this.set.add(item)
+    }
+
+    delete(item: T): void {
+        this.set.delete(item)
+    }
+
+    has(item: T): boolean {
+        return this.set.has(item)
+    }
+
+    at(position: geo.Point): T | null {
+        for (const value of this.set) {
+            if (value.position?.equal(position)) {
+                return value
+            }
+        }
+
+        return null
+    }
+
+    *[Symbol.iterator](): Generator<T> {
+        for (const value of this.set) {
+            yield value
+        }
+    }
+}
+
+
+/**
+ * a layer that is based on a grid
+ * works well for dense layers
+ */
+export class GridLayer<T extends rl.Thing> implements Layer<T> {
+    private readonly set = new Set<T>()
+    private readonly grd: grid.Grid<T | null>
+
+    constructor(width: number, height: number) {
+        this.grd = grid.generate(width, height, () => null)
+    }
+
+    get width() {
+        return this.grd.width
+    }
+
+    get height() {
+        return this.grd.height
+    }
+
+    add(item: T): void {
+        if (!item.position) {
+            throw new Error("Item cannot be placed in layer without a position")
+        }
+
+        this.grd.setPoint(item.position, item)
+        this.set.add(item)
+    }
+
+    delete(item: T): void {
+        if (!item.position) {
+            throw new Error("Item cannot be deleted from layer without a position")
+        }
+
+        this.grd.setPoint(item.position, null)
+        this.set.delete(item)
+    }
+
+    has(item: T): boolean {
+        return this.set.has(item)
+    }
+
+    at(position: geo.Point): T | null {
+        return this.grd.atPoint(position)
+    }
+
+    *[Symbol.iterator](): Generator<T> {
+        for (const value of this.set) {
+            yield value
+        }
+    }
+}
 
 /**
  * components of a generated map area
  */
 export class Map {
-    tiles = new Set<rl.Tile>()
-    fixtures = new Set<rl.Fixture>()
-    monsters = new Set<rl.Monster>();
-    containers = new Set<rl.Container>();
+    tiles: Layer<rl.Tile>
+    fixtures: Layer<rl.Fixture>
+    monsters: Layer<rl.Monster>
+    containers: Layer<rl.Container>
 
-    constructor(readonly player: rl.Player) { }
+    constructor(readonly width: number, readonly height: number, readonly player: rl.Player) { 
+        this.tiles = new GridLayer(width, height)
+        this.fixtures = new SetLayer()
+        this.monsters = new SetLayer()
+        this.containers = new SetLayer()
+    }
 
     /**
       * iterate over all things in map
@@ -38,22 +148,22 @@ export class Map {
     }
 
     tileAt(xy: geo.Point): rl.Tile | null {
-        return array.find(this.tiles, t => (t.position?.equal(xy)) ?? false) || null
+        return this.tiles.at(xy)
     }
 
     fixtureAt(xy: geo.Point): rl.Fixture | null {
-        return array.find(this.fixtures, f => (f.position?.equal(xy)) ?? false) || null
+        return this.fixtures.at(xy)
     }
 
     containerAt(xy: geo.Point): rl.Container | null {
-        return array.find(this.containers, c => (c.position?.equal(xy)) ?? false) || null
+        return this.containers.at(xy)
     }
 
     monsterAt(xy: geo.Point): rl.Monster | null {
-        return array.find(this.monsters, c => (c.position?.equal(xy)) ?? false) || null
+        return this.monsters.at(xy)
     }
 
-    *thingsAt(xy: geo.Point): Generator<rl.Monster | rl.Fixture | rl.Tile> {
+    *at(xy: geo.Point): Generator<rl.Monster | rl.Fixture | rl.Tile> {
         const fixture = this.fixtureAt(xy)
         if (fixture) {
             yield fixture
@@ -74,6 +184,91 @@ export class Map {
             yield monster
         }
     }
+
+    inBounds(xy: geo.Point): boolean {
+        return xy.x >= 0 && xy.x < this.width && xy.y >= 0 && xy.y < this.height
+    }
+}
+
+function resetVisibility(map: Map) {
+    for (const th of map) {
+        if (th.visible) {
+            th.visible = rl.Visible.Fog
+        }
+    }
+
+    map.player.visible = rl.Visible.Visible
+}
+
+export function updateVisibility(map: Map, eye: geo.Point, radius: number) {
+    resetVisibility(map)
+    for (let i = 0; i < 8; ++i) {
+        updateVisibilityOctant(map, eye, radius, i)
+    }
+}
+
+function updateVisibilityOctant(map: Map, eye: geo.Point, radius: number, octant: number) {
+    const shadows: geo.Point[] = []
+
+    for (let i = 1; i <= radius; ++i) {
+        for (let j = 0; j <= i; ++j) {
+            const octantPoint = new geo.Point(i, j)
+
+            const mapPoint = transformOctant(octantPoint, octant).addPoint(eye)
+            if (!map.inBounds(mapPoint)) {
+                continue
+            }
+
+            if (isShadowed(shadows, octantPoint)) {
+                continue
+            }
+
+            const tile = map.tileAt(mapPoint)
+            if (!tile) {
+                continue
+            }
+
+            if (!tile?.transparent) {
+                shadows.push(octantPoint)
+            }
+
+            if (geo.calcManhattenDist(mapPoint, eye) > radius) {
+                continue
+            }
+
+            tile.visible = rl.Visible.Visible
+        }
+    }
+}
+
+function transformOctant(coords: geo.Point, octant: number): geo.Point {
+    switch (octant) {
+        case 0: return new geo.Point(-coords.x, coords.y);
+        case 1: return new geo.Point(-coords.y, coords.x);
+        case 2: return new geo.Point(coords.y, coords.x);
+        case 3: return new geo.Point(coords.x, coords.y);
+        case 4: return new geo.Point(coords.x, -coords.y);
+        case 5: return new geo.Point(coords.y, -coords.x);
+        case 6: return new geo.Point(-coords.y, -coords.x);
+        case 7: return new geo.Point(-coords.x, -coords.y);
+    }
+
+    throw new Error("Invalid octant - must be in interval [0, 8)")
+}
+
+function isShadowed(shadows: geo.Point[], coords: geo.Point): boolean {
+    return array.any(shadows, x => shadowCoversPoint(x, coords))
+}
+
+function shadowCoversPoint(shadow: geo.Point, coords: geo.Point): boolean {
+    if (shadow.x == 0) {
+        return coords.y > shadow.y
+    }
+
+    const startX = shadow.x / (shadow.y + 1) * coords.y
+    const endX = (shadow.x + 1) / shadow.y * coords.y
+
+    return coords.y > shadow.y && coords.x > startX && coords.x < endX
 }
 
 // export function updateVisibility(map: Map, eye: geo.Point, radius: number) {
