@@ -193,11 +193,15 @@ export class Map {
 function resetVisibility(map: Map) {
     for (const th of map) {
         if (th.visible) {
-            th.visible = rl.Visible.Fog
+            th.visible = rl.Visibility.Fog
         }
     }
 
-    map.player.visible = rl.Visible.Visible
+    for (const monster of map.monsters) {
+        monster.visible = rl.Visibility.None
+    }
+
+    map.player.visible = rl.Visibility.Visible
 }
 
 export function updateVisibility(map: Map, eye: geo.Point, radius: number) {
@@ -233,7 +237,7 @@ function updateVisibilityOctant(map: Map, eye: geo.Point, radius: number, octant
             }
 
             for (const th of map.at(mapPoint)) {
-                th.visible = rl.Visible.Visible
+                th.visible = rl.Visibility.Visible
             }
         }
     }
@@ -268,79 +272,3 @@ function shadowCoversPoint(shadow: geo.Point, coords: geo.Point): boolean {
 
     return coords.y > shadow.y && coords.x > startX && coords.x < endX
 }
-
-// export function updateVisibility(map: Map, eye: geo.Point, radius: number) {
-//     updateVisibilityFlags(map, eye, radius, TileFlags.Visible | TileFlags.Seen, TileFlags.Visible)
-// }
-
-// function updateVisibilityFlags(map: Map, eye: geo.Point, radius: number, setFlags: TileFlags, clearFlags: TileFlags) {
-//     for (const tile of map) {
-//         tile.flags &= ~clearFlags
-//     }
-
-//     map.getTile(eye).flags |= setFlags
-
-//     for (let i = 0; i < 8; ++i) {
-//         updateVisibilityOctant(map, eye, radius, setFlags, i)
-//     }
-// }
-
-// function updateVisibilityOctant(map: Map, eye: geo.Point, radius: number, setFlags: TileFlags, octant: number) {
-//     const shadows: geo.Point[] = []
-
-//     for (let i = 1; i <= radius; ++i) {
-//         for (let j = 0; j <= i; ++j) {
-//             const octantPoint = new geo.Point(i, j)
-
-//             const mapPoint = transformOctant(octantPoint, octant).add(eye)
-//             if (!map.inBounds(mapPoint)) {
-//                 continue
-//             }
-
-//             if (isShadowed(shadows, octantPoint)) {
-//                 continue
-//             }
-
-//             const tile = map.getTile(mapPoint)
-//             if (tileBlocksView(tile)) {
-//                 shadows.push(octantPoint)
-//             }
-
-//             if (geo.calcDist(mapPoint, eye) > radius) {
-//                 continue
-//             }
-
-//             tile.flags |= setFlags
-//         }
-//     }
-// }
-
-// function transformOctant(coords: geo.Point, octant: number): geo.Point {
-//     switch (octant) {
-//         case 0: return new geo.Point(coords.i, -coords.j);
-//         case 1: return new geo.Point(coords.j, -coords.i);
-//         case 2: return new geo.Point(coords.j, coords.i);
-//         case 3: return new geo.Point(coords.i, coords.j);
-//         case 4: return new geo.Point(-coords.i, coords.j);
-//         case 5: return new geo.Point(-coords.j, coords.i);
-//         case 6: return new geo.Point(-coords.j, -coords.i);
-//         case 7: return new geo.Point(-coords.i, -coords.j);
-//     }
-
-//     throw new Error("Invalid octant - must be in interval [0, 8)")
-// }
-
-// function isShadowed(shadows: geo.Point[], coords: geo.Point): boolean {
-//     return iter.any(shadows, x => shadowCoversPoint(x, coords))
-// }
-
-// function shadowCoversPoint(shadow: geo.Point, coords: geo.Point): boolean {
-//     if (shadow.j == 0) {
-//         return coords.i > shadow.i
-//     }
-
-//     const startJ = shadow.j / (shadow.i + 1) * coords.i
-//     const endJ = (shadow.j + 1) / shadow.i * coords.i
-
-//     return coords.i > shadow.i && coords.j > startJ && coords.j < endJ
-// }

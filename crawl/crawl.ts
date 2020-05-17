@@ -312,14 +312,20 @@ function drawThing(renderer: gfx.Renderer, offset: geo.Point, th: rl.Thing) {
         return
     }
 
-    if (th.visible !== rl.Visible.Visible) {
+    if (th.visible === rl.Visibility.None) {
         return
+    }
+
+    const color = th.color
+    console.log(th.visible)
+    if (th.visible === rl.Visibility.Fog) {
+        color.a = .75
     }
 
     const spritePosition = th.position.mulScalar(rl.tileSize).addPoint(offset)
     const sprite = new gfx.Sprite({
         position: spritePosition,
-        color: th.color,
+        color: color,
         width: rl.tileSize,
         height: rl.tileSize,
         texture: th.texture,
