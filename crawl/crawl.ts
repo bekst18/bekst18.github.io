@@ -86,8 +86,20 @@ class Dialog {
 
 
 class StatsDialog extends Dialog {
+    private readonly openButton = dom.byId("statsButton")
+    private readonly closeButton = dom.byId("statsCloseButton") as HTMLButtonElement
+
     constructor(private readonly player: rl.Player, canvas: HTMLCanvasElement) {
         super(dom.byId("statsDialog"), canvas)
+
+        this.openButton.addEventListener("click", () => this.toggle())
+        this.closeButton.addEventListener("click", () => this.hide())
+
+        this.elem.addEventListener("keypress", (ev) => {
+            if (ev.key.toUpperCase() === "Z") {
+                this.hide()
+            }
+        })
     }
 
     show() {
@@ -112,11 +124,21 @@ class StatsDialog extends Dialog {
 }
 
 class InventoryDialog extends Dialog {
-    private readonly inventoryTable = dom.byId("inventoryTable") as HTMLTableElement
-    private readonly inventoryItemTemplate = dom.byId("inventoryItemTemplate") as HTMLTemplateElement
+    private readonly openButton = dom.byId("inventoryButton")
+    private readonly table = dom.byId("inventoryTable") as HTMLTableElement
+    private readonly itemTemplate = dom.byId("inventoryItemTemplate") as HTMLTemplateElement
+    private readonly closeButton = dom.byId("inventoryCloseButton") as HTMLButtonElement
 
     constructor(private readonly player: rl.Player, canvas: HTMLCanvasElement) {
         super(dom.byId("inventoryDialog"), canvas)
+        this.openButton.addEventListener("click", () => this.toggle())
+        this.closeButton.addEventListener("click", () => this.hide())
+
+        this.elem.addEventListener("keypress", (ev) => {
+            if (ev.key.toUpperCase() === "I") {
+                this.hide()
+            }
+        })
     }
 
     show() {
@@ -125,12 +147,12 @@ class InventoryDialog extends Dialog {
     }
 
     refresh() {
-        const tbody = this.inventoryTable.tBodies[0]
+        const tbody = this.table.tBodies[0]
         dom.removeAllChildren(tbody)
 
         const items = getSortedItems(this.player.inventory)
         for (const item of items) {
-            const fragment = this.inventoryItemTemplate.content.cloneNode(true) as DocumentFragment
+            const fragment = this.itemTemplate.content.cloneNode(true) as DocumentFragment
             const tr = dom.bySelector(fragment, ".item-row")
             const itemNameTd = dom.bySelector(tr, ".item-name")
             const equipButton = dom.bySelector(tr, ".inventory-equip-button") as HTMLButtonElement
@@ -149,10 +171,12 @@ class InventoryDialog extends Dialog {
 
 class ContainerDialog {
     private readonly dialog: Dialog
+    private readonly nameSpan = dom.byId("containerName") as HTMLSpanElement
     private readonly closeButton = dom.byId("containerCloseButton") as HTMLDivElement
     private readonly takeAllButton = dom.byId("containerTakeAllButton") as HTMLDivElement
     private readonly containerTable = dom.byId("containerTable") as HTMLTableElement
     private readonly containerItemTemplate = dom.byId("containerItemTemplate") as HTMLTemplateElement
+    private map: maps.Map | null = null
     private container: rl.Container | null = null
 
     constructor(private readonly player: rl.Player, canvas: HTMLCanvasElement) {
@@ -176,17 +200,29 @@ class ContainerDialog {
 
             this.container.items.delete(item)
             this.player.inventory.add(item)
-            this.refresh()
+
+            // hide if this was the last item
+            if (this.container.items.size == 0) {
+                this.hide()
+            } else {
+                this.refresh()
+            }
         })
     }
 
-    show(container: rl.Container) {
+    show(map: maps.Map, container: rl.Container) {
+        this.map = map
         this.container = container
+        this.nameSpan.textContent = this.container.name
         this.refresh()
         this.dialog.show()
     }
 
     hide() {
+        if (this.map && this.container) {
+            this.map.containers.delete(this.container)
+        }
+
         this.container = null
         this.dialog.hide()
     }
@@ -307,10 +343,6 @@ class App {
 
     constructor() {
         const player = this.player
-        player.inventory.add(things.steelShield.clone())
-        player.inventory.add(things.steelSword.clone())
-        player.inventory.add(things.steelPlateArmor.clone())
-        player.inventory.add(things.weakHealthPotion.clone())
         player.inventory.add(things.healthPotion.clone())
     }
 
@@ -539,13 +571,13 @@ class App {
 
         const tile = map.tileAt(position)
         if (tile && !tile.passable) {
-            output.info(`Can't move that way, blocked by ${tile.name}`)
+            output.info(`Blocked by ${tile.name}`)
             return null
         }
 
         const container = map.containerAt(position)
         if (container) {
-            this.containerDialog.show(container)
+            this.containerDialog.show(map, container)
             return null
         }
 
@@ -594,6 +626,10 @@ class App {
 
         for (const fixture of map.fixtures) {
             this.drawThing(offset, fixture)
+        }
+
+        for (const container of map.containers) {
+            this.drawThing(offset, container)
         }
 
         for (const creature of map.monsters) {

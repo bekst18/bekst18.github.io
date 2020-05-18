@@ -75,10 +75,7 @@ export async function generateMap(player: rl.Player, renderer: gfx.Renderer, wid
     // bake all 24x24 tile images to a single array texture
     // store mapping from image url to index
     let imageUrls: string[] = []
-    imageUrls.push(...array.map(map.tiles, t => t.image))
-    imageUrls.push(...array.map(map.fixtures, t => t.image))
-    imageUrls.push(...array.map(map.monsters, c => c.image))
-    imageUrls.push(player.image)
+    imageUrls.push(...array.map(map, t => t.image))
     imageUrls = imageUrls.filter(url => url)
     imageUrls = array.distinct(imageUrls)
 
@@ -167,7 +164,7 @@ function generateMapRooms(width: number, height: number, player: rl.Player): map
     }
 
     placeMonsters(cells, rooms, map)
-    // placeTreasures(cells, rooms, map)
+    placeTreasures(cells, rooms, map)
 
     return map
 }
@@ -255,13 +252,12 @@ function tryPlaceTreasure(cells: CellGrid, room: Room, map: maps.Map): boolean {
         // extra loot
         let extraLootChance = .5
         while (rand.chance(extraLootChance)) {
-            extraLootChance /= .5
+            extraLootChance *= .5
             const item = rand.choose(loot)
             chest.items.add(item)
         }
 
-        map.fixtures.add(chest)
-
+        map.containers.add(chest)
         return true
     }
 
