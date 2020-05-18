@@ -2,7 +2,6 @@ import * as geo from "../shared/geo2d.js"
 import * as array from "../shared/array.js"
 import * as rl from "./rl.js"
 import * as grid from "../shared/grid.js"
-import * as gfx from "./gfx.js"
 
 /**
  * a layer of things on a map
@@ -23,10 +22,6 @@ export class SetLayer<T extends rl.Thing> implements Layer<T> {
     private readonly set = new Set<T>()
 
     add(item: T): void {
-        if (!item.position) {
-            throw new Error("Item cannot be placed in layer without a position")
-        }
-
         this.set.add(item)
     }
 
@@ -77,19 +72,11 @@ export class GridLayer<T extends rl.Thing> implements Layer<T> {
     }
 
     add(item: T): void {
-        if (!item.position) {
-            throw new Error("Item cannot be placed in layer without a position")
-        }
-
         this.grd.setPoint(item.position, item)
         this.set.add(item)
     }
 
     delete(item: T): void {
-        if (!item.position) {
-            throw new Error("Item cannot be deleted from layer without a position")
-        }
-
         this.grd.setPoint(item.position, null)
         this.set.delete(item)
     }
@@ -184,10 +171,18 @@ export class Map {
         if (monster) {
             yield monster
         }
+
+        if (this.player.position.equal(xy)) {
+            yield this.player
+        }
     }
 
     inBounds(xy: geo.Point): boolean {
         return xy.x >= 0 && xy.x < this.width && xy.y >= 0 && xy.y < this.height
+    }
+
+    isPassable(position: geo.Point): boolean {
+        return array.all(this.at(position), th => th.passable)
     }
 }
 
@@ -272,4 +267,124 @@ function shadowCoversPoint(shadow: geo.Point, coords: geo.Point): boolean {
     const endX = (shadow.x + 1) / shadow.y * coords.y
 
     return coords.y > shadow.y && coords.x > startX && coords.x < endX
+}
+
+
+/**
+ * Find a path from start to goal
+ * @param map map
+ * @param start start coords
+ * @param goal goal coords
+ * @returns path from start to goal, including goal, but not starting position
+ */
+export function findPath(map: Map, start: geo.Point, goal: geo.Point): Array<geo.Point> {
+    interface Node {
+        f: number
+        g: number
+        h: number
+        parent: Node | null
+        coords: geo.Point
+    }
+
+    const open = new Array<Node>()
+    const closed = new Array<Node>()
+
+    open.push({ f: 0, g: 0, h: 0, parent: null, coords: start })
+
+    const popOpen = () => {
+        // warning: assumes non-empty!
+        let n = 0
+        open.forEach((x, i) => {
+            if (x.f < open[n].f) {
+                n = i
+            }
+        })
+
+        // swap & pop
+        const r = open[n]
+
+        if (n < open.length - 1) {
+            open[n] = open[open.length - 1]
+        }
+
+        open.pop()
+
+        return r
+    }
+
+    const assemblePath = (node: Node | null): Array<geo.Point> => {
+        // path found! backtrack and assemble path
+        const path = new Array<geo.Point>()
+
+        while (node && !node.coords.equal(start)) {
+            path.push(node.coords)
+            node = node.parent
+        }
+
+        return path.reverse()
+    }
+
+    while (open.length > 0) {
+        const cur = popOpen()
+        closed.push(cur)
+
+        if (cur.coords.equal(goal)) {
+            return assemblePath(cur)
+        }
+
+        for (const coords of visitNeighbors(cur.coords, map.width, map.height)) {
+            if (!map.isPassable(coords) && !coords.equal(goal)) {
+                continue
+            }
+
+            if (closed.find(x => coords.equal(x.coords))) {
+                continue
+            }
+
+            const g = cur.g + 1
+            const h = geo.calcManhattenDist(goal, coords)
+            const f = g + h
+
+            // does this node already exist in open list?
+            const openNode = open.find(x => coords.equal(x.coords))
+            if (openNode != null && openNode.g <= g) {
+                continue
+            }
+
+            // place in open list
+            open.push({ g: g, h: h, f: f, parent: cur, coords: coords })
+        }
+    }
+
+    return new Array<geo.Point>();
+}
+
+function* visitNeighbors(pt: geo.Point, width: number, height: number): Iterable<geo.Point> {
+    if (pt.x < 0 || pt.y < 0 || pt.x >= width || pt.y >= height) {
+        throw new Error("pt is out of bounds")
+    }
+
+    // w
+    if (pt.x > 0) {
+        const w = new geo.Point(pt.x - 1, pt.y)
+        yield w
+    }
+
+    // s
+    if (pt.y < height - 1) {
+        const s = new geo.Point(pt.x, pt.y + 1)
+        yield s
+    }
+
+    // e
+    if (pt.x < width - 1) {
+        const e = new geo.Point(pt.x + 1, pt.y)
+        yield e
+    }
+
+    // n
+    if (pt.y > 0) {
+        const n = new geo.Point(pt.x, pt.y - 1)
+        yield n
+    }
 }

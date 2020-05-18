@@ -343,11 +343,12 @@ class App {
 
     constructor() {
         const player = this.player
+        player.agility = 9
         player.inventory.add(things.healthPotion.clone())
     }
 
     async exec() {
-        this.map = await gen.generateMap(this.player, this.renderer, 64, 64)
+        this.map = await gen.generateMap(this.player, this.renderer, 16, 16)
         if (!this.player.position) {
             throw new Error("Player is not positioned")
         }
@@ -377,33 +378,35 @@ class App {
         // this all should be repeated until player's turn is processed at which point we should wait for next player move
         const map = this.map
         const creatures = array.orderByDesc(array.append<rl.Creature>(map.monsters, map.player), m => m.agility)
-        const maxAgility = creatures.reduce((x, y) => x.agility < y.agility ? x : y).agility
-        const actionPerRound = 1 / maxAgility
+        const minAgility = creatures.reduce((x, y) => x.agility < y.agility ? x : y).agility
+        const maxAgility = creatures.reduce((x, y) => x.agility > y.agility ? x : y).agility
+        const offset = 1 - minAgility
+        const tickThreshold = maxAgility + offset
+
         let playerMoved = false
 
         while (!playerMoved) {
             for (const creature of creatures) {
-                if (creature.action < 1) {
-                    creature.action += actionPerRound
+                if (creature.action < tickThreshold) {
+                    creature.action += creature.agility + offset
                     continue
                 }
 
-                creature.action -= 1
+                creature.action -= tickThreshold
 
                 if (creature instanceof rl.Player) {
                     this.tickPlayer(cmd)
                     playerMoved = true
+                    break
                 }
 
                 if (creature instanceof rl.Monster) {
                     this.tickMonster(creature)
                 }
             }
-
-            if (map.player.position) {
-                maps.updateVisibility(map, map.player.position, rl.lightRadius)
-            }
         }
+
+        maps.updateVisibility(map, map.player.position, rl.lightRadius)
     }
 
     getScrollOffset(): geo.Point {
@@ -483,14 +486,31 @@ class App {
             return
         }
 
-        if (canSee(map, monster.position, map.player.position) && monster.state !== rl.MonsterState.aggro) {
-            output.warning(`${monster.name} has spotted you!`)
+        // aggro state
+        if (monster.state !== rl.MonsterState.aggro && canSee(map, monster.position, map.player.position)) {
             monster.state = rl.MonsterState.aggro
         }
 
-        if (!canSee(map, monster.position, map.player.position) && monster.state === rl.MonsterState.aggro) {
-            output.warning(`${monster.name} has lost sight of you!`)
+        if (monster.state === rl.MonsterState.aggro && !canSee(map, monster.position, map.player.position)) {
             monster.state = rl.MonsterState.idle
+        }
+
+        // if player is within range, attack
+
+        // no aggro, done for now
+        if (!rl.MonsterState.aggro) {
+            return
+        }
+
+        // aggro - seek and destroy
+        const path = maps.findPath(map, monster.position, this.player.position)
+        if (path.length === 0) {
+            return
+        }
+
+        const position = path[0]
+        if (map.isPassable(position)) {
+            monster.position = path[0]
         }
     }
 

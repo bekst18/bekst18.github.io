@@ -376,16 +376,6 @@ function generateRoomTemplate(width: number, height: number): RoomTemplate {
     }
 }
 
-function findInteriorNeighbor(cells: CellGrid, pt: geo.Point): geo.Point | null {
-    for (const [t, npt] of visitNeighbors(cells, pt)) {
-        if (t === CellType.Interior) {
-            return npt
-        }
-    }
-
-    return null
-}
-
 function findExteriorNeighbor(cells: CellGrid, pt: geo.Point): geo.Point | null {
     for (const [t, npt] of visitNeighbors(cells, pt)) {
         if (t === CellType.Exterior) {
