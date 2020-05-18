@@ -15,7 +15,7 @@ export enum Visibility {
 }
 
 export interface ThingOptions {
-    position?: geo.Point | null
+    position?: geo.Point
     passable: boolean
     transparent: boolean
     name: string
@@ -24,7 +24,7 @@ export interface ThingOptions {
 }
 
 export class Thing {
-    position: geo.Point | null
+    position: geo.Point
     passable: boolean
     transparent: boolean
     name: string
@@ -35,7 +35,7 @@ export class Thing {
     visible: Visibility = Visibility.None
 
     constructor(options: ThingOptions) {
-        this.position = options.position?.clone() ?? null
+        this.position = options.position?.clone() ?? new geo.Point(-1, -1)
         this.passable = options.passable
         this.transparent = options.transparent
         this.name = options.name
@@ -96,7 +96,7 @@ export class StairsDown extends Fixture {
 export class Item extends Thing { }
 
 export interface WeaponOptions {
-    position?: geo.Point | null
+    position?: geo.Point
     name: string
     image?: string
     color?: gfx.Color
@@ -123,7 +123,7 @@ export class Weapon extends Item {
 }
 
 export interface ArmorOptions {
-    position?: geo.Point | null
+    position?: geo.Point
     name: string
     image?: string
     color?: gfx.Color
@@ -134,7 +134,7 @@ export class Armor extends Item {
     readonly defense: number
 
     constructor(options: ArmorOptions) {
-        super(Object.assign({ passable: false, transparent: false }, options))
+        super(Object.assign({ position: new geo.Point(-1, -1), passable: false, transparent: false }, options))
         this.defense = options.defense
     }
 
@@ -144,7 +144,7 @@ export class Armor extends Item {
 }
 
 export interface ShieldOptions {
-    position?: geo.Point | null
+    position?: geo.Point
     name: string
     image?: string
     color?: gfx.Color
@@ -171,7 +171,7 @@ export function isEquippable(item: Item): item is Equippable {
 }
 
 export interface UsableOptions {
-    position?: geo.Point | null
+    position?: geo.Point
     name: string
     image?: string
     color?: gfx.Color
@@ -192,7 +192,7 @@ export class Usable extends Item {
 }
 
 export interface CreatureOptions {
-    position?: geo.Point | null
+    position?: geo.Point
     name: string
     image: string
     color?: gfx.Color
@@ -396,11 +396,11 @@ export class Monster extends Creature {
 }
 
 export interface ContainerOptions {
-    position?: geo.Point | null
+    position?: geo.Point
     name: string
     image: string
     color?: gfx.Color
-    items: Set<Item>
+    items?: Set<Item>
 }
 
 export class Container extends Fixture {
@@ -408,8 +408,11 @@ export class Container extends Fixture {
 
     constructor(options: ContainerOptions) {
         super(Object.assign({ passable: false, transparent: true }, options))
-        this.position = options.position ?? null
-        this.items = new Set<Item>(options.items)
+        this.items = new Set<Item>([...options.items ?? []])
+    }
+
+    clone(): Container {
+        return new Container(this)
     }
 }
 

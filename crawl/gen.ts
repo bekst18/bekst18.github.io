@@ -8,6 +8,8 @@ import * as array from "../shared/array.js"
 import * as rand from "../shared/rand.js"
 import * as things from "./things.js"
 import * as maps from "./maps.js"
+import * as gfx from "./gfx.js"
+import * as dom from "../shared/dom.js"
 
 interface DungeonTileset {
     wall: rl.Tile,
@@ -34,6 +36,17 @@ const monsters = [
     things.rat.clone()
 ]
 
+const loot = [
+    things.clothArmor.clone(),
+    things.sharpStick.clone(),
+    things.dagger.clone(),
+    things.leatherArmor.clone(),
+    things.woodenBow.clone(),
+    things.slingShot.clone(),
+    things.weakHealthPotion.clone(),
+    things.healthPotion.clone()
+]
+
 enum CellType {
     Exterior,
     Interior,
@@ -55,7 +68,44 @@ interface Room {
     depth: number,
 }
 
-export function generateMap(width: number, height: number, player: rl.Player): maps.Map {
+
+export async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: number, height: number): Promise<maps.Map> {
+    const map = generateMapRooms(width, height, player)
+
+    // bake all 24x24 tile images to a single array texture
+    // store mapping from image url to index
+    let imageUrls: string[] = []
+    imageUrls.push(...array.map(map.tiles, t => t.image))
+    imageUrls.push(...array.map(map.fixtures, t => t.image))
+    imageUrls.push(...array.map(map.monsters, c => c.image))
+    imageUrls.push(player.image)
+    imageUrls = imageUrls.filter(url => url)
+    imageUrls = array.distinct(imageUrls)
+
+    const layerMap = new Map<string, number>(imageUrls.map((url, i) => [url, i]))
+    const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
+    const texture = renderer.bakeTextureArray(rl.tileSize, rl.tileSize, images)
+
+    for (const th of map) {
+        if (!th.image) {
+            th.textureLayer = -1
+            th.texture = null
+            continue
+        }
+
+        const layer = layerMap.get(th.image)
+        if (layer === undefined) {
+            throw new Error(`texture index not found for ${th.image}`)
+        }
+
+        th.texture = texture
+        th.textureLayer = layer
+    }
+
+    return map
+}
+
+function generateMapRooms(width: number, height: number, player: rl.Player): maps.Map {
     const map = new maps.Map(width, height, player)
     const [cells, rooms] = generateCellGrid(width, height)
 
@@ -117,7 +167,7 @@ export function generateMap(width: number, height: number, player: rl.Player): m
     }
 
     placeMonsters(cells, rooms, map)
-    placeTreasures(cells, rooms, map)
+    // placeTreasures(cells, rooms, map)
 
     return map
 }
@@ -185,7 +235,7 @@ function placeTreasures(cells: CellGrid, rooms: Room[], map: maps.Map) {
 
 
 function tryPlaceTreasure(cells: CellGrid, room: Room, map: maps.Map): boolean {
-    // attempt to place monster
+    // attempt to place treasure
     for (const [t, pt] of visitInterior(cells, room.interiorPt)) {
         if (t !== CellType.Interior) {
             continue
@@ -197,6 +247,19 @@ function tryPlaceTreasure(cells: CellGrid, room: Room, map: maps.Map): boolean {
 
         const chest = things.chest.clone()
         chest.position = pt.clone()
+
+        // choose loot
+        const item = rand.choose(loot)
+        chest.items.add(item)
+
+        // extra loot
+        let extraLootChance = .5
+        while (rand.chance(extraLootChance)) {
+            extraLootChance /= .5
+            const item = rand.choose(loot)
+            chest.items.add(item)
+        }
+
         map.fixtures.add(chest)
 
         return true

@@ -140,7 +140,7 @@ export const skeleton = new rl.Monster({
     ]
 })
 
-export const shapStick = new rl.Weapon({
+export const sharpStick = new rl.Weapon({
     name: "Sharp Stick",
     attack: 1,
     damage: new rl.Dice(1, 2),
@@ -243,11 +243,9 @@ export const healthPotion = new rl.Usable({
     health: 10
 })
 
-export const chest = new rl.Fixture({
+export const chest = new rl.Container({
     name: "Chest",
-    passable: true,
-    transparent: true,
-    image: "./assets/chest.png"
+    image: "./assets/chest.png",
 })
 
 export const player = new rl.Player({
