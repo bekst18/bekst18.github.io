@@ -743,7 +743,7 @@ class App {
         const inp = this.inp
         const position = player.position.clone()
 
-        if (inp.mouseLeftPressed) {
+        if (inp.mouseLeftReleased) {
             // determine the map coordinates the user clicked on
             const mxy = this.canvasToMapPoint(new geo.Point(inp.mouseX, inp.mouseY)).floor()
 
@@ -764,6 +764,7 @@ class App {
             const dxy = mxy.subPoint(player.position)
             const sgn = dxy.sign()
             const abs = dxy.abs()
+            console.log("player: ", player.position, "click: ", mxy, dxy, sgn, abs)
 
             if (abs.x > 0 && abs.x >= abs.y) {
                 position.x += sgn.x
