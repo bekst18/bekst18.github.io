@@ -37,6 +37,10 @@
                         <td id="statsAgility"></td>
                     </tr>
                     <tr>
+                        <td>Damage:</td>
+                        <td id="statsDamage"></td>
+                    </tr>
+                    <tr>
                         <td>Level:</td>
                         <td id="statsLevel"></td>
                     </tr>
@@ -90,6 +94,10 @@
                     </td>
                 </tr>
             </template>
+        </div>
+        <div id="defeatDialog" class="dialog" tabindex="0" hidden>
+            You have been defeated!
+            <button id="tryAgainButton" type="button">Try Again</button>
         </div>
     </div>
     <script type="module" src="crawl.js"></script>

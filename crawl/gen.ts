@@ -104,7 +104,16 @@ export async function generateMap(player: rl.Player, renderer: gfx.Renderer, wid
 
 function generateMapRooms(width: number, height: number, player: rl.Player): maps.Map {
     const map = new maps.Map(width, height, player)
-    const [cells, rooms] = generateCellGrid(width, height)
+    const minRooms = 4
+
+    const [cells, rooms] = (() => {
+        while (true) {
+            const [cells, rooms] = generateCellGrid(width, height)
+            if (rooms.length > minRooms) {
+                return [cells, rooms]
+            }
+        }
+    })() as [CellGrid, Room[]]
 
     const firstRoom = rooms.reduce((x, y) => x.depth < y.depth ? x : y)
     map.player.position = firstRoom.interiorPt.clone()
@@ -171,9 +180,9 @@ function generateMapRooms(width: number, height: number, player: rl.Player): map
 
 function placeMonsters(cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
-    const encounterChance = 1
-    const secondEncounterChance = .3
-    const thirdEncounterChance = .2
+    const encounterChance = .25
+    const secondEncounterChance = .2
+    const thirdEncounterChance = .1
 
     for (const room of rooms) {
         if (!rand.chance(encounterChance)) {
@@ -219,7 +228,7 @@ function tryPlaceMonster(cells: CellGrid, room: Room, map: maps.Map): boolean {
 
 function placeTreasures(cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
-    const treasureChance = .5
+    const treasureChance = .2
 
     for (const room of rooms) {
         if (!rand.chance(treasureChance)) {
@@ -263,7 +272,6 @@ function tryPlaceTreasure(cells: CellGrid, room: Room, map: maps.Map): boolean {
 
     return false
 }
-
 
 function generateCellGrid(width: number, height: number): [CellGrid, Room[]] {
     const cells = grid.generate(width, height, () => CellType.Exterior)

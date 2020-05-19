@@ -11,6 +11,7 @@ export interface Layer<T extends rl.Thing> {
     delete(item: T): void
     has(item: T): boolean
     at(position: geo.Point): T | null
+    size: number
     [Symbol.iterator](): Generator<T>
 }
 
@@ -43,6 +44,10 @@ export class SetLayer<T extends rl.Thing> implements Layer<T> {
         return null
     }
 
+    get size() {
+        return this.set.size
+    }
+    
     *[Symbol.iterator](): Generator<T> {
         for (const value of this.set) {
             yield value
@@ -89,6 +94,10 @@ export class GridLayer<T extends rl.Thing> implements Layer<T> {
         return this.grd.atPoint(position)
     }
 
+    get size() {
+        return this.set.size
+    }
+    
     *[Symbol.iterator](): Generator<T> {
         for (const value of this.set) {
             yield value

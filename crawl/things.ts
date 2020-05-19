@@ -42,12 +42,13 @@ export const rat = new rl.Monster({
     maxHealth: 3,
     image: "./assets/rat.png",
     experience: 1,
-    attack: 0,
-    agility: 0,
+    agility: 1,
     defense: 0,
     attacks: [
         new rl.Attack({
+            attack: 0,
             damage: new rl.Dice(1, 1),
+            action: 1,
             verb: "gnaws at"
         })
     ]
@@ -58,12 +59,13 @@ export const bat = new rl.Monster({
     maxHealth: 3,
     image: "./assets/bat.png",
     experience: 1,
-    attack: 0,
-    agility: 0,
+    agility: 1,
     defense: 0,
     attacks: [
         new rl.Attack({
+            attack: 0,
             damage: new rl.Dice(1, 1),
+            action: 1,
             verb: "nips at"
         })
     ]
@@ -75,12 +77,13 @@ export const greenSlime = new rl.Monster({
     color: gfx.Color.green,
     image: "./assets/slime.png",
     experience: 1,
-    attack: 0,
-    agility: 0,
+    agility: 1,
     defense: 0,
     attacks: [
         new rl.Attack({
+            attack: 0,
             damage: new rl.Dice(1, 1),
+            action: 1,
             verb: "oozes onto"
         })
     ]
@@ -92,12 +95,13 @@ export const redSlime = new rl.Monster({
     color: gfx.Color.red,
     image: "./assets/slime.png",
     experience: 2,
-    attack: 1,
-    agility: 1,
+    agility: 2,
     defense: 1,
     attacks: [
         new rl.Attack({
+            attack: 1,
             damage: new rl.Dice(1, 2),
+            action: 1,
             verb: "oozes onto"
         })
     ]
@@ -108,12 +112,13 @@ export const spider = new rl.Monster({
     maxHealth: 3,
     image: "./assets/spider.png",
     experience: 1,
-    attack: 0,
-    agility: 0,
+    agility: 2,
     defense: 0,
     attacks: [
         new rl.Attack({
+            attack: 1,
             damage: new rl.Dice(1, 1),
+            action: 1,
             verb: "bites"
         })
     ]
@@ -124,44 +129,62 @@ export const skeleton = new rl.Monster({
     maxHealth: 5,
     image: "./assets/skeleton.png",
     experience: 2,
-    attack: 0,
-    agility: 0,
+    agility: 2,
     defense: 0,
     attacks: [
         new rl.Attack({
             attack: 1,
             damage: new rl.Dice(1, 3),
+            action: 1,
             verb: "slashes at"
         }),
         new rl.Attack({
+            attack: 2,
             damage: new rl.Dice(1, 4),
+            action: 1,
             verb: "thrusts at"
         })
     ]
 })
 
+export const fists = new rl.Weapon({
+    name: "Fists",
+    attack: 0,
+    damage: new rl.Dice(1, 2),
+    action: 1,
+    verb: "punches at"
+})
+
 export const sharpStick = new rl.Weapon({
     name: "Sharp Stick",
     attack: 1,
+    action: 1,
     damage: new rl.Dice(1, 2),
+    verb: "swings at"
 })
 
 export const dagger = new rl.Weapon({
     name: "Dagger",
     attack: 1,
+    action: 1,
     damage: new rl.Dice(1, 3),
+    verb: "jabs at"
 })
 
 export const ironSword = new rl.Weapon({
     name: "Iron Sword",
     attack: 2,
+    action: 1,
     damage: new rl.Dice(2, 4),
+    verb: "thrusts at"
 })
 
 export const steelSword = new rl.Weapon({
     name: "Steel Sword",
     attack: 3,
     damage: new rl.Dice(3, 5),
+    action: 1,
+    verb: "thrusts at"
 })
 
 export const slingShot = new rl.Weapon({
@@ -169,6 +192,8 @@ export const slingShot = new rl.Weapon({
     attack: 1,
     range: 3,
     damage: new rl.Dice(1, 2),
+    action: 1,
+    verb: "shoots at"
 })
 
 export const woodenBow = new rl.Weapon({
@@ -176,6 +201,8 @@ export const woodenBow = new rl.Weapon({
     attack: 2,
     range: 5,
     damage: new rl.Dice(2, 5),
+    action: 1,
+    verb: "shoots at"
 })
 
 export const clothArmor = new rl.Armor({
@@ -253,6 +280,6 @@ export const player = new rl.Player({
     image: "./assets/char.png",
     attack: 0,
     defense: 0,
-    agility: 0,
+    agility: 1,
     maxHealth: 6
 })

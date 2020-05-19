@@ -8,56 +8,7 @@ import * as geo from "../shared/geo2d.js"
 import * as output from "./output.js"
 import * as things from "./things.js"
 import * as maps from "./maps.js"
-
-enum CommandType {
-    Move,
-    Equip,
-    Use,
-    Pass,
-    Open,
-    Attack,
-    ClimbUp,
-    ClimbDown
-}
-
-interface MoveCommand {
-    type: CommandType.Move
-    position: geo.Point
-}
-
-interface EquipCommand {
-    type: CommandType.Equip
-    item: rl.Equippable
-}
-
-interface PassCommand {
-    type: CommandType.Pass
-}
-
-interface UseCommand {
-    type: CommandType.Use
-    item: rl.Usable
-}
-
-interface OpenCommand {
-    type: CommandType.Open
-    fixture: rl.Door
-}
-
-interface AttackCommand {
-    type: CommandType.Attack
-    monster: rl.Monster
-}
-
-interface ClimbUpCommand {
-    type: CommandType.ClimbUp
-}
-
-interface ClimbDownCommand {
-    type: CommandType.ClimbDown
-}
-
-type Command = MoveCommand | EquipCommand | PassCommand | UseCommand | OpenCommand | AttackCommand | ClimbUpCommand | ClimbDownCommand
+import * as rand from "../shared/rand.js"
 
 class Dialog {
     private readonly modalBackground = dom.byId("modalBackground") as HTMLDivElement
@@ -84,7 +35,6 @@ class Dialog {
     }
 }
 
-
 class StatsDialog extends Dialog {
     private readonly openButton = dom.byId("statsButton")
     private readonly closeButton = dom.byId("statsCloseButton") as HTMLButtonElement
@@ -108,6 +58,7 @@ class StatsDialog extends Dialog {
         const attackSpan = dom.byId("statsAttack") as HTMLSpanElement
         const defenseSpan = dom.byId("statsDefense") as HTMLSpanElement
         const agilitySpan = dom.byId("statsAgility") as HTMLSpanElement
+        const damageSpan = dom.byId("statsDamage") as HTMLSpanElement
         const levelSpan = dom.byId("statsLevel") as HTMLSpanElement
         const experienceSpan = dom.byId("statsExperience") as HTMLSpanElement
         const experienceRequirement = rl.getExperienceRequirement(player.level + 1)
@@ -116,6 +67,9 @@ class StatsDialog extends Dialog {
         attackSpan.textContent = `${player.attack}`
         defenseSpan.textContent = `${player.defense}`
         agilitySpan.textContent = `${player.agility}`
+
+        const weapon = this.player.weapon ?? things.fists
+        damageSpan.textContent = `${weapon.damage.min} - ${weapon.damage.max}`
         levelSpan.textContent = `${player.level}`
         experienceSpan.textContent = `${player.experience} / ${experienceRequirement}`
 
@@ -139,6 +93,11 @@ class InventoryDialog extends Dialog {
                 this.hide()
             }
         })
+
+        dom.delegate(this.elem, "click", ".inventory-use-button", (ev) => this.onUse(ev))
+        dom.delegate(this.elem, "click", ".inventory-drop-button", (ev) => this.onDrop(ev))
+        dom.delegate(this.elem, "click", ".inventory-equip-button", (ev) => this.onEquip(ev))
+        dom.delegate(this.elem, "click", ".inventory-remove-button", (ev) => this.onRemove(ev))
     }
 
     show() {
@@ -167,13 +126,53 @@ class InventoryDialog extends Dialog {
             tbody.appendChild(fragment)
         }
     }
+
+    onUse(ev: Event) {
+        const index = dom.getElementIndex((ev.target as HTMLButtonElement).closest(".item-row") as HTMLTableRowElement)
+        const item = getSortedItems(this.player.inventory)[index]
+        if (!(item instanceof rl.Usable)) {
+            return
+        }
+
+        useItem(this.player, item)
+        this.refresh()
+    }
+
+    onDrop(ev: Event) {
+        const index = dom.getElementIndex((ev.target as HTMLButtonElement).closest(".item-row") as HTMLTableRowElement)
+        const item = getSortedItems(this.player.inventory)[index]
+        dropItem(this.player, item)
+        this.refresh()
+    }
+
+    onEquip(ev: Event) {
+        const index = dom.getElementIndex((ev.target as HTMLButtonElement).closest(".item-row") as HTMLTableRowElement)
+        const item = getSortedItems(this.player.inventory)[index]
+        if (!rl.isEquippable(item)) {
+            return
+        }
+
+        equipItem(this.player, item)
+        this.refresh()
+    }
+
+    onRemove(ev: Event) {
+        const index = dom.getElementIndex((ev.target as HTMLButtonElement).closest(".item-row") as HTMLTableRowElement)
+        const item = getSortedItems(this.player.inventory)[index]
+        if (!rl.isEquippable(item)) {
+            return
+        }
+
+        removeItem(this.player, item)
+        this.refresh()
+    }
 }
 
 class ContainerDialog {
     private readonly dialog: Dialog
     private readonly nameSpan = dom.byId("containerName") as HTMLSpanElement
-    private readonly closeButton = dom.byId("containerCloseButton") as HTMLDivElement
-    private readonly takeAllButton = dom.byId("containerTakeAllButton") as HTMLDivElement
+    private readonly closeButton = dom.byId("containerCloseButton") as HTMLButtonElement
+    private readonly takeAllButton = dom.byId("containerTakeAllButton") as HTMLButtonElement
     private readonly containerTable = dom.byId("containerTable") as HTMLTableElement
     private readonly containerItemTemplate = dom.byId("containerItemTemplate") as HTMLTemplateElement
     private map: maps.Map | null = null
@@ -259,6 +258,24 @@ class ContainerDialog {
     }
 }
 
+class DefeatDialog {
+    private readonly tryAgainButton = dom.byId("tryAgainButton")
+    private readonly dialog: Dialog
+
+    constructor(canvas: HTMLCanvasElement) {
+        this.dialog = new Dialog(dom.byId("defeatDialog"), canvas)
+        this.tryAgainButton.addEventListener("click", () => this.tryAgain())
+    }
+
+    show() {
+        this.dialog.show()
+    }
+
+    private tryAgain() {
+        window.location.reload(false)
+    }
+}
+
 function getSortedItems(items: Iterable<rl.Item>): rl.Item[] {
     const sortedItems = array.orderBy(items, i => i.name)
     return sortedItems
@@ -339,16 +356,17 @@ class App {
     private readonly statsDialog = new StatsDialog(this.player, this.canvas)
     private readonly inventoryDialog = new InventoryDialog(this.player, this.canvas)
     private readonly containerDialog = new ContainerDialog(this.player, this.canvas)
+    private readonly defeatDialog = new DefeatDialog(this.canvas)
     private map: maps.Map = new maps.Map(0, 0, this.player)
 
     constructor() {
         const player = this.player
-        player.agility = 9
         player.inventory.add(things.healthPotion.clone())
     }
 
     async exec() {
-        this.map = await gen.generateMap(this.player, this.renderer, 16, 16)
+        this.canvas.focus()
+        this.map = await gen.generateMap(this.player, this.renderer, 32, 32)
         if (!this.player.position) {
             throw new Error("Player is not positioned")
         }
@@ -360,53 +378,58 @@ class App {
 
 
     tick() {
-        const cmd = this.handleInput()
-        if (cmd) {
-            this.processTurn(cmd)
+        const nextCreature = this.getNextCreature()
+        if (nextCreature instanceof rl.Player) {
+            if (this.handleInput()) {
+                maps.updateVisibility(this.map, this.player.position, rl.lightRadius)
+            }
+        } else if (nextCreature instanceof rl.Monster) {
+            this.tickMonster(nextCreature)
+        } else {
+            this.tickRound()
         }
 
         this.drawFrame()
         requestAnimationFrame(() => this.tick())
     }
 
-    processTurn(cmd: Command) {
-        // find creature with max agility
-        // everyone moves relative to this rate
-        // everyone gets one action point per round
-        // fastest creature(s) require 1 action point to move
-        // the rest require an amount of action points according to their ratio with the fastest
-        // this all should be repeated until player's turn is processed at which point we should wait for next player move
-        const map = this.map
-        const creatures = array.orderByDesc(array.append<rl.Creature>(map.monsters, map.player), m => m.agility)
-        const minAgility = creatures.reduce((x, y) => x.agility < y.agility ? x : y).agility
-        const maxAgility = creatures.reduce((x, y) => x.agility > y.agility ? x : y).agility
-        const offset = 1 - minAgility
-        const tickThreshold = maxAgility + offset
+    getNextMonster(): rl.Monster | null {
+        // determine whose turn it is
+        let nextMonster = null
+        for (const monster of this.map.monsters) {
+            if (monster.state !== rl.MonsterState.aggro) {
+                continue
+            }
 
-        let playerMoved = false
+            if (monster.action <= 0) {
+                continue
+            }
 
-        while (!playerMoved) {
-            for (const creature of creatures) {
-                if (creature.action < tickThreshold) {
-                    creature.action += creature.agility + offset
-                    continue
-                }
-
-                creature.action -= tickThreshold
-
-                if (creature instanceof rl.Player) {
-                    this.tickPlayer(cmd)
-                    playerMoved = true
-                    break
-                }
-
-                if (creature instanceof rl.Monster) {
-                    this.tickMonster(creature)
-                }
+            if (!nextMonster || monster.action > nextMonster.action) {
+                nextMonster = monster
             }
         }
 
-        maps.updateVisibility(map, map.player.position, rl.lightRadius)
+        return nextMonster
+    }
+
+    getNextCreature(): rl.Monster | rl.Player | null {
+        const monster = this.getNextMonster()
+        if (this.player.action > 0 && this.player.action > (monster?.action ?? 0)) {
+            return this.player
+        }
+
+        return monster
+    }
+
+    tickRound() {
+        // accumulate action points
+        for (const monster of this.map.monsters) {
+            monster.action += monster.agility
+        }
+
+        this.player.action += this.player.agility
+        this.updateMonsterStates()
     }
 
     getScrollOffset(): geo.Point {
@@ -429,88 +452,110 @@ class App {
         return cxy
     }
 
-    tickPlayer(cmd: Command) {
-        const player = this.player
-        switch (cmd.type) {
-            case CommandType.Open: {
-                output.info("Door opened")
-                this.map.fixtures.delete(cmd.fixture)
-            }
-                break
+    processPlayerAttack(defender: rl.Monster) {
+        // base 60% chance to hit
+        // 10% bonus / penalty for every point difference between attack and defense
+        // bottoms out at 5% - always SOME chance to hit
+        const attacker = this.player
+        const bonus = (attacker.attack - defender.defense) * .1
+        const hitChance = Math.min(Math.max(.6 + bonus, .05), .95)
+        const hit = rand.chance(hitChance)
+        const weapon = attacker.weapon ?? things.fists
+        const attackVerb = weapon.verb ? weapon.verb : "attacks"
+        attacker.action -= weapon.action
 
-            case CommandType.Pass: {
-                output.info("Pass")
-            }
-                break
+        if (!hit) {
+            output.warning(`${attacker.name} ${attackVerb} ${defender.name} but misses!`)
+            return
+        }
 
-            case CommandType.Move: {
-                player.position = cmd.position
-            }
-                break
+        // hit - calculate damage
+        const damage = weapon.damage.roll()
+        output.warning(`${attacker.name} ${attackVerb} ${defender.name} and hits for ${damage} damage!`)
+        defender.health -= damage
 
-            case CommandType.Equip: {
-                output.error("Equip not yet implemented")
-            }
-                break
-
-            case CommandType.Use: {
-                output.error("Use not yet implemented")
-            }
-                break
-
-            case CommandType.Attack: {
-                output.error("Attack not yet implemented")
-            }
-                break
-
-            case CommandType.ClimbUp: {
-                output.error("Climb up not yet implemented")
-            }
-                break
-
-            case CommandType.ClimbDown: {
-                output.error("Climb down yet implemented")
-            }
-                break
+        if (defender.health < 0) {
+            output.warning(`${defender.name} has been defeated and ${attacker.name} receives ${defender.experience} experience`)
+            this.player.experience += defender.experience
+            this.map.monsters.delete(defender)
         }
     }
 
-    tickMonster(monster: rl.Monster) {
-        // determine whether monster can see player
-        if (!monster.position) {
+    processMonsterAttack(attacker: rl.Monster, attack: rl.Attack) {
+        // base 60% chance to hit
+        // 10% bonus / penalty for every point difference between attack and defense
+        // clamps to out at [5, 95] - always SOME chance to hit or miss
+        // choose an attack from repertoire of monster
+        const defender = this.player
+        const bonus = (attack.attack - defender.defense) * .1
+        const hitChance = Math.max(.6 + bonus, .05)
+        const hit = rand.chance(hitChance)
+        const attackVerb = attack.verb ? attack.verb : "attacks"
+        attacker.action -= attack.action
+
+        if (!hit) {
+            output.warning(`${attacker.name} ${attackVerb} ${defender.name} but misses!`)
             return
         }
 
-        const map = this.map
-        if (!map.player.position) {
-            return
-        }
+        // hit - calculate damage
+        const damage = attack.damage.roll()
+        output.warning(`${attacker.name} ${attackVerb} ${defender.name} and hits for ${damage} damage!`)
+        defender.health -= damage
 
+        if (defender.health < 0) {
+            output.warning(`${defender.name} has been defeated!`)
+            this.defeatDialog.show()
+        }
+    }
+
+    updateMonsterStates() {
+        for (const monster of this.map.monsters) {
+            this.updateMonsterState(monster)
+        }
+    }
+
+    updateMonsterState(monster: rl.Monster) {
         // aggro state
+        const map = this.map
         if (monster.state !== rl.MonsterState.aggro && canSee(map, monster.position, map.player.position)) {
             monster.state = rl.MonsterState.aggro
         }
 
         if (monster.state === rl.MonsterState.aggro && !canSee(map, monster.position, map.player.position)) {
+            monster.action = 0
             monster.state = rl.MonsterState.idle
         }
+    }
 
-        // if player is within range, attack
-
-        // no aggro, done for now
-        if (!rl.MonsterState.aggro) {
-            return
+    tickMonster(monster: rl.Monster) {
+        // if player is within reach (and alive), attack
+        if (this.player.health > 0) {
+            const distanceToPlayer = geo.calcManhattenDist(this.player.position, monster.position)
+            const attacks = monster.attacks.filter(a => a.range >= distanceToPlayer)
+            if (attacks.length > 0) {
+                const attack = rand.choose(attacks)
+                this.processMonsterAttack(monster, attack)
+                return
+            }
         }
 
-        // aggro - seek and destroy
+        // determine whether monster can see player
+        // seek and destroy
+        const map = this.map
         const path = maps.findPath(map, monster.position, this.player.position)
         if (path.length === 0) {
+            // pass
+            monster.action = 0
             return
         }
 
         const position = path[0]
         if (map.isPassable(position)) {
+            monster.action -= 1
             monster.position = path[0]
+        } else {
+            monster.action = 0
         }
     }
 
@@ -524,15 +569,10 @@ class App {
         canvas.height = canvas.clientHeight
     }
 
-    handleInput(): Command | null {
+    handleInput(): boolean {
         const map = this.map
         const player = this.player
         const inp = this.inp
-
-        if (!player.position) {
-            return null
-        }
-
         const position = player.position.clone()
 
         if (inp.mouseLeftPressed) {
@@ -543,14 +583,14 @@ class App {
             if (clickFixture) {
                 output.info(`You see ${clickFixture.name}`)
                 inp.flush()
-                return null
+                return false
             }
 
             const clickCreature = map.monsterAt(mxy)
             if (clickCreature) {
                 output.info(`You see ${clickCreature.name}`)
                 inp.flush()
-                return null
+                return false
             }
 
             const dxy = mxy.subPoint(player.position)
@@ -566,68 +606,70 @@ class App {
             }
 
         }
-        else if (inp.pressed("w")) {
+        else if (inp.pressed("w") || inp.pressed("ArrowUp")) {
             position.y -= 1
         }
-        else if (inp.pressed("s")) {
+        else if (inp.pressed("s") || inp.pressed("ArrowDown")) {
             position.y += 1
         }
-        else if (inp.pressed("a")) {
+        else if (inp.pressed("a") || inp.pressed("ArrowLeft")) {
             position.x -= 1
         }
-        else if (inp.pressed("d")) {
+        else if (inp.pressed("d") || inp.pressed("ArrowRight")) {
             position.x += 1
         } else if (inp.pressed("z")) {
             this.statsDialog.show()
         } else if (inp.pressed("i")) {
             this.inventoryDialog.show()
+        } else if (inp.pressed(" ")) {
+            this.player.actionReserve += this.player.action
+            this.player.action = 0
+            inp.flush()
+            return true
         }
 
         inp.flush()
 
         if (position.equal(player.position)) {
-            return null
+            return false
         }
 
         const tile = map.tileAt(position)
         if (tile && !tile.passable) {
             output.info(`Blocked by ${tile.name}`)
-            return null
+            return false
+        }
+
+        const monster = map.monsterAt(position)
+        if (monster) {
+            this.processPlayerAttack(monster)
+            return true
         }
 
         const container = map.containerAt(position)
         if (container) {
             this.containerDialog.show(map, container)
-            return null
+            return false
         }
 
         const fixture = map.fixtureAt(position)
         if (fixture instanceof rl.Door) {
-            return {
-                type: CommandType.Open,
-                fixture: fixture
-            }
+            output.info(`${fixture.name} opened`)
+            this.map.fixtures.delete(fixture)
+            player.action -= 1
+            return true
         } else if (fixture instanceof rl.StairsUp) {
-            return { type: CommandType.ClimbUp }
+            output.error("Stairs not implemented")
         } else if (fixture instanceof rl.StairsDown) {
-            return { type: CommandType.ClimbDown }
+            output.error("Stairs not implemented")
         } else if (fixture && !fixture.passable) {
             output.info(`Can't move that way, blocked by ${fixture.name}`)
-            return null
+            return false
         }
 
-        const monster = map.monsterAt(position)
-        if (monster && !monster.passable) {
-            return {
-                type: CommandType.Attack,
-                monster: monster
-            }
-        }
-
-        return {
-            type: CommandType.Move,
-            position: position
-        }
+        player.position = position
+        player.action -= 1
+        return true
     }
 
     drawFrame() {
@@ -696,19 +738,21 @@ class App {
             return
         }
 
-        const width = creature.maxHealth * 4 + 2
+        const health = Math.max(creature.health, 0)
+        const borderWidth = health * 4 + 2
+        const interiorWidth = health * 4
         const spritePosition = creature.position.mulScalar(rl.tileSize).addPoint(offset).subPoint(new geo.Point(0, rl.tileSize / 2))
         this.renderer.drawSprite(new gfx.Sprite({
             position: spritePosition,
             color: gfx.Color.white,
-            width: width,
+            width: borderWidth,
             height: 8
         }))
 
         this.renderer.drawSprite(new gfx.Sprite({
             position: spritePosition.addPoint(new geo.Point(1, 1)),
             color: gfx.Color.red,
-            width: width - 2,
+            width: interiorWidth,
             height: 6
         }))
     }

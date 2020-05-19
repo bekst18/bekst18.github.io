@@ -102,6 +102,8 @@ export interface WeaponOptions {
     color?: gfx.Color
     attack: number
     range?: number
+    verb?: string
+    action: number
     damage: Dice
 }
 
@@ -109,12 +111,16 @@ export class Weapon extends Item {
     readonly attack: number
     readonly damage: Dice
     readonly range: number
+    readonly action: number
+    readonly verb: string
 
     constructor(options: WeaponOptions) {
         super(Object.assign({ passable: false, transparent: false }, options))
         this.attack = options.attack
         this.damage = options.damage.clone()
         this.range = options.range ?? 1
+        this.verb = options.verb ?? ""
+        this.action = options.action
     }
 
     clone(): Weapon {
@@ -198,7 +204,6 @@ export interface CreatureOptions {
     color?: gfx.Color
     maxHealth: number
     health?: number
-    attack: number
     defense: number
     agility: number
 }
@@ -206,16 +211,15 @@ export interface CreatureOptions {
 export class Creature extends Thing {
     maxHealth: number
     health: number
-    attack: number
     defense: number
     agility: number
     action: number = 0
+    actionReserve: number = 0
 
     constructor(options: CreatureOptions) {
         super(Object.assign({ passable: false, transparent: true }, options))
         this.maxHealth = options.maxHealth
         this.health = options.health ?? this.maxHealth
-        this.attack = options.attack
         this.defense = options.defense
         this.agility = options.agility
     }
@@ -226,6 +230,7 @@ export class Creature extends Thing {
 }
 
 export interface PlayerOptions extends CreatureOptions {
+    attack?: number
     level?: number
     experience?: number
     weapon?: Weapon | null
@@ -236,6 +241,7 @@ export interface PlayerOptions extends CreatureOptions {
 
 export class Player extends Creature {
     level: number = 1
+    attack: number = 0
     experience: number = 0
     weapon: Weapon | null
     armor: Armor | null
@@ -244,6 +250,10 @@ export class Player extends Creature {
 
     constructor(options: PlayerOptions) {
         super(options)
+
+        if (options.attack) {
+            this.attack = options.attack
+        }
 
         this.level = options.level ?? 1
         if (this.level < 1) {
@@ -342,19 +352,25 @@ export class Player extends Creature {
 }
 
 export interface AttackOptions {
-    attack?: number
+    attack: number
     damage: Dice
+    action: number
+    range?: number
     verb?: string
 }
 
 export class Attack {
     attack: number
     damage: Dice
+    action: number
+    range: number
     verb: string
 
     constructor(options: AttackOptions) {
         this.attack = options.attack ?? 0
         this.damage = options.damage.clone()
+        this.action = options.action
+        this.range = options.range ?? 1
         this.verb = options.verb ?? ""
     }
 
