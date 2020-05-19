@@ -79,25 +79,93 @@ class StatsDialog extends Dialog {
 
 class InventoryDialog extends Dialog {
     private readonly openButton = dom.byId("inventoryButton")
+    private readonly infoDiv = dom.byId("inventoryInfo") as HTMLDivElement
+    private readonly emptyDiv = dom.byId("inventoryEmpty") as HTMLDivElement
     private readonly table = dom.byId("inventoryTable") as HTMLTableElement
     private readonly itemTemplate = dom.byId("inventoryItemTemplate") as HTMLTemplateElement
+    private readonly nextPageButton = dom.byId("inventoryNextPageButton") as HTMLButtonElement
+    private readonly prevPageButton = dom.byId("inventoryPrevPageButton") as HTMLButtonElement
     private readonly closeButton = dom.byId("inventoryCloseButton") as HTMLButtonElement
+    private readonly pageSize: number = 9
+    private pageIndex: number = 0
+    private selectedIndex: number = -1
 
     constructor(private readonly player: rl.Player, canvas: HTMLCanvasElement) {
         super(dom.byId("inventoryDialog"), canvas)
         this.openButton.addEventListener("click", () => this.toggle())
         this.closeButton.addEventListener("click", () => this.hide())
 
+        this.nextPageButton.addEventListener("click", () => {
+            this.pageIndex++
+            this.pageIndex = Math.min(this.pageIndex, Math.ceil(this.player.inventory.size / this.pageSize))
+            this.refresh()
+        })
+
+        this.prevPageButton.addEventListener("click", () => {
+            this.pageIndex--
+            this.pageIndex = Math.max(this.pageIndex, 0)
+            this.refresh()
+        })
+
         this.elem.addEventListener("keypress", (ev) => {
-            if (ev.key.toUpperCase() === "I") {
+            const key = ev.key.toUpperCase()
+            if (key === "I" || key === "C") {
                 this.hide()
+            }
+
+            const index = parseInt(ev.key)
+            if (index && index > 0 && index <= 9) {
+                this.selectedIndex = index - 1
+                this.refresh()
+            }
+
+            if (key === "U" && this.selectedIndex >= 0) {
+                this.use(this.selectedIndex)
+            }
+
+            if (key === "E" && this.selectedIndex >= 0) {
+                this.equip(this.selectedIndex)
+            }
+
+            if (key === "R" && this.selectedIndex >= 0) {
+                this.remove(this.selectedIndex)
+            }
+
+            if (key === "D" && this.selectedIndex >= 0) {
+                this.drop(this.selectedIndex)
             }
         })
 
-        dom.delegate(this.elem, "click", ".inventory-use-button", (ev) => this.onUse(ev))
-        dom.delegate(this.elem, "click", ".inventory-drop-button", (ev) => this.onDrop(ev))
-        dom.delegate(this.elem, "click", ".inventory-equip-button", (ev) => this.onEquip(ev))
-        dom.delegate(this.elem, "click", ".inventory-remove-button", (ev) => this.onRemove(ev))
+        dom.delegate(this.elem, "click", ".inventory-use-button", (ev) => {
+            ev.stopImmediatePropagation()
+            const index = this.getRowIndex(ev.target as HTMLButtonElement)
+            this.use(index)
+        })
+
+        dom.delegate(this.elem, "click", ".inventory-drop-button", (ev) => {
+            ev.stopImmediatePropagation()
+            const index = this.getRowIndex(ev.target as HTMLButtonElement)
+            this.drop(index)
+        })
+
+        dom.delegate(this.elem, "click", ".inventory-equip-button", (ev) => {
+            ev.stopImmediatePropagation()
+            const index = this.getRowIndex(ev.target as HTMLButtonElement)
+            this.equip(index)
+        })
+
+        dom.delegate(this.elem, "click", ".inventory-remove-button", (ev) => {
+            ev.stopImmediatePropagation()
+            const index = this.getRowIndex(ev.target as HTMLButtonElement)
+            this.remove(index)
+        })
+
+        dom.delegate(this.elem, "click", ".item-row", (ev) => {
+            const row = (ev.target as HTMLElement).closest(".item-row")
+            if (row) {
+                this.select(row as HTMLTableRowElement)
+            }
+        })
     }
 
     show() {
@@ -109,27 +177,73 @@ class InventoryDialog extends Dialog {
         const tbody = this.table.tBodies[0]
         dom.removeAllChildren(tbody)
 
-        const items = getSortedItems(this.player.inventory)
-        for (const item of items) {
+        if (this.player.inventory.size === 0) {
+            this.emptyDiv.hidden = false
+            this.infoDiv.hidden = true
+        } else {
+            this.emptyDiv.hidden = true
+            this.infoDiv.hidden = false
+        }
+
+        const pageCount = Math.ceil(this.player.inventory.size / this.pageSize)
+        this.pageIndex = Math.min(Math.max(0, this.pageIndex), pageCount - 1)
+        this.prevPageButton.disabled = this.pageIndex <= 0
+        this.nextPageButton.disabled = this.pageIndex >= pageCount - 1
+
+        this.infoDiv.textContent = `Page ${this.pageIndex + 1} of ${pageCount}`
+
+        const items = getSortedItemsPage(this.player.inventory, this.pageIndex, this.pageSize)
+        this.selectedIndex = Math.min(this.selectedIndex, items.length - 1)
+
+        for (let i = 0; i < items.length; ++i) {
+            const item = items[i]
             const fragment = this.itemTemplate.content.cloneNode(true) as DocumentFragment
             const tr = dom.bySelector(fragment, ".item-row")
+            const itemIndexTd = dom.bySelector(tr, ".item-index")
             const itemNameTd = dom.bySelector(tr, ".item-name")
             const equipButton = dom.bySelector(tr, ".inventory-equip-button") as HTMLButtonElement
             const removeButton = dom.bySelector(tr, ".inventory-remove-button") as HTMLButtonElement
             const useButton = dom.bySelector(tr, ".inventory-use-button") as HTMLButtonElement
 
+            itemIndexTd.textContent = (i + 1).toString()
             itemNameTd.textContent = item.name
-            useButton.hidden = !(item instanceof rl.Usable)
-            equipButton.hidden = !rl.isEquippable(item) || this.player.isEquipped(item)
-            removeButton.hidden = !this.player.isEquipped(item)
+
+            if (!(item instanceof rl.Usable)) {
+                useButton.remove()
+            }
+            if (!rl.isEquippable(item) || this.player.isEquipped(item)) {
+                equipButton.remove()
+            }
+
+            if (!this.player.isEquipped(item)) {
+                removeButton.remove()
+            }
+
+            if (i === this.selectedIndex) {
+                tr.classList.add("selected")
+            }
 
             tbody.appendChild(fragment)
         }
     }
 
-    onUse(ev: Event) {
-        const index = dom.getElementIndex((ev.target as HTMLButtonElement).closest(".item-row") as HTMLTableRowElement)
-        const item = getSortedItems(this.player.inventory)[index]
+    private select(selectedRow: HTMLTableRowElement) {
+        const rows = Array.from(this.elem.querySelectorAll(".item-row"))
+        for (const row of rows) {
+            row.classList.remove("selected")
+        }
+
+        selectedRow.classList.add("selected")
+    }
+
+    private getRowIndex(elem: HTMLButtonElement) {
+        const index = dom.getElementIndex(elem.closest(".item-row") as HTMLTableRowElement)
+        return index
+    }
+
+    private use(index: number) {
+        const i = this.pageIndex * this.pageSize + index
+        const item = getSortedItems(this.player.inventory)[i]
         if (!(item instanceof rl.Usable)) {
             return
         }
@@ -138,16 +252,16 @@ class InventoryDialog extends Dialog {
         this.refresh()
     }
 
-    onDrop(ev: Event) {
-        const index = dom.getElementIndex((ev.target as HTMLButtonElement).closest(".item-row") as HTMLTableRowElement)
-        const item = getSortedItems(this.player.inventory)[index]
+    private drop(index: number) {
+        const i = this.pageIndex * this.pageSize + index
+        const item = getSortedItems(this.player.inventory)[i]
         dropItem(this.player, item)
         this.refresh()
     }
 
-    onEquip(ev: Event) {
-        const index = dom.getElementIndex((ev.target as HTMLButtonElement).closest(".item-row") as HTMLTableRowElement)
-        const item = getSortedItems(this.player.inventory)[index]
+    private equip(index: number) {
+        const i = this.pageIndex * this.pageSize + index
+        const item = getSortedItems(this.player.inventory)[i]
         if (!rl.isEquippable(item)) {
             return
         }
@@ -156,9 +270,9 @@ class InventoryDialog extends Dialog {
         this.refresh()
     }
 
-    onRemove(ev: Event) {
-        const index = dom.getElementIndex((ev.target as HTMLButtonElement).closest(".item-row") as HTMLTableRowElement)
-        const item = getSortedItems(this.player.inventory)[index]
+    private remove(index: number) {
+        const i = this.pageIndex * this.pageSize + index
+        const item = getSortedItems(this.player.inventory)[i]
         if (!rl.isEquippable(item)) {
             return
         }
@@ -183,8 +297,9 @@ class ContainerDialog {
         this.player = player
         this.closeButton.addEventListener("click", () => this.hide())
         this.takeAllButton.addEventListener("click", () => this.takeAll())
+        const elem = this.dialog.elem
 
-        dom.delegate(this.dialog.elem, "click", ".container-take-button", (ev) => {
+        dom.delegate(elem, "click", ".container-take-button", (ev) => {
             if (!this.container) {
                 return
             }
@@ -192,19 +307,22 @@ class ContainerDialog {
             const btn = ev.target as HTMLButtonElement
             const row = btn.closest(".item-row") as HTMLTableRowElement
             const idx = dom.getElementIndex(row)
-            const item = getSortedItems(this.container.items)[idx]
-            if (!item) {
-                return
+            this.take(idx)
+        })
+
+        elem.addEventListener("keypress", (ev) => {
+            const key = ev.key.toUpperCase()
+            if (key === "C") {
+                this.hide()
             }
 
-            this.container.items.delete(item)
-            this.player.inventory.add(item)
+            if (key === "A") {
+                this.takeAll()
+            }
 
-            // hide if this was the last item
-            if (this.container.items.size == 0) {
-                this.hide()
-            } else {
-                this.refresh()
+            const index = parseInt(ev.key)
+            if (index && index > 0 && index <= 9) {
+                this.take(index - 1)
             }
         })
     }
@@ -218,7 +336,7 @@ class ContainerDialog {
     }
 
     hide() {
-        if (this.map && this.container) {
+        if (this.map && this.container && this.container.items.size == 0) {
             this.map.containers.delete(this.container)
         }
 
@@ -235,12 +353,36 @@ class ContainerDialog {
         }
 
         const items = getSortedItems(this.container.items)
-        for (const item of items) {
+        for (let i = 0; i < items.length; ++i) {
+            const item = items[i]
             const fragment = this.containerItemTemplate.content.cloneNode(true) as DocumentFragment
             const tr = dom.bySelector(fragment, ".item-row")
+            const itemIndexTd = dom.bySelector(tr, ".item-index")
             const itemNameTd = dom.bySelector(tr, ".item-name")
+            itemIndexTd.textContent = `${i + 1}`
             itemNameTd.textContent = item.name
             tbody.appendChild(fragment)
+        }
+    }
+
+    take(index: number) {
+        if (!this.container) {
+            return
+        }
+
+        const item = getSortedItems(this.container.items)[index]
+        if (!item) {
+            return
+        }
+
+        this.container.items.delete(item)
+        this.player.inventory.add(item)
+
+        // hide if this was the last item
+        if (this.container.items.size == 0) {
+            this.hide()
+        } else {
+            this.refresh()
         }
     }
 
@@ -265,6 +407,16 @@ class DefeatDialog {
     constructor(canvas: HTMLCanvasElement) {
         this.dialog = new Dialog(dom.byId("defeatDialog"), canvas)
         this.tryAgainButton.addEventListener("click", () => this.tryAgain())
+        this.dialog.elem.addEventListener("keypress", (ev) => {
+            const key = ev.key.toUpperCase()
+            if (key === "T") {
+                this.tryAgain()
+            }
+
+            if (key === "ENTER") {
+                this.tryAgain()
+            }
+        })
     }
 
     show() {
@@ -279,6 +431,14 @@ class DefeatDialog {
 function getSortedItems(items: Iterable<rl.Item>): rl.Item[] {
     const sortedItems = array.orderBy(items, i => i.name)
     return sortedItems
+}
+
+function getSortedItemsPage(items: Iterable<rl.Item>, pageIndex: number, pageSize: number): rl.Item[] {
+    const startIndex = pageIndex * pageSize
+    const endIndex = startIndex + pageSize
+    const sortedItems = getSortedItems(items)
+    const page = sortedItems.slice(startIndex, endIndex)
+    return page
 }
 
 function canSee(map: maps.Map, eye: geo.Point, target: geo.Point): boolean {
@@ -362,6 +522,7 @@ class App {
     constructor() {
         const player = this.player
         player.inventory.add(things.healthPotion.clone())
+        player.inventory.add(things.clothArmor)
     }
 
     async exec() {
@@ -424,11 +585,17 @@ class App {
 
     tickRound() {
         // accumulate action points
-        for (const monster of this.map.monsters) {
-            monster.action += monster.agility
+        for (const monster of array.filter(this.map.monsters, m => m.state === rl.MonsterState.aggro)) {
+            const reserve = Math.min(monster.actionReserve, monster.agility)
+            monster.action = monster.agility + reserve
+            monster.actionReserve = 0
         }
 
-        this.player.action += this.player.agility
+        // cap action reserve 
+        const reserve = Math.min(this.player.actionReserve, this.player.agility)
+        this.player.action = this.player.agility + reserve
+        this.player.actionReserve = 0
+
         this.updateMonsterStates()
     }
 
@@ -503,7 +670,7 @@ class App {
         output.warning(`${attacker.name} ${attackVerb} ${defender.name} and hits for ${damage} damage!`)
         defender.health -= damage
 
-        if (defender.health < 0) {
+        if (defender.health <= 0) {
             output.warning(`${defender.name} has been defeated!`)
             this.defeatDialog.show()
         }
@@ -519,6 +686,7 @@ class App {
         // aggro state
         const map = this.map
         if (monster.state !== rl.MonsterState.aggro && canSee(map, monster.position, map.player.position)) {
+            monster.action = 0
             monster.state = rl.MonsterState.aggro
         }
 

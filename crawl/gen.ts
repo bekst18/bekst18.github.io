@@ -228,7 +228,7 @@ function tryPlaceMonster(cells: CellGrid, room: Room, map: maps.Map): boolean {
 
 function placeTreasures(cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
-    const treasureChance = .2
+    const treasureChance = 1
 
     for (const room of rooms) {
         if (!rand.chance(treasureChance)) {

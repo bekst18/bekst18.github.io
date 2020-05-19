@@ -91,13 +91,39 @@ body {
 }
 
 button {
-    font-size: large;
+    background-color: royalblue;
+}
+
+button:disabled {
+    color: darkgray;
+}
+
+.button-group button {
+    border-color: darkblue;
+}
+
+table, tr, td {
+    border-spacing: 0;
+    border-collapse: collapse;
 }
 
 #inventoryTable td {
+    margin: 0;
     padding: .25em;
 }
 
 #containerTable td {
     padding: .25em;
+}
+
+.item-row {
+    cursor: pointer;
+}
+
+.item-row:hover, .item-row:hover td {
+    background-color: darkgray;
+}
+
+.item-row.selected, .item-row.selected td {
+    background-color: darkgray;
 }

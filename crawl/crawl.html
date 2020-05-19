@@ -55,22 +55,29 @@
         </div>
         <div id="inventoryDialog" class="dialog" tabindex="0" hidden>
             <h1>Inventory</h1>
+            <div id="inventoryInfo"></div>
+            <div id="inventoryEmpty" hidden>Your inventory is currently empty - go find some treasure!</div>
             <table id="inventoryTable">
                 <thead></thead>
                 <tbody>
 
                 </tbody>
             </table>
-            <button id="inventoryCloseButton" class="dialog-close-button mt-3" type="button">Close</button>
+            <div class="button-group">
+                <button id="inventoryPrevPageButton" type="button"><strong>P</strong>rev</button>
+                <button id="inventoryNextPageButton" type="button"><strong>N</strong>ext</button>
+                <button id="inventoryCloseButton" class="dialog-close-button" type="button"><strong>C</strong>lose</button>
+            </div>
             <template id="inventoryItemTemplate">
                 <tr class="inventory-item-row item-row">
+                    <td class="item-index"></td>
                     <td class="item-name"></td>
                     <td>
                         <div class="button-group">
-                            <button class="inventory-remove-button" type="button">Remove</button>
-                            <button class="inventory-equip-button" type="button">Equip</button>
-                            <button class="inventory-use-button" type="button">Use</button>
-                            <button class="inventory-drop-button" type="button">Drop</button>
+                            <button class="inventory-remove-button" type="button"><strong>R</strong>emove</button>
+                            <button class="inventory-equip-button" type="button"><strong>E</strong>quip</button>
+                            <button class="inventory-use-button" type="button"><strong>U</strong>se</button>
+                            <button class="inventory-drop-button" type="button"><strong>D</strong>rop</button>
                         </div>
                     </td>
                 </tr>
@@ -84,20 +91,26 @@
 
                 </tbody>
             </table>
-            <button id="containerTakeAllButton" class="dialog-close-button mt-3" type="button">Take All</button>
-            <button id="containerCloseButton" class="dialog-close-button mt-3" type="button">Close</button>
+            <div class="button-group">
+                <button id="containerTakeAllButton" class="dialog-close-button mt-3" type="button">Take <strong>A</strong>ll</button>
+                <button id="containerCloseButton" class="dialog-close-button mt-3" type="button"><strong>C</strong>lose</button>
+            </div>
             <template id="containerItemTemplate">
                 <tr class="container-item-row item-row">
+                    <td class="item-index"></td>
                     <td class="item-name"></td>
                     <td>
-                        <button class="container-take-button" type="button">Take</button>
+                        <button class="container-take-button" type="button"><strong>T</strong>ake</button>
                     </td>
                 </tr>
             </template>
         </div>
         <div id="defeatDialog" class="dialog" tabindex="0" hidden>
             You have been defeated!
-            <button id="tryAgainButton" type="button">Try Again</button>
+            <button id="tryAgainButton" type="button"><strong>T</strong>ry Again</button>
+        </div>
+        <div id="townDialog" class="dialog" tabindex="0" hidden>
+
         </div>
     </div>
     <script type="module" src="crawl.js"></script>
