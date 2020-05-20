@@ -42,7 +42,7 @@ export const rat = new rl.Monster({
     maxHealth: 3,
     image: "./assets/rat.png",
     experience: 1,
-    agility: 1,
+    agility: 0,
     defense: 0,
     attacks: [
         new rl.Attack({
@@ -59,7 +59,7 @@ export const bat = new rl.Monster({
     maxHealth: 3,
     image: "./assets/bat.png",
     experience: 1,
-    agility: 1,
+    agility: 0,
     defense: 0,
     attacks: [
         new rl.Attack({
@@ -77,7 +77,7 @@ export const greenSlime = new rl.Monster({
     color: gfx.Color.green,
     image: "./assets/slime.png",
     experience: 1,
-    agility: 1,
+    agility: 0,
     defense: 0,
     attacks: [
         new rl.Attack({
@@ -95,7 +95,7 @@ export const redSlime = new rl.Monster({
     color: gfx.Color.red,
     image: "./assets/slime.png",
     experience: 2,
-    agility: 2,
+    agility: 1,
     defense: 1,
     attacks: [
         new rl.Attack({
@@ -112,7 +112,7 @@ export const spider = new rl.Monster({
     maxHealth: 3,
     image: "./assets/spider.png",
     experience: 1,
-    agility: 2,
+    agility: 1,
     defense: 0,
     attacks: [
         new rl.Attack({
@@ -129,7 +129,7 @@ export const skeleton = new rl.Monster({
     maxHealth: 5,
     image: "./assets/skeleton.png",
     experience: 2,
-    agility: 2,
+    agility: 1,
     defense: 0,
     attacks: [
         new rl.Attack({
@@ -278,8 +278,5 @@ export const chest = new rl.Container({
 export const player = new rl.Player({
     name: "Player",
     image: "./assets/char.png",
-    attack: 0,
-    defense: 0,
-    agility: 1,
     maxHealth: 6
 })

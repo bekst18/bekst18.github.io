@@ -58,8 +58,16 @@ export class Dice {
         return rand.int(this.min, this.max + 1)
     }
 
+    add(x: number): Dice {
+        return new Dice(this.min + x, this.max + x)
+    }
+
     clone(): Dice {
         return new Dice(this.min, this.max)
+    }
+
+    toString(): string {
+        return `${this.min} - ${this.max}`
     }
 }
 
@@ -93,13 +101,20 @@ export class StairsDown extends Fixture {
     }
 }
 
-export class Item extends Thing { }
-
-export interface WeaponOptions {
+export interface ItemOptions {
     position?: geo.Point
     name: string
     image?: string
     color?: gfx.Color
+}
+
+export class Item extends Thing {
+    constructor(options: ItemOptions) {
+        super(Object.assign({ passable: false, transparent: true }, options))
+    }
+}
+
+export interface WeaponOptions extends ItemOptions {
     attack: number
     range?: number
     verb?: string
@@ -115,7 +130,7 @@ export class Weapon extends Item {
     readonly verb: string
 
     constructor(options: WeaponOptions) {
-        super(Object.assign({ passable: false, transparent: false }, options))
+        super(options)
         this.attack = options.attack
         this.damage = options.damage.clone()
         this.range = options.range ?? 1
@@ -128,11 +143,10 @@ export class Weapon extends Item {
     }
 }
 
-export interface ArmorOptions {
-    position?: geo.Point
-    name: string
-    image?: string
-    color?: gfx.Color
+export class RangedWeapon extends Weapon { }
+export class MeleeWeapon extends Weapon { }
+
+export interface ArmorOptions extends ItemOptions {
     defense: number
 }
 
@@ -140,7 +154,7 @@ export class Armor extends Item {
     readonly defense: number
 
     constructor(options: ArmorOptions) {
-        super(Object.assign({ position: new geo.Point(-1, -1), passable: false, transparent: false }, options))
+        super(options)
         this.defense = options.defense
     }
 
@@ -149,11 +163,24 @@ export class Armor extends Item {
     }
 }
 
-export interface ShieldOptions {
-    position?: geo.Point
-    name: string
-    image?: string
-    color?: gfx.Color
+export interface HelmOptions extends ItemOptions {
+    defense: number
+}
+
+export class Helm extends Item {
+    readonly defense: number
+
+    constructor(options: HelmOptions) {
+        super(options)
+        this.defense = options.defense
+    }
+
+    clone(): Helm {
+        return new Helm(this)
+    }
+}
+
+export interface ShieldOptions extends ItemOptions {
     defense: number
 }
 
@@ -161,7 +188,7 @@ export class Shield extends Item {
     readonly defense: number
 
     constructor(options: ShieldOptions) {
-        super(Object.assign({ passable: false, transparent: false }, options))
+        super(options)
         this.defense = options.defense
     }
 
@@ -170,7 +197,29 @@ export class Shield extends Item {
     }
 }
 
-export type Equippable = Weapon | Armor | Shield
+export interface RingOptions extends ItemOptions {
+    strength?: number
+    agility?: number
+    intelligence?: number
+    maxHealth?: number
+}
+
+export class Ring extends Item {
+    strength: number
+    agility: number
+    intelligence: number
+    maxHealth: number
+
+    constructor(options: RingOptions) {
+        super(options)
+        this.strength = options.strength ?? 0
+        this.agility = options.agility ?? 0
+        this.intelligence = options.intelligence ?? 0
+        this.maxHealth = options.maxHealth ?? 0
+    }
+}
+
+export type Equippable = MeleeWeapon | RangedWeapon | Armor | Helm | Shield | Ring
 
 export function isEquippable(item: Item): item is Equippable {
     return item instanceof Weapon || item instanceof Armor || item instanceof Shield
@@ -204,145 +253,183 @@ export interface CreatureOptions {
     color?: gfx.Color
     maxHealth: number
     health?: number
-    defense: number
-    agility: number
+    agility?: number
 }
 
-export class Creature extends Thing {
+export interface Creature extends Thing {
     maxHealth: number
     health: number
     defense: number
     agility: number
-    action: number = 0
-    actionReserve: number = 0
-
-    constructor(options: CreatureOptions) {
-        super(Object.assign({ passable: false, transparent: true }, options))
-        this.maxHealth = options.maxHealth
-        this.health = options.health ?? this.maxHealth
-        this.defense = options.defense
-        this.agility = options.agility
-    }
-
-    clone(): Creature {
-        return new Creature(this)
-    }
+    action: number
+    actionReserve: number
 }
 
 export interface PlayerOptions extends CreatureOptions {
-    attack?: number
     level?: number
     experience?: number
-    weapon?: Weapon | null
+    strength?: number
+    intelligence?: number
+    maxHealth: number
+    meleeWeapon?: MeleeWeapon | null
+    rangedWeapon?: RangedWeapon | null
     armor?: Armor | null
+    helm?: Helm | null
     shield?: Shield | null
+    ring?: Ring | null
     inventory?: Set<Item>
 }
 
-export class Player extends Creature {
-    level: number = 1
-    attack: number = 0
-    experience: number = 0
-    weapon: Weapon | null
+export class Player extends Thing implements Creature {
+    baseStrength: number
+    baseIntelligence: number
+    baseAgility: number
+    baseMaxHealth: number
+    level: number
+    experience: number
+    health: number
+    action: number = 0
+    actionReserve: number = 0
+    meleeWeapon: MeleeWeapon | null
+    rangedWeapon: RangedWeapon | null
     armor: Armor | null
+    helm: Helm | null
     shield: Shield | null
+    ring: Ring | null
     inventory: Set<Item>
 
     constructor(options: PlayerOptions) {
-        super(options)
-
-        if (options.attack) {
-            this.attack = options.attack
-        }
-
+        super(Object.assign({ passable: false, transparent: true }, options))
+        this.baseStrength = options.strength ?? 0
+        this.baseIntelligence = options.strength ?? 0
+        this.baseAgility = options.agility ?? 0
+        this.baseMaxHealth = options.maxHealth
         this.level = options.level ?? 1
-        if (this.level < 1) {
-            this.level = 1
-        }
-
         this.experience = options.experience ?? 0
-        this.weapon = options.weapon ?? null
+        this.health = options.health ?? this.maxHealth
+        this.meleeWeapon = options.meleeWeapon ?? null
+        this.rangedWeapon = options.rangedWeapon ?? null
+        this.helm = options.helm ?? null
         this.armor = options.armor ?? null
         this.shield = options.shield ?? null
+        this.ring = options.ring ?? null
         this.inventory = options.inventory ? new Set<Item>(options.inventory) : new Set<Item>()
+    }
+
+    get strength(): number {
+        return this.baseStrength + (this.ring?.strength ?? 0)
+    }
+
+    get agility(): number {
+        return this.baseAgility + (this.ring?.agility ?? 0)
+    }
+
+    get intelligence(): number {
+        return this.baseIntelligence + (this.ring?.intelligence ?? 0)
+    }
+
+    get maxHealth(): number {
+        return this.baseMaxHealth + (this.ring?.maxHealth ?? 0)
+    }
+
+    get meleeAttack(): number {
+        return this.strength + (this.meleeWeapon?.attack ?? 0)
+    }
+
+    get meleeDamage(): Dice {
+        return (this.meleeWeapon?.damage ?? new Dice(1, 2)).add(this.strength)
+    }
+
+    get rangedAttack(): number {
+        return this.agility + (this.rangedWeapon?.attack ?? 0)
+    }
+
+    get rangedDamage(): Dice | null {
+        return this.rangedWeapon?.damage?.add(this.agility) ?? null
+    }
+
+    get defense(): number {
+        return this.agility + (this.armor?.defense ?? 0) + (this.helm?.defense ?? 0) + (this.shield?.defense ?? 0)
+    }
+
+    isEquipped(item: Item): boolean {
+        return [...this.equipment()].includes(item)
+    }
+
+    *equipment(): Iterable<Item> {
+        if (this.meleeWeapon) {
+            yield this.meleeWeapon
+        }
+
+        if (this.rangedWeapon) {
+            yield this.rangedWeapon
+        }
+
+        if (this.armor) {
+            yield this.armor
+        }
+
+        if (this.helm) {
+            yield this.helm
+        }
+
+        if (this.shield) {
+            yield this.shield
+        }
+
+        if (this.ring) {
+            yield this.ring
+        }
     }
 
     clone(): Player {
         return new Player(this)
     }
 
-    equip(item: Equippable) {
-        if (!this.inventory.has(item)) {
-            return
-        } else if (item instanceof Weapon) {
-            this.equipWeapon(item)
+    equip(item: Item) {
+        if (item instanceof MeleeWeapon) {
+            this.meleeWeapon = item
+        } else if (item instanceof RangedWeapon) {
+            this.rangedWeapon = item
         } else if (item instanceof Armor) {
-            this.equipArmor(item)
+            this.armor = item
         } else if (item instanceof Shield) {
-            this.equipShield(item)
+            this.shield = item
+        } else if (item instanceof Helm) {
+            this.helm = item
+        } else if (item instanceof Ring) {
+            this.ring = item
         }
     }
 
-    remove(item: Equippable) {
-        if (item === this.weapon) {
-            this.removeWeapon()
-        } else if (item === this.armor) {
-            this.removeArmor()
-        } else if (item === this.shield) {
-            this.removeShield()
-        }
-    }
-
-    equipWeapon(weapon: Weapon) {
-        this.removeWeapon()
-        this.weapon = weapon
-        this.attack += weapon.attack
-    }
-
-    equipArmor(armor: Armor) {
-        this.removeArmor()
-        this.armor = armor
-        this.defense += armor.defense
-    }
-
-    equipShield(shield: Shield) {
-        this.removeShield()
-        this.shield = shield
-        this.defense += shield.defense
-    }
-
-    removeWeapon() {
-        if (!this.weapon) {
-            return
+    remove(item: Item) {
+        if (this.meleeWeapon === item) {
+            this.meleeWeapon = null
         }
 
-        this.attack -= this.weapon.attack
-        this.weapon = null
-    }
-
-    removeArmor() {
-        if (!this.armor) {
-            return
+        if (this.rangedWeapon === item) {
+            this.rangedWeapon = null
         }
 
-        this.defense -= this.armor.defense
-        this.armor = null
-    }
-
-    removeShield() {
-        if (!this.shield) {
-            return
+        if (this.armor === item) {
+            this.armor = null
         }
 
-        this.defense -= this.shield.defense
-        this.shield = null
-    }
+        if (this.helm === item) {
+            this.helm = null
+        }
 
-    isEquipped(item: Item): boolean {
-        return this.weapon === item || this.armor === item || this.shield === item
+        if (this.shield === item) {
+            this.shield = null
+        }
+
+        if (this.ring === item) {
+            this.ring = null
+        }
     }
 
     delete(item: Item) {
+
         if (isEquippable(item)) {
             this.remove(item)
         }
@@ -385,21 +472,30 @@ export enum MonsterState {
 }
 
 export interface MonsterOptions extends CreatureOptions {
+    defense: number
     experience: number,
-    attacks: Attack[],
-    state?: MonsterState
+    attacks: Attack[]
 }
 
-export class Monster extends Creature {
+export class Monster extends Thing implements Creature {
+    agility: number
+    defense: number
+    maxHealth: number
+    health: number
     experience: number
     readonly attacks: Attack[] = []
-    state: MonsterState
+    state: MonsterState = MonsterState.idle
+    action: number = 0
+    actionReserve: number = 0
 
     constructor(options: MonsterOptions) {
-        super(options)
+        super(Object.assign({ passable: false, transparent: true }, options))
+        this.agility = options.agility ?? 0
+        this.defense = options.defense ?? 0
+        this.maxHealth = options.maxHealth
+        this.health = options.health ?? this.maxHealth
         this.experience = options.experience
         this.attacks = [...options.attacks]
-        this.state = options.state ?? MonsterState.idle
 
         if (this.attacks.length == 0) {
             throw new Error(`No attacks defined for monster ${this.name}`)

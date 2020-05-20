@@ -53,23 +53,28 @@ class StatsDialog extends Dialog {
     }
 
     show() {
-        const healthSpan = dom.byId("statsHealth") as HTMLSpanElement
         const player = this.player
-        const attackSpan = dom.byId("statsAttack") as HTMLSpanElement
-        const defenseSpan = dom.byId("statsDefense") as HTMLSpanElement
+        const healthSpan = dom.byId("statsHealth") as HTMLSpanElement
+        const strengthSpan = dom.byId("statsStrength") as HTMLSpanElement
         const agilitySpan = dom.byId("statsAgility") as HTMLSpanElement
+        const intelligenceSpan = dom.byId("statsIntelligence") as HTMLSpanElement
+        const attackSpan = dom.byId("statsAttack") as HTMLSpanElement
         const damageSpan = dom.byId("statsDamage") as HTMLSpanElement
+        const defenseSpan = dom.byId("statsDefense") as HTMLSpanElement
         const levelSpan = dom.byId("statsLevel") as HTMLSpanElement
         const experienceSpan = dom.byId("statsExperience") as HTMLSpanElement
+
         const experienceRequirement = rl.getExperienceRequirement(player.level + 1)
 
         healthSpan.textContent = `${player.health} / ${player.maxHealth}`
-        attackSpan.textContent = `${player.attack}`
+        strengthSpan.textContent = `${player.strength}`
+        agilitySpan.textContent = `${player.agility}`
+        intelligenceSpan.textContent = `${player.intelligence}`
+        attackSpan.textContent = `${player.meleeAttack} / ${player.rangedWeapon ? player.rangedAttack : "NA"}`
+        damageSpan.textContent = `${player.meleeDamage} / ${player.rangedDamage ? player.rangedDamage : "NA"}`
+        console.log(damageSpan)
         defenseSpan.textContent = `${player.defense}`
         agilitySpan.textContent = `${player.agility}`
-
-        const weapon = this.player.weapon ?? things.fists
-        damageSpan.textContent = `${weapon.damage.min} - ${weapon.damage.max}`
         levelSpan.textContent = `${player.level}`
         experienceSpan.textContent = `${player.experience} / ${experienceRequirement}`
 
@@ -587,13 +592,13 @@ class App {
         // accumulate action points
         for (const monster of array.filter(this.map.monsters, m => m.state === rl.MonsterState.aggro)) {
             const reserve = Math.min(monster.actionReserve, monster.agility)
-            monster.action = monster.agility + reserve
+            monster.action = 1 + monster.agility + reserve
             monster.actionReserve = 0
         }
 
         // cap action reserve 
         const reserve = Math.min(this.player.actionReserve, this.player.agility)
-        this.player.action = this.player.agility + reserve
+        this.player.action = 1 + this.player.agility + reserve
         this.player.actionReserve = 0
 
         this.updateMonsterStates()
@@ -619,15 +624,15 @@ class App {
         return cxy
     }
 
-    processPlayerAttack(defender: rl.Monster) {
+    processPlayerMeleeAttack(defender: rl.Monster) {
         // base 60% chance to hit
         // 10% bonus / penalty for every point difference between attack and defense
         // bottoms out at 5% - always SOME chance to hit
         const attacker = this.player
-        const bonus = (attacker.attack - defender.defense) * .1
+        const bonus = (attacker.meleeAttack - defender.defense) * .1
         const hitChance = Math.min(Math.max(.6 + bonus, .05), .95)
         const hit = rand.chance(hitChance)
-        const weapon = attacker.weapon ?? things.fists
+        const weapon = attacker.meleeWeapon ?? things.fists
         const attackVerb = weapon.verb ? weapon.verb : "attacks"
         attacker.action -= weapon.action
 
@@ -637,7 +642,40 @@ class App {
         }
 
         // hit - calculate damage
-        const damage = weapon.damage.roll()
+        const damage = attacker.meleeDamage.roll()
+        output.warning(`${attacker.name} ${attackVerb} ${defender.name} and hits for ${damage} damage!`)
+        defender.health -= damage
+
+        if (defender.health < 0) {
+            output.warning(`${defender.name} has been defeated and ${attacker.name} receives ${defender.experience} experience`)
+            this.player.experience += defender.experience
+            this.map.monsters.delete(defender)
+        }
+    }
+
+    processPlayerRangedAttack(defender: rl.Monster) {
+        // base 40% chance to hit
+        // 10% bonus / penalty for every point difference between attack and defense
+        // bottoms out at 5% - always SOME chance to hit
+        const attacker = this.player
+        if (!attacker.rangedWeapon) {
+            throw new Error("Player has no ranged weapon equipped")
+        }
+
+        const bonus = (attacker.rangedAttack - defender.defense) * .1
+        const hitChance = Math.min(Math.max(.6 + bonus, .05), .95)
+        const hit = rand.chance(hitChance)
+        const weapon = attacker.rangedWeapon
+        const attackVerb = weapon.verb ? weapon.verb : "attacks"
+        attacker.action -= weapon.action
+
+        if (!hit) {
+            output.warning(`${attacker.name} ${attackVerb} ${defender.name} but misses!`)
+            return
+        }
+
+        // hit - calculate damage
+        const damage = attacker.rangedDamage?.roll() ?? 0
         output.warning(`${attacker.name} ${attackVerb} ${defender.name} and hits for ${damage} damage!`)
         defender.health -= damage
 
@@ -764,7 +802,6 @@ class App {
             const dxy = mxy.subPoint(player.position)
             const sgn = dxy.sign()
             const abs = dxy.abs()
-            console.log("player: ", player.position, "click: ", mxy, dxy, sgn, abs)
 
             if (abs.x > 0 && abs.x >= abs.y) {
                 position.x += sgn.x
@@ -811,7 +848,7 @@ class App {
 
         const monster = map.monsterAt(position)
         if (monster) {
-            this.processPlayerAttack(monster)
+            this.processPlayerMeleeAttack(monster)
             return true
         }
 

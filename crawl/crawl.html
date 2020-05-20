@@ -25,20 +25,28 @@
                         <td id="statsHealth"></td>
                     </tr>
                     <tr>
-                        <td>Attack:</td>
-                        <td id="statsAttack"></td>
-                    </tr>
-                    <tr>
-                        <td>Defense:</td>
-                        <td id="statsDefense"></td>
+                        <td>Strength:</td>
+                        <td id="statsStrength"></td>
                     </tr>
                     <tr>
                         <td>Agility:</td>
                         <td id="statsAgility"></td>
                     </tr>
                     <tr>
-                        <td>Damage:</td>
+                        <td>Intelligence:</td>
+                        <td id="statsIntelligence"></td>
+                    </tr>
+                    <tr>
+                        <td>Attack Melee / Ranged:</td>
+                        <td id="statsAttack"></td>
+                    </tr>
+                    <tr>
+                        <td>Damage Melee / Ranged:</td>
                         <td id="statsDamage"></td>
+                    </tr>
+                    <tr>
+                        <td>Defense:</td>
+                        <td id="statsDefense"></td>
                     </tr>
                     <tr>
                         <td>Level:</td>
@@ -66,7 +74,8 @@
             <div class="button-group">
                 <button id="inventoryPrevPageButton" type="button"><strong>P</strong>rev</button>
                 <button id="inventoryNextPageButton" type="button"><strong>N</strong>ext</button>
-                <button id="inventoryCloseButton" class="dialog-close-button" type="button"><strong>C</strong>lose</button>
+                <button id="inventoryCloseButton" class="dialog-close-button"
+                    type="button"><strong>C</strong>lose</button>
             </div>
             <template id="inventoryItemTemplate">
                 <tr class="inventory-item-row item-row">
@@ -92,8 +101,10 @@
                 </tbody>
             </table>
             <div class="button-group">
-                <button id="containerTakeAllButton" class="dialog-close-button mt-3" type="button">Take <strong>A</strong>ll</button>
-                <button id="containerCloseButton" class="dialog-close-button mt-3" type="button"><strong>C</strong>lose</button>
+                <button id="containerTakeAllButton" class="dialog-close-button mt-3" type="button">Take
+                    <strong>A</strong>ll</button>
+                <button id="containerCloseButton" class="dialog-close-button mt-3"
+                    type="button"><strong>C</strong>lose</button>
             </div>
             <template id="containerItemTemplate">
                 <tr class="container-item-row item-row">
@@ -108,9 +119,6 @@
         <div id="defeatDialog" class="dialog" tabindex="0" hidden>
             You have been defeated!
             <button id="tryAgainButton" type="button"><strong>T</strong>ry Again</button>
-        </div>
-        <div id="townDialog" class="dialog" tabindex="0" hidden>
-
         </div>
     </div>
     <script type="module" src="crawl.js"></script>
