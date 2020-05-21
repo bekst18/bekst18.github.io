@@ -69,6 +69,7 @@ body {
     background-color: black;
     color: white;
     padding: 1em;
+    min-width: 20em;
 }
 
 #statsTable td {

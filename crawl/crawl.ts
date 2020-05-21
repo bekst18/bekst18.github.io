@@ -26,6 +26,10 @@ class Dialog {
         this.canvas.focus()
     }
 
+    get hidden() {
+        return this.elem.hidden
+    }
+
     toggle() {
         if (this.elem.hidden) {
             this.show()
@@ -44,12 +48,6 @@ class StatsDialog extends Dialog {
 
         this.openButton.addEventListener("click", () => this.toggle())
         this.closeButton.addEventListener("click", () => this.hide())
-
-        this.elem.addEventListener("keypress", (ev) => {
-            if (ev.key.toUpperCase() === "Z") {
-                this.hide()
-            }
-        })
     }
 
     show() {
@@ -72,7 +70,6 @@ class StatsDialog extends Dialog {
         intelligenceSpan.textContent = `${player.intelligence}`
         attackSpan.textContent = `${player.meleeAttack} / ${player.rangedWeapon ? player.rangedAttack : "NA"}`
         damageSpan.textContent = `${player.meleeDamage} / ${player.rangedDamage ? player.rangedDamage : "NA"}`
-        console.log(damageSpan)
         defenseSpan.textContent = `${player.defense}`
         agilitySpan.textContent = `${player.agility}`
         levelSpan.textContent = `${player.level}`
@@ -114,11 +111,8 @@ class InventoryDialog extends Dialog {
 
         this.elem.addEventListener("keypress", (ev) => {
             const key = ev.key.toUpperCase()
-            if (key === "I" || key === "C") {
-                this.hide()
-            }
-
             const index = parseInt(ev.key)
+
             if (index && index > 0 && index <= 9) {
                 this.selectedIndex = index - 1
                 this.refresh()
@@ -138,6 +132,18 @@ class InventoryDialog extends Dialog {
 
             if (key === "D" && this.selectedIndex >= 0) {
                 this.drop(this.selectedIndex)
+            }
+
+            if (key === "ArrowDown" || key === "S") {
+                ++this.selectedIndex
+                this.selectedIndex = Math.min(this.selectedIndex, 8)
+                this.refresh()
+            }
+
+            if (key === "ArrowUp" || key === "W") {
+                --this.selectedIndex
+                this.selectedIndex = Math.max(this.selectedIndex, -1)
+                this.refresh()
             }
         })
 
@@ -349,6 +355,10 @@ class ContainerDialog {
         this.dialog.hide()
     }
 
+    get hidden() {
+        return this.dialog.hidden
+    }
+
     refresh() {
         const tbody = this.containerTable.tBodies[0]
         dom.removeAllChildren(tbody)
@@ -513,8 +523,18 @@ function removeItem(player: rl.Player, item: rl.Equippable): void {
     output.info(`${item.name} was removed`)
 }
 
+enum TargetCommand {
+    None,
+    Attack,
+    Shoot,
+    Look
+}
+
 class App {
     private readonly canvas = dom.byId("canvas") as HTMLCanvasElement
+    private readonly attackButton = dom.byId("attackButton") as HTMLButtonElement
+    private readonly shootButton = dom.byId("shootButton") as HTMLButtonElement
+    private readonly lookButton = dom.byId("lookButton") as HTMLButtonElement
     private readonly renderer = new gfx.Renderer(this.canvas)
     private readonly player: rl.Player = things.player.clone()
     private readonly inp: input.Input = new input.Input(this.canvas)
@@ -523,11 +543,12 @@ class App {
     private readonly containerDialog = new ContainerDialog(this.player, this.canvas)
     private readonly defeatDialog = new DefeatDialog(this.canvas)
     private map: maps.Map = new maps.Map(0, 0, this.player)
+    private targetCommand: TargetCommand = TargetCommand.None
 
     constructor() {
         const player = this.player
         player.inventory.add(things.healthPotion.clone())
-        player.inventory.add(things.clothArmor)
+        player.inventory.add(things.slingShot)
     }
 
     async exec() {
@@ -540,6 +561,20 @@ class App {
         output.write("Your adventure begins")
         maps.updateVisibility(this.map, this.map.player.position, rl.lightRadius)
         requestAnimationFrame(() => this.tick())
+
+        document.addEventListener("keypress", (ev) => this.handleKeyPress(ev))
+
+        this.attackButton.addEventListener("click", () => {
+            this.targetCommand = TargetCommand.Attack
+        })
+
+        this.shootButton.addEventListener("click", () => {
+            this.targetCommand = TargetCommand.Shoot
+        })
+
+        this.lookButton.addEventListener("click", () => {
+            this.targetCommand = TargetCommand.Look
+        })
     }
 
 
@@ -614,7 +649,7 @@ class App {
 
     canvasToMapPoint(cxy: geo.Point) {
         const scrollOffset = this.getScrollOffset()
-        const mxy = cxy.subPoint(scrollOffset).divScalar(rl.tileSize)
+        const mxy = cxy.subPoint(scrollOffset).divScalar(rl.tileSize).floor()
         return mxy
     }
 
@@ -781,9 +816,14 @@ class App {
         const inp = this.inp
         const position = player.position.clone()
 
+        if (this.targetCommand !== TargetCommand.None) {
+            this.handleTargetingInput()
+            return false
+        }
+
         if (inp.mouseLeftReleased) {
             // determine the map coordinates the user clicked on
-            const mxy = this.canvasToMapPoint(new geo.Point(inp.mouseX, inp.mouseY)).floor()
+            const mxy = this.canvasToMapPoint(new geo.Point(inp.mouseX, inp.mouseY))
 
             const clickFixture = map.fixtureAt(mxy)
             if (clickFixture) {
@@ -823,10 +863,6 @@ class App {
         }
         else if (inp.pressed("d") || inp.pressed("ArrowRight")) {
             position.x += 1
-        } else if (inp.pressed("z")) {
-            this.statsDialog.show()
-        } else if (inp.pressed("i")) {
-            this.inventoryDialog.show()
         } else if (inp.pressed(" ")) {
             this.player.actionReserve += this.player.action
             this.player.action = 0
@@ -878,6 +914,52 @@ class App {
         return true
     }
 
+    private handleTargetingInput() {
+        if (!this.inp.mouseLeftReleased) {
+            this.inp.flush()
+            return false
+        }
+
+        const cxy = new geo.Point(this.inp.mouseX, this.inp.mouseY)
+        const mxy = this.canvasToMapPoint(cxy)
+
+        if (geo.calcManhattenDist(this.player.position, mxy) > rl.lightRadius) {
+            this.inp.flush()
+            output.error(`Darkness!`)
+            return false
+        } 
+
+        switch (this.targetCommand) {
+            case TargetCommand.Look: {
+                // show what user clicked on
+                for (const th of this.map.at(mxy)) {
+                    output.info(`You see ${th.name}`)
+                }
+            }
+                break
+
+            case TargetCommand.Attack: {
+                const monster = this.map.monsterAt(mxy)
+                if (monster) {
+                    this.processPlayerMeleeAttack(monster)
+                }
+            }
+                break
+
+            case TargetCommand.Shoot: {
+                const monster = this.map.monsterAt(mxy)
+                if (monster) {
+                    this.processPlayerRangedAttack(monster)
+                }
+            }
+                break
+        }
+
+        this.targetCommand = TargetCommand.None
+        this.inp.flush()
+        return false
+    }
+
     drawFrame() {
         this.handleResize()
 
@@ -885,6 +967,13 @@ class App {
         const offset = this.getScrollOffset()
 
         // note - drawing order matters - draw from bottom to top
+        if (this.targetCommand !== TargetCommand.None) {
+            this.canvas.style.cursor = "crosshair"
+        } else {
+            this.canvas.style.cursor = ""
+        }
+
+        this.shootButton.disabled = !this.player.rangedWeapon
 
         // draw various layers of sprites
         const map = this.map
@@ -961,6 +1050,51 @@ class App {
             width: interiorWidth,
             height: 6
         }))
+    }
+
+    private hideDialogs() {
+        this.inventoryDialog.hide()
+        this.statsDialog.hide()
+    }
+
+    private handleKeyPress(ev: KeyboardEvent) {
+        const key = ev.key.toUpperCase()
+
+        switch (key) {
+            case "I": {
+                const wasHidden = this.inventoryDialog.hidden
+                this.hideDialogs()
+                if (wasHidden) {
+                    this.inventoryDialog.show()
+                }
+            }
+                break;
+
+            case "Z": {
+                const wasHidden = this.statsDialog.hidden
+                this.hideDialogs()
+                if (wasHidden) {
+                    this.statsDialog.show()
+                }
+            }
+                break;
+
+            case "L":
+                this.targetCommand = TargetCommand.Look
+                break;
+
+            case "ENTER":
+                if (ev.ctrlKey && this.player.rangedWeapon) {
+                    this.targetCommand = TargetCommand.Shoot
+                } else {
+                    this.targetCommand = TargetCommand.Attack
+                }
+                break;
+
+            case "L":
+                this.targetCommand = TargetCommand.Shoot
+                break;
+        }
     }
 }
 

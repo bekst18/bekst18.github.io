@@ -169,7 +169,7 @@ export const dagger = new rl.Weapon({
     action: 1,
     damage: new rl.Dice(1, 3),
     verb: "jabs at"
-})
+})  
 
 export const ironSword = new rl.Weapon({
     name: "Iron Sword",
