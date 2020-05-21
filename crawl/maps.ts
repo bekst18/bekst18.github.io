@@ -11,6 +11,7 @@ export interface Layer<T extends rl.Thing> {
     delete(item: T): void
     has(item: T): boolean
     at(position: geo.Point): T | null
+    within(aabb: geo.AABB): Generator<T>
     size: number
     [Symbol.iterator](): Generator<T>
 }
@@ -44,10 +45,18 @@ export class SetLayer<T extends rl.Thing> implements Layer<T> {
         return null
     }
 
+    *within(aabb: geo.AABB): Generator<T> {
+        for (const item of this.set) {
+            if (aabb.contains(item.position)) {
+                yield item
+            }
+        }
+    }
+
     get size() {
         return this.set.size
     }
-    
+
     *[Symbol.iterator](): Generator<T> {
         for (const value of this.set) {
             yield value
@@ -94,15 +103,28 @@ export class GridLayer<T extends rl.Thing> implements Layer<T> {
         return this.grd.atPoint(position)
     }
 
+    *within(aabb: geo.AABB): Generator<T> {
+        for (const [item] of this.grd.scanAABB(aabb)) {
+            if (item) {
+                yield item
+            }
+        }
+    }
+
     get size() {
         return this.set.size
     }
-    
+
     *[Symbol.iterator](): Generator<T> {
         for (const value of this.set) {
             yield value
         }
     }
+}
+
+export enum Lighting {
+    None,
+    Ambient,
 }
 
 /**
@@ -113,6 +135,7 @@ export class Map {
     fixtures: Layer<rl.Fixture>
     monsters: Layer<rl.Monster>
     containers: Layer<rl.Container>
+    lighting: Lighting = Lighting.None
 
     constructor(readonly width: number, readonly height: number, readonly player: rl.Player) {
         this.tiles = new GridLayer(width, height)
@@ -191,7 +214,7 @@ export class Map {
     }
 
     isPassable(position: geo.Point): boolean {
-        return array.all(this.at(position), th => th.passable)
+        return this.inBounds(position) && array.all(this.at(position), th => th.passable)
     }
 }
 

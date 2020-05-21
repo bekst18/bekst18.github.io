@@ -68,37 +68,10 @@ interface Room {
     depth: number,
 }
 
-
-export async function generateMap(player: rl.Player, renderer: gfx.Renderer, width: number, height: number): Promise<maps.Map> {
+export async function generateDungeonLevel(renderer: gfx.Renderer, player: rl.Player, width: number, height: number): Promise<maps.Map> {
     const map = generateMapRooms(width, height, player)
-
-    // bake all 24x24 tile images to a single array texture
-    // store mapping from image url to index
-    let imageUrls: string[] = []
-    imageUrls.push(...array.map(map, t => t.image))
-    imageUrls = imageUrls.filter(url => url)
-    imageUrls = array.distinct(imageUrls)
-
-    const layerMap = new Map<string, number>(imageUrls.map((url, i) => [url, i]))
-    const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
-    const texture = renderer.bakeTextureArray(rl.tileSize, rl.tileSize, images)
-
-    for (const th of map) {
-        if (!th.image) {
-            th.textureLayer = -1
-            th.texture = null
-            continue
-        }
-
-        const layer = layerMap.get(th.image)
-        if (layer === undefined) {
-            throw new Error(`texture index not found for ${th.image}`)
-        }
-
-        th.texture = texture
-        th.textureLayer = layer
-    }
-
+    map.lighting = maps.Lighting.None
+    await loadSpriteTextures(renderer, map)
     return map
 }
 
@@ -394,7 +367,7 @@ function findExteriorNeighbor(cells: CellGrid, pt: geo.Point): geo.Point | null 
     return null
 }
 
-function* visitNeighbors(cells: CellGrid, pt: geo.Point): Iterable<[CellType, geo.Point]> {
+function* visitNeighbors<T>(cells: grid.Grid<T>, pt: geo.Point): Iterable<[T, geo.Point]> {
     cells.assertBounds(pt.x, pt.y)
 
     // w
@@ -508,4 +481,115 @@ function isValidPlacement(src: CellGrid, dst: CellGrid, offset: geo.Point): bool
     }
 
     return true
+}
+
+export async function generateOutdoorMap(renderer: gfx.Renderer, player: rl.Player, width: number, height: number): Promise<maps.Map> {
+    const map = new maps.Map(width, height, player)
+    map.lighting = maps.Lighting.Ambient
+
+    player.position = new geo.Point(0, 0)
+    generateOutdoorTerrain(map)
+    await loadSpriteTextures(renderer, map)
+    return map
+}
+
+enum OutdoorTileType {
+    water,
+    grass,
+    dirt,
+    sand
+}
+
+function generateOutdoorTerrain(map: maps.Map) {
+    const tiles = grid.generate(map.width, map.height, () => OutdoorTileType.water)
+    const stack = new Array<geo.Point>()
+
+    // "plant" a continent
+    const seed = new geo.Point(Math.floor(map.width / 2), Math.floor(map.height / 2))
+    map.player.position = seed
+    tiles.setPoint(seed, OutdoorTileType.grass)
+
+    const maxPlaced = map.width * map.height * .5
+    let placed = 1
+
+    for (const [t, xy] of visitNeighbors(tiles, seed)) {
+        if (t === OutdoorTileType.water) {
+            stack.push(xy)
+        }
+    }
+
+    while (stack.length > 0 && placed < maxPlaced) {
+        const pt = array.pop(stack)
+        tiles.setPoint(pt, OutdoorTileType.grass)
+        ++placed
+
+        for (const [t, xy] of visitNeighbors(tiles, pt)) {
+            if (t === OutdoorTileType.water) {
+                stack.push(xy)
+            }
+        }
+
+        rand.shuffle(stack)
+    }
+
+    for (const [t, x, y] of tiles.scan()) {
+        switch (t) {
+            case (OutdoorTileType.water): {
+                const tile = things.water.clone()
+                tile.position = new geo.Point(x, y)
+                map.tiles.add(tile)
+            }
+                break
+
+            case (OutdoorTileType.dirt): {
+                const tile = things.dirt.clone()
+                tile.position = new geo.Point(x, y)
+                map.tiles.add(tile)
+            }
+                break
+
+            case (OutdoorTileType.grass): {
+                const tile = things.grass.clone()
+                tile.position = new geo.Point(x, y)
+                map.tiles.add(tile)
+            }
+                break
+
+            case (OutdoorTileType.sand): {
+                const tile = things.sand.clone()
+                tile.position = new geo.Point(x, y)
+                map.tiles.add(tile)
+            }
+                break
+        }
+    }
+}
+
+export async function loadSpriteTextures(renderer: gfx.Renderer, map: maps.Map): Promise<void> {
+    // bake all 24x24 tile images to a single array texture
+    // store mapping from image url to index
+    let imageUrls: string[] = []
+    imageUrls.push(...array.map(map, t => t.image))
+    imageUrls = imageUrls.filter(url => url)
+    imageUrls = array.distinct(imageUrls)
+
+    const layerMap = new Map<string, number>(imageUrls.map((url, i) => [url, i]))
+    const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
+    const texture = renderer.bakeTextureArray(rl.tileSize, rl.tileSize, images)
+
+    for (const th of map) {
+        if (!th.image) {
+            th.textureLayer = -1
+            th.texture = null
+            continue
+        }
+
+        const layer = layerMap.get(th.image)
+        if (layer === undefined) {
+            throw new Error(`texture index not found for ${th.image}`)
+        }
+
+        th.texture = texture
+        th.textureLayer = layer
+    }
 }

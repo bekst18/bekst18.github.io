@@ -6,7 +6,6 @@ import * as rand from "../shared/rand.js"
 import * as gfx from "./gfx.js"
 
 export const tileSize = 24
-export const lightRadius = 5
 
 export enum Visibility {
     None,
@@ -266,6 +265,7 @@ export interface Creature extends Thing {
 }
 
 export interface PlayerOptions extends CreatureOptions {
+    lightRadius: number
     level?: number
     experience?: number
     strength?: number
@@ -296,6 +296,7 @@ export class Player extends Thing implements Creature {
     helm: Helm | null
     shield: Shield | null
     ring: Ring | null
+    lightRadius: number
     inventory: Set<Item>
 
     constructor(options: PlayerOptions) {
@@ -313,6 +314,7 @@ export class Player extends Thing implements Creature {
         this.armor = options.armor ?? null
         this.shield = options.shield ?? null
         this.ring = options.ring ?? null
+        this.lightRadius = options.lightRadius
         this.inventory = options.inventory ? new Set<Item>(options.inventory) : new Set<Item>()
     }
 

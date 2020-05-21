@@ -114,6 +114,15 @@ export class AABB {
         )
     }
 
+    contains(pt: Point): boolean {
+        return (
+            pt.x >= this.min.x &&
+            pt.y >= this.min.y &&
+            pt.x < this.max.x &&
+            pt.y < this.max.y
+        )
+    }
+
     translate(offset: Point): AABB {
         return new AABB(this.min.addPoint(offset), this.max.addPoint(offset))
     }

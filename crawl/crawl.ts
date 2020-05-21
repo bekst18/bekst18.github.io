@@ -48,6 +48,12 @@ class StatsDialog extends Dialog {
 
         this.openButton.addEventListener("click", () => this.toggle())
         this.closeButton.addEventListener("click", () => this.hide())
+        this.elem.addEventListener("keydown", ev => {
+            const key = ev.key.toUpperCase()
+            if (key === "ESCAPE") {
+                this.hide()
+            }
+        })
     }
 
     show() {
@@ -109,7 +115,7 @@ class InventoryDialog extends Dialog {
             this.refresh()
         })
 
-        this.elem.addEventListener("keypress", (ev) => {
+        this.elem.addEventListener("keydown", (ev) => {
             const key = ev.key.toUpperCase()
             const index = parseInt(ev.key)
 
@@ -134,16 +140,20 @@ class InventoryDialog extends Dialog {
                 this.drop(this.selectedIndex)
             }
 
-            if (key === "ArrowDown" || key === "S") {
+            if (key === "ARROWDOWN" || key === "S") {
                 ++this.selectedIndex
                 this.selectedIndex = Math.min(this.selectedIndex, 8)
                 this.refresh()
             }
 
-            if (key === "ArrowUp" || key === "W") {
+            if (key === "ARROWUP" || key === "W") {
                 --this.selectedIndex
                 this.selectedIndex = Math.max(this.selectedIndex, -1)
                 this.refresh()
+            }
+
+            if (key === "ESCAPE") {
+                this.hide()
             }
         })
 
@@ -456,7 +466,11 @@ function getSortedItemsPage(items: Iterable<rl.Item>, pageIndex: number, pageSiz
     return page
 }
 
-function canSee(map: maps.Map, eye: geo.Point, target: geo.Point): boolean {
+function canSee(map: maps.Map, eye: geo.Point, target: geo.Point, lightRadius: number): boolean {
+    if (geo.calcManhattenDist(eye, target) > lightRadius) {
+        return false
+    }
+
     for (const pt of march(eye, target)) {
         // ignore start point
         if (pt.equal(eye)) {
@@ -553,13 +567,15 @@ class App {
 
     async exec() {
         this.canvas.focus()
-        this.map = await gen.generateMap(this.player, this.renderer, 32, 32)
+        this.map = await gen.generateOutdoorMap(this.renderer, this.player, 64, 64)
+        console.log(this.map)
         if (!this.player.position) {
             throw new Error("Player is not positioned")
         }
 
         output.write("Your adventure begins")
-        maps.updateVisibility(this.map, this.map.player.position, rl.lightRadius)
+        this.handleResize()
+        this.updateVisibility()
         requestAnimationFrame(() => this.tick())
 
         document.addEventListener("keypress", (ev) => this.handleKeyPress(ev))
@@ -582,7 +598,7 @@ class App {
         const nextCreature = this.getNextCreature()
         if (nextCreature instanceof rl.Player) {
             if (this.handleInput()) {
-                maps.updateVisibility(this.map, this.player.position, rl.lightRadius)
+                this.updateVisibility()
             }
         } else if (nextCreature instanceof rl.Monster) {
             this.tickMonster(nextCreature)
@@ -758,12 +774,13 @@ class App {
     updateMonsterState(monster: rl.Monster) {
         // aggro state
         const map = this.map
-        if (monster.state !== rl.MonsterState.aggro && canSee(map, monster.position, map.player.position)) {
+        const lightRadius = this.calcLightRadius()
+        if (monster.state !== rl.MonsterState.aggro && canSee(map, monster.position, map.player.position, lightRadius)) {
             monster.action = 0
             monster.state = rl.MonsterState.aggro
         }
 
-        if (monster.state === rl.MonsterState.aggro && !canSee(map, monster.position, map.player.position)) {
+        if (monster.state === rl.MonsterState.aggro && !canSee(map, monster.position, map.player.position, lightRadius)) {
             monster.action = 0
             monster.state = rl.MonsterState.idle
         }
@@ -876,6 +893,10 @@ class App {
             return false
         }
 
+        if (!this.map.inBounds(position)) {
+            return false
+        }
+
         const tile = map.tileAt(position)
         if (tile && !tile.passable) {
             output.info(`Blocked by ${tile.name}`)
@@ -923,11 +944,12 @@ class App {
         const cxy = new geo.Point(this.inp.mouseX, this.inp.mouseY)
         const mxy = this.canvasToMapPoint(cxy)
 
-        if (geo.calcManhattenDist(this.player.position, mxy) > rl.lightRadius) {
+        const lightRadius = this.calcLightRadius()
+        if (!canSee(this.map, this.player.position, mxy, lightRadius)) {
             this.inp.flush()
-            output.error(`Darkness!`)
+            output.error(`Can't see!`)
             return false
-        } 
+        }
 
         switch (this.targetCommand) {
             case TargetCommand.Look: {
@@ -960,7 +982,32 @@ class App {
         return false
     }
 
-    drawFrame() {
+    private updateVisibility() {
+        // update visibility around player
+        // limit radius to visible viewport area
+        const lightRadius = this.calcLightRadius()
+        maps.updateVisibility(this.map, this.player.position, lightRadius)
+    }
+
+    private calcMapViewport(): geo.AABB {
+        const aabb = new geo.AABB(
+            this.canvasToMapPoint(new geo.Point(0, 0)),
+            this.canvasToMapPoint(new geo.Point(this.canvas.width + rl.tileSize, this.canvas.height + rl.tileSize)))
+
+        return aabb
+    }
+
+    private calcLightRadius(): number {
+        const viewportAABB = this.calcMapViewport()
+        const viewportLightRadius = Math.max(viewportAABB.width, viewportAABB.height)
+        if (this.map.lighting === maps.Lighting.Ambient) {
+            return viewportLightRadius
+        }
+
+        return Math.min(viewportLightRadius, this.player.lightRadius)
+    }
+
+    private drawFrame() {
         this.handleResize()
 
         // center the grid around the playerd
@@ -975,21 +1022,27 @@ class App {
 
         this.shootButton.disabled = !this.player.rangedWeapon
 
-        // draw various layers of sprites
+        const viewportAABB = this.calcMapViewport()
         const map = this.map
-        for (const tile of map.tiles) {
+
+        const tiles = map.tiles.within(viewportAABB)
+        const fixtures = map.fixtures.within(viewportAABB)
+        const containers = map.containers.within(viewportAABB)
+        const monsters = map.monsters.within(viewportAABB)
+
+        for (const tile of tiles) {
             this.drawThing(offset, tile)
         }
 
-        for (const fixture of map.fixtures) {
+        for (const fixture of fixtures) {
             this.drawThing(offset, fixture)
         }
 
-        for (const container of map.containers) {
+        for (const container of containers) {
             this.drawThing(offset, container)
         }
 
-        for (const creature of map.monsters) {
+        for (const creature of monsters) {
             this.drawThing(offset, creature)
         }
 
@@ -1094,6 +1147,19 @@ class App {
             case "L":
                 this.targetCommand = TargetCommand.Shoot
                 break;
+        }
+    }
+
+    private *iterViewportCoords(): Iterable<geo.Point> {
+        const nw = this.canvasToMapPoint(new geo.Point(0, 0))
+        const se = this.canvasToMapPoint(new geo.Point(this.canvas.width, this.canvas.height))
+        const width = se.x - nw.x
+        const height = se.y - nw.y
+
+        for (let y = 0; y < height; ++y) {
+            for (let x = 0; x < width; ++x) {
+                yield new geo.Point(x, y)
+            }
         }
     }
 }

@@ -36,7 +36,7 @@ body {
 }
 
 #ui {
-    float: right;
+    background-color: black;
 }
 
 .message {

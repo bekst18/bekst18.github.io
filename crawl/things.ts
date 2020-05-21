@@ -16,6 +16,55 @@ export const floor = new rl.Tile({
     transparent: true
 })
 
+export const water = new rl.Tile({
+    name: "Water",
+    image: "./assets/water.png",
+    passable: false,
+    transparent: true
+})
+
+export const grass = new rl.Tile({
+    name: "Grass",
+    image: "./assets/grass.png",
+    passable: true,
+    transparent: true
+})
+
+export const dirt = new rl.Tile({
+    name: "Dirt",
+    image: "./assets/dirt.png",
+    passable: true,
+    transparent: true
+})
+
+export const sand = new rl.Tile({
+    name: "Sand",
+    image: "./assets/sand.png",
+    passable: true,
+    transparent: true
+})
+
+export const trees = new rl.Fixture({
+    name: "Trees",
+    image: "./assets/trees.png",
+    passable: true,
+    transparent: false
+})
+
+export const hills = new rl.Fixture({
+    name: "Hills",
+    image: "./assets/hills.png",
+    passable: true,
+    transparent: true
+})
+
+export const mountains = new rl.Fixture({
+    name: "Mountaihs",
+    image: "./assets/mountain.png",
+    passable: false,
+    transparent: false
+})
+
 export const door = new rl.Door({
     name: "A Closed Wooden Door",
     image: "./assets/closed.png",
@@ -147,7 +196,7 @@ export const skeleton = new rl.Monster({
     ]
 })
 
-export const fists = new rl.Weapon({
+export const fists = new rl.MeleeWeapon({
     name: "Fists",
     attack: 0,
     damage: new rl.Dice(1, 2),
@@ -155,7 +204,7 @@ export const fists = new rl.Weapon({
     verb: "punches at"
 })
 
-export const sharpStick = new rl.Weapon({
+export const sharpStick = new rl.MeleeWeapon({
     name: "Sharp Stick",
     attack: 1,
     action: 1,
@@ -163,15 +212,15 @@ export const sharpStick = new rl.Weapon({
     verb: "swings at"
 })
 
-export const dagger = new rl.Weapon({
+export const dagger = new rl.MeleeWeapon({
     name: "Dagger",
     attack: 1,
     action: 1,
     damage: new rl.Dice(1, 3),
     verb: "jabs at"
-})  
+})
 
-export const ironSword = new rl.Weapon({
+export const ironSword = new rl.MeleeWeapon({
     name: "Iron Sword",
     attack: 2,
     action: 1,
@@ -179,7 +228,7 @@ export const ironSword = new rl.Weapon({
     verb: "thrusts at"
 })
 
-export const steelSword = new rl.Weapon({
+export const steelSword = new rl.MeleeWeapon({
     name: "Steel Sword",
     attack: 3,
     damage: new rl.Dice(3, 5),
@@ -187,7 +236,7 @@ export const steelSword = new rl.Weapon({
     verb: "thrusts at"
 })
 
-export const slingShot = new rl.Weapon({
+export const slingShot = new rl.RangedWeapon({
     name: "Slingshot",
     attack: 1,
     range: 3,
@@ -196,7 +245,7 @@ export const slingShot = new rl.Weapon({
     verb: "shoots at"
 })
 
-export const woodenBow = new rl.Weapon({
+export const woodenBow = new rl.RangedWeapon({
     name: "Wooden Bow",
     attack: 2,
     range: 5,
@@ -278,5 +327,6 @@ export const chest = new rl.Container({
 export const player = new rl.Player({
     name: "Player",
     image: "./assets/char.png",
-    maxHealth: 6
+    maxHealth: 6,
+    lightRadius: 5
 })
