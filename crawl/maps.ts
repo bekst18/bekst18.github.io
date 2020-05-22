@@ -1,5 +1,5 @@
 import * as geo from "../shared/geo2d.js"
-import * as array from "../shared/array.js"
+import * as iter from "../shared/iter.js"
 import * as rl from "./rl.js"
 import * as grid from "../shared/grid.js"
 
@@ -214,7 +214,7 @@ export class Map {
     }
 
     isPassable(position: geo.Point): boolean {
-        return this.inBounds(position) && array.all(this.at(position), th => th.passable)
+        return this.inBounds(position) && iter.all(this.at(position), th => th.passable)
     }
 }
 
@@ -255,7 +255,7 @@ function updateVisibilityOctant(map: Map, eye: geo.Point, radius: number, octant
                 continue
             }
 
-            const opaque = array.any(map.at(mapPoint), th => !th.transparent)
+            const opaque = iter.any(map.at(mapPoint), th => !th.transparent)
             if (opaque) {
                 shadows.push(octantPoint)
             }
@@ -287,7 +287,7 @@ function transformOctant(coords: geo.Point, octant: number): geo.Point {
 }
 
 function isShadowed(shadows: geo.Point[], coords: geo.Point): boolean {
-    return array.any(shadows, x => shadowCoversPoint(x, coords))
+    return iter.any(shadows, x => shadowCoversPoint(x, coords))
 }
 
 function shadowCoversPoint(shadow: geo.Point, coords: geo.Point): boolean {

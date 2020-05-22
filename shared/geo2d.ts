@@ -98,9 +98,16 @@ export class AABB {
         return new Point(this.min.x + this.width / 2, this.min.y + this.height / 2)
     }
 
-    combine(aabb: AABB): AABB {
+    union(aabb: AABB): AABB {
         const min = new Point(Math.min(this.min.x, aabb.min.x), Math.min(this.min.y, aabb.min.y))
         const max = new Point(Math.max(this.max.x, aabb.max.x), Math.max(this.max.y, aabb.max.y))
+        const r = new AABB(min, max)
+        return r
+    }
+
+    intersection(aabb: AABB): AABB {
+        const min = new Point(Math.max(this.min.x, aabb.min.x), Math.max(this.min.y, aabb.min.y))
+        const max = new Point(Math.min(this.max.x, aabb.max.x), Math.min(this.max.y, aabb.max.y))
         const r = new AABB(min, max)
         return r
     }
@@ -200,7 +207,7 @@ export class AABBTree<T> {
         const newParent: InternalNode<T> = {
             type: NodeType.Internal,
             parent: sibling.parent,
-            aabb: aabb.combine(sibling.aabb),
+            aabb: aabb.union(sibling.aabb),
             children: [newLeaf, sibling]
         }
 
@@ -302,8 +309,8 @@ export class AABBTree<T> {
             case NodeType.Internal:
                 const n = node.children.reduce((a, b) => {
                     // calculate surface area increase for node a
-                    const da = a.aabb.area - a.aabb.combine(aabb).area
-                    const db = b.aabb.area - b.aabb.combine(aabb).area
+                    const da = a.aabb.area - a.aabb.union(aabb).area
+                    const db = b.aabb.area - b.aabb.union(aabb).area
                     return da < db ? a : b
                 })
 
@@ -318,7 +325,7 @@ export class AABBTree<T> {
 
     private updateAABBs(node: InternalNode<T> | null) {
         while (node != null) {
-            node.aabb = node.children[0].aabb.combine(node.children[1].aabb)
+            node.aabb = node.children[0].aabb.union(node.children[1].aabb)
             node = node.parent
         }
     }

@@ -303,3 +303,31 @@ export function* scan(x0: number, y0: number, width: number, height: number): It
         }
     }
 }
+
+export function* visitNeighbors<T>(cells: Grid<T>, pt: geo.Point): Iterable<[T, geo.Point]> {
+    cells.assertBounds(pt.x, pt.y)
+
+    // w
+    if (pt.x > 0) {
+        const w = new geo.Point(pt.x - 1, pt.y)
+        yield [cells.atPoint(w), w]
+    }
+
+    // s
+    if (pt.y < cells.height - 1) {
+        const s = new geo.Point(pt.x, pt.y + 1)
+        yield [cells.atPoint(s), s]
+    }
+
+    // e
+    if (pt.x < cells.width - 1) {
+        const e = new geo.Point(pt.x + 1, pt.y)
+        yield [cells.atPoint(e), e]
+    }
+
+    // n
+    if (pt.y > 0) {
+        const n = new geo.Point(pt.x, pt.y - 1)
+        yield [cells.atPoint(n), n]
+    }
+}

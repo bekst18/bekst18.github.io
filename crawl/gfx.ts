@@ -57,7 +57,6 @@ in vec3 frag_uvw;
 out vec4 out_color;
 
 void main() {
-    float l = 1.f;
     out_color = frag_color;
 
     if (use_array_texture) {
@@ -65,8 +64,6 @@ void main() {
     } else {
         out_color *= texture(sampler, frag_uvw.xy);
     }
-
-    out_color *= vec4(l, l, l, 1);
 }`
 
 export enum SpriteFlags {
@@ -414,7 +411,6 @@ export class Renderer {
 
     private checkSize() {
         const canvas = this.canvas
-        const gl = this.gl
 
         if (canvas.width !== canvas.clientWidth && canvas.height !== canvas.clientHeight) {
             canvas.width = canvas.clientWidth

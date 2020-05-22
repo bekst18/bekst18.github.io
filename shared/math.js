@@ -1,0 +1,13 @@
+/**
+ * math utility library
+ */
+/**
+ * clamp x such that it is in the interval [min, max]
+ * @param x value to clamp
+ * @param min minimum value
+ * @param max maximum vaule
+ */
+export function clamp(x, min, max) {
+    return Math.min(Math.max(x, min), max);
+}
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJmaWxlIjoibWF0aC5qcyIsInNvdXJjZVJvb3QiOiIiLCJzb3VyY2VzIjpbIm1hdGgudHMiXSwibmFtZXMiOltdLCJtYXBwaW5ncyI6IkFBQUE7O0dBRUc7QUFFSDs7Ozs7R0FLRztBQUNILE1BQU0sVUFBVSxLQUFLLENBQUMsQ0FBUyxFQUFFLEdBQVcsRUFBRSxHQUFXO0lBQ3JELE9BQU8sSUFBSSxDQUFDLEdBQUcsQ0FBQyxJQUFJLENBQUMsR0FBRyxDQUFDLENBQUMsRUFBRSxHQUFHLENBQUMsRUFBRSxHQUFHLENBQUMsQ0FBQTtBQUMxQyxDQUFDIiwic291cmNlc0NvbnRlbnQiOlsiLyoqXHJcbiAqIG1hdGggdXRpbGl0eSBsaWJyYXJ5XHJcbiAqL1xyXG5cclxuLyoqXHJcbiAqIGNsYW1wIHggc3VjaCB0aGF0IGl0IGlzIGluIHRoZSBpbnRlcnZhbCBbbWluLCBtYXhdXHJcbiAqIEBwYXJhbSB4IHZhbHVlIHRvIGNsYW1wXHJcbiAqIEBwYXJhbSBtaW4gbWluaW11bSB2YWx1ZVxyXG4gKiBAcGFyYW0gbWF4IG1heGltdW0gdmF1bGVcclxuICovXHJcbmV4cG9ydCBmdW5jdGlvbiBjbGFtcCh4OiBudW1iZXIsIG1pbjogbnVtYmVyLCBtYXg6IG51bWJlcik6IG51bWJlciB7XHJcbiAgICByZXR1cm4gTWF0aC5taW4oTWF0aC5tYXgoeCwgbWluKSwgbWF4KVxyXG59Il19

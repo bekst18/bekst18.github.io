@@ -5,6 +5,7 @@ import * as rl from "./rl.js"
 import * as geo from "../shared/geo2d.js"
 import * as grid from "../shared/grid.js"
 import * as array from "../shared/array.js"
+import * as iter from "../shared/iter.js"
 import * as rand from "../shared/rand.js"
 import * as things from "./things.js"
 import * as maps from "./maps.js"
@@ -92,7 +93,7 @@ function generateMapRooms(width: number, height: number, player: rl.Player): map
     map.player.position = firstRoom.interiorPt.clone()
 
     const stairsUp = tileset.stairsUp.clone()
-    const stairsUpPosition = array.find(visitInteriorCoords(cells, firstRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
+    const stairsUpPosition = iter.find(visitInteriorCoords(cells, firstRoom.interiorPt), pt => iter.any(grid.visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsUpPosition) {
         throw new Error("Failed to place stairs up")
     }
@@ -101,7 +102,7 @@ function generateMapRooms(width: number, height: number, player: rl.Player): map
 
     const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
     const stairsDown = tileset.stairsDown.clone()
-    const stairsDownPosition = array.find(visitInteriorCoords(cells, lastRoom.interiorPt), pt => array.any(visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
+    const stairsDownPosition = iter.find(visitInteriorCoords(cells, lastRoom.interiorPt), pt => iter.any(grid.visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsDownPosition) {
         throw new Error("Failed to place stairs down")
     }
@@ -185,7 +186,7 @@ function tryPlaceMonster(cells: CellGrid, room: Room, map: maps.Map): boolean {
             continue
         }
 
-        if (array.any(map, th => (th.position?.equal(pt) ?? false) && !th.passable)) {
+        if (iter.any(map, th => (th.position?.equal(pt) ?? false) && !th.passable)) {
             continue
         }
 
@@ -220,7 +221,7 @@ function tryPlaceTreasure(cells: CellGrid, room: Room, map: maps.Map): boolean {
             continue
         }
 
-        if (array.any(map, th => (th.position?.equal(pt) ?? false) && !th.passable)) {
+        if (iter.any(map, th => (th.position?.equal(pt) ?? false) && !th.passable)) {
             continue
         }
 
@@ -358,7 +359,7 @@ function generateRoomTemplate(width: number, height: number): RoomTemplate {
 }
 
 function findExteriorNeighbor(cells: CellGrid, pt: geo.Point): geo.Point | null {
-    for (const [t, npt] of visitNeighbors(cells, pt)) {
+    for (const [t, npt] of grid.visitNeighbors(cells, pt)) {
         if (t === CellType.Exterior) {
             return npt
         }
@@ -367,66 +368,8 @@ function findExteriorNeighbor(cells: CellGrid, pt: geo.Point): geo.Point | null 
     return null
 }
 
-function* visitNeighbors<T>(cells: grid.Grid<T>, pt: geo.Point): Iterable<[T, geo.Point]> {
-    cells.assertBounds(pt.x, pt.y)
-
-    // w
-    if (pt.x > 0) {
-        const w = new geo.Point(pt.x - 1, pt.y)
-        yield [cells.atPoint(w), w]
-    }
-
-    // s
-    if (pt.y < cells.height - 1) {
-        const s = new geo.Point(pt.x, pt.y + 1)
-        yield [cells.atPoint(s), s]
-    }
-
-    // e
-    if (pt.x < cells.width - 1) {
-        const e = new geo.Point(pt.x + 1, pt.y)
-        yield [cells.atPoint(e), e]
-    }
-
-    // n
-    if (pt.y > 0) {
-        const n = new geo.Point(pt.x, pt.y - 1)
-        yield [cells.atPoint(n), n]
-    }
-}
-
-function* visitRoom(cells: CellGrid, pt0: geo.Point): Iterable<[CellType, geo.Point]> {
-    const explored = cells.map2(() => false)
-    const stack = [pt0]
-
-    while (stack.length > 0) {
-        const pt = array.pop(stack)
-        explored.setPoint(pt, true)
-        const t = cells.atPoint(pt)
-        yield [t, pt]
-
-        // if this is a wall, do not explore neighbors
-        if (t === CellType.Wall) {
-            continue
-        }
-
-        // otherwise, explore neighbors, pushing onto stack those that are unexplored
-        for (const [_, npt] of visitNeighbors(cells, pt)) {
-            if (explored.atPoint(npt)) {
-                continue
-            }
-
-            stack.push(npt)
-        }
-    }
-}
-
-function visitRoomCoords(cells: CellGrid, pt0: geo.Point): Iterable<geo.Point> {
-    return array.map(visitRoom(cells, pt0), x => x[1])
-}
-
 function visitInteriorCoords(cells: CellGrid, pt0: geo.Point): Iterable<geo.Point> {
-    return array.map(visitInterior(cells, pt0), x => x[1])
+    return iter.map(visitInterior(cells, pt0), x => x[1])
 }
 
 function* visitInterior(cells: CellGrid, pt0: geo.Point): Iterable<[CellType, geo.Point]> {
@@ -445,7 +388,7 @@ function* visitInterior(cells: CellGrid, pt0: geo.Point): Iterable<[CellType, ge
         }
 
         // otherwise, explore neighbors, pushing onto stack those that are unexplored
-        for (const [t, npt] of visitNeighbors(cells, pt)) {
+        for (const [t, npt] of grid.visitNeighbors(cells, pt)) {
             if (explored.atPoint(npt)) {
                 continue
             }
@@ -502,35 +445,10 @@ enum OutdoorTileType {
 
 function generateOutdoorTerrain(map: maps.Map) {
     const tiles = grid.generate(map.width, map.height, () => OutdoorTileType.water)
-    const stack = new Array<geo.Point>()
-
-    // "plant" a continent
-    const seed = new geo.Point(Math.floor(map.width / 2), Math.floor(map.height / 2))
-    map.player.position = seed
-    tiles.setPoint(seed, OutdoorTileType.grass)
-
-    const maxPlaced = map.width * map.height * .5
-    let placed = 1
-
-    for (const [t, xy] of visitNeighbors(tiles, seed)) {
-        if (t === OutdoorTileType.water) {
-            stack.push(xy)
-        }
-    }
-
-    while (stack.length > 0 && placed < maxPlaced) {
-        const pt = array.pop(stack)
-        tiles.setPoint(pt, OutdoorTileType.grass)
-        ++placed
-
-        for (const [t, xy] of visitNeighbors(tiles, pt)) {
-            if (t === OutdoorTileType.water) {
-                stack.push(xy)
-            }
-        }
-
-        rand.shuffle(stack)
-    }
+    const numContinents = 7
+    const maxTilesPerContinent = Math.floor(map.width * map.height * .5 / numContinents)
+    placeContinent(tiles, maxTilesPerContinent)
+    map.player.position = tiles.findPoint(t => t === OutdoorTileType.grass) ?? new geo.Point(0, 0)
 
     for (const [t, x, y] of tiles.scan()) {
         switch (t) {
@@ -565,14 +483,32 @@ function generateOutdoorTerrain(map: maps.Map) {
     }
 }
 
+function placeContinent(tiles: grid.Grid<OutdoorTileType>, maxTiles: number) {
+    // "plant" a continent
+    const stack = new Array<geo.Point>()
+    const seed = new geo.Point(tiles.width / 2, tiles.height / 2).floor()
+    stack.push(seed)
+    let placed = 0
+
+    while (stack.length > 0 && placed < maxTiles) {
+        const pt = array.pop(stack)
+        tiles.setPoint(pt, OutdoorTileType.grass)
+        ++placed
+
+        for (const [t, xy] of grid.visitNeighbors(tiles, pt)) {
+            if (t === OutdoorTileType.water) {
+                stack.push(xy)
+            }
+        }
+
+        rand.shuffle(stack)
+    }
+}
+
 export async function loadSpriteTextures(renderer: gfx.Renderer, map: maps.Map): Promise<void> {
     // bake all 24x24 tile images to a single array texture
     // store mapping from image url to index
-    let imageUrls: string[] = []
-    imageUrls.push(...array.map(map, t => t.image))
-    imageUrls = imageUrls.filter(url => url)
-    imageUrls = array.distinct(imageUrls)
-
+    const imageUrls = iter.wrap(map).map(th => th.image).filter().distinct().toArray()
     const layerMap = new Map<string, number>(imageUrls.map((url, i) => [url, i]))
     const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
     const texture = renderer.bakeTextureArray(rl.tileSize, rl.tileSize, images)

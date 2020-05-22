@@ -1,5 +1,5 @@
 import * as dom from "../shared/dom.js"
-import * as array from "../shared/array.js"
+import * as iter from "../shared/iter.js"
 import * as gfx from "./gfx.js"
 import * as gen from "./gen.js"
 import * as input from "../shared/input.js"
@@ -454,7 +454,7 @@ class DefeatDialog {
 }
 
 function getSortedItems(items: Iterable<rl.Item>): rl.Item[] {
-    const sortedItems = array.orderBy(items, i => i.name)
+    const sortedItems = iter.orderBy(items, i => i.name)
     return sortedItems
 }
 
@@ -568,7 +568,6 @@ class App {
     async exec() {
         this.canvas.focus()
         this.map = await gen.generateOutdoorMap(this.renderer, this.player, 64, 64)
-        console.log(this.map)
         if (!this.player.position) {
             throw new Error("Player is not positioned")
         }
@@ -595,6 +594,7 @@ class App {
 
 
     tick() {
+        this.handleResize()
         const nextCreature = this.getNextCreature()
         if (nextCreature instanceof rl.Player) {
             if (this.handleInput()) {
@@ -641,7 +641,7 @@ class App {
 
     tickRound() {
         // accumulate action points
-        for (const monster of array.filter(this.map.monsters, m => m.state === rl.MonsterState.aggro)) {
+        for (const monster of iter.filter(this.map.monsters, m => m.state === rl.MonsterState.aggro)) {
             const reserve = Math.min(monster.actionReserve, monster.agility)
             monster.action = 1 + monster.agility + reserve
             monster.actionReserve = 0
@@ -993,6 +993,7 @@ class App {
         const aabb = new geo.AABB(
             this.canvasToMapPoint(new geo.Point(0, 0)),
             this.canvasToMapPoint(new geo.Point(this.canvas.width + rl.tileSize, this.canvas.height + rl.tileSize)))
+            .intersection(new geo.AABB(new geo.Point(0, 0), new geo.Point(this.map.width, this.map.height)))
 
         return aabb
     }
@@ -1008,9 +1009,8 @@ class App {
     }
 
     private drawFrame() {
-        this.handleResize()
-
         // center the grid around the playerd
+        const viewportAABB = this.calcMapViewport()
         const offset = this.getScrollOffset()
 
         // note - drawing order matters - draw from bottom to top
@@ -1022,9 +1022,7 @@ class App {
 
         this.shootButton.disabled = !this.player.rangedWeapon
 
-        const viewportAABB = this.calcMapViewport()
         const map = this.map
-
         const tiles = map.tiles.within(viewportAABB)
         const fixtures = map.fixtures.within(viewportAABB)
         const containers = map.containers.within(viewportAABB)
@@ -1147,19 +1145,6 @@ class App {
             case "L":
                 this.targetCommand = TargetCommand.Shoot
                 break;
-        }
-    }
-
-    private *iterViewportCoords(): Iterable<geo.Point> {
-        const nw = this.canvasToMapPoint(new geo.Point(0, 0))
-        const se = this.canvasToMapPoint(new geo.Point(this.canvas.width, this.canvas.height))
-        const width = se.x - nw.x
-        const height = se.y - nw.y
-
-        for (let y = 0; y < height; ++y) {
-            for (let x = 0; x < width; ++x) {
-                yield new geo.Point(x, y)
-            }
         }
     }
 }
