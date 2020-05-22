@@ -574,7 +574,6 @@ class App {
 
         output.write("Your adventure begins")
         this.handleResize()
-        this.updateVisibility()
         requestAnimationFrame(() => this.tick())
 
         document.addEventListener("keypress", (ev) => this.handleKeyPress(ev))
@@ -825,6 +824,7 @@ class App {
 
         canvas.width = canvas.clientWidth
         canvas.height = canvas.clientHeight
+        this.updateVisibility()
     }
 
     handleInput(): boolean {
@@ -1051,11 +1051,6 @@ class App {
     }
 
     drawThing(offset: geo.Point, th: rl.Thing) {
-        // don't draw things that aren't positioned
-        if (!th.position) {
-            return
-        }
-
         if (th.visible === rl.Visibility.None) {
             return
         }

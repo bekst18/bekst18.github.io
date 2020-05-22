@@ -64,6 +64,9 @@ void main() {
     } else {
         out_color *= texture(sampler, frag_uvw.xy);
     }
+
+    // pre-multiply alpha
+    out_color.rgb *= out_color.a;
 }`
 
 export enum SpriteFlags {
@@ -159,7 +162,6 @@ export class Renderer {
 
     constructor(readonly canvas: HTMLCanvasElement) {
         this.gl = glu.createContext(canvas)
-
         const gl = this.gl
 
         this.spriteProgram = glu.compileProgram(gl, spriteVertexSrc, spriteFragmentSrc)
@@ -202,13 +204,13 @@ export class Renderer {
         const gl = this.gl
         const texture = this.createTexture()
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, texture.texture)
+        gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAX_LEVEL, 0)
         gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA, width, height, images.length, 0, gl.RGBA, gl.UNSIGNED_BYTE, null)
         images.forEach((img, i) => {
             gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, i, width, height, 1, gl.RGBA, gl.UNSIGNED_BYTE, img)
         })
 
-        gl.generateMipmap(gl.TEXTURE_2D_ARRAY)
-
+        // gl.generateMipmap(gl.TEXTURE_2D_ARRAY)
         return texture
     }
 
@@ -300,7 +302,7 @@ export class Renderer {
         // draw the batched sprites
         const gl = this.gl
         gl.enable(gl.BLEND)
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.bindFramebuffer(gl.FRAMEBUFFER, null)
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
         gl.clearColor(0, 0, 0, 1)

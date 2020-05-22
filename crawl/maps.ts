@@ -237,6 +237,9 @@ export function updateVisibility(map: Map, eye: geo.Point, radius: number) {
     for (let i = 0; i < 8; ++i) {
         updateVisibilityOctant(map, eye, radius, i)
     }
+
+    // eye point always visible
+    iter.each(map.at(eye), th => th.visible = rl.Visibility.Visible)
 }
 
 function updateVisibilityOctant(map: Map, eye: geo.Point, radius: number, octant: number) {

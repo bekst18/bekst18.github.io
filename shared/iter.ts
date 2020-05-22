@@ -14,6 +14,11 @@ class Iter<T> {
         }
     }
 
+    each(f: (x: T) => void) {
+        each(this.a, f)
+        return this
+    }
+
     distinct() {
         return new Iter(distinct(this.a))
     }
@@ -136,6 +141,17 @@ class Iter<T> {
      */
     toArray(): T[] {
         return [...this.a]
+    }
+}
+
+/**
+ * invoke a function on every element of the iterable
+ * @param a iterable
+ * @param f function
+ */
+export function each<T>(a: Iterable<T>, f: (x: T) => void): void {
+    for (const x of a) {
+        f(x)
     }
 }
 
