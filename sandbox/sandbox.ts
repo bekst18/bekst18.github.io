@@ -1,5 +1,4 @@
 import * as dom from "../shared/dom.js"
-import * as util from "../shared/util.js"
 
 const canvas = dom.byId("canvas") as HTMLCanvasElement
 const ctx = canvas.getContext("2d") as CanvasRenderingContext2D

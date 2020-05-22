@@ -30,11 +30,10 @@ function tick(input: number[], output: number[], w0: number[]) {
     process(input, output, w0)
 
     // evaluate output
-    const q = evalAdd(x, y, output)
 
     // learn?
     // how to adjust weights to get closer to correct answer based on q?
-    
+
 }
 
 function process(input: number[], output: number[], w: number[]) {

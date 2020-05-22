@@ -1,4 +1,4 @@
-import * as util from "../shared/util.js"
+import * as array from "../shared/array.js"
 
 enum Axis { None, X, Y, Z }
 
@@ -15,7 +15,7 @@ export function palettizeMedianCut(imageData: ImageData, maxColors: number): [Co
     const data = imageData.data
 
     // place all colors in initial bucket
-    const bucket = createBucket(data, util.sequence(imageData.width * imageData.height))
+    const bucket = createBucket(data, array.sequence(imageData.width * imageData.height))
     buckets.push(bucket)
 
     while (buckets.length < maxColors) {
@@ -26,7 +26,7 @@ export function palettizeMedianCut(imageData: ImageData, maxColors: number): [Co
 
     // choose color for each bucket
     const palette = buckets.map(b => divXYZ(b.indices.reduce((xyz, i) => addXYZ(xyz, [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]]), [0, 0, 0]), b.indices.length))
-    const paletteOverlay = util.fill(0, imageData.width * imageData.height)
+    const paletteOverlay = array.uniform(0, imageData.width * imageData.height)
 
     for (let i = 0; i < buckets.length; ++i) {
         const bucket = buckets[i]
@@ -45,10 +45,10 @@ export function palettizeHistogram(imageData: ImageData, bucketsPerComponent: nu
     const numBuckets = bucketPitch * bucketsPerComponent
 
     // creat intial buckets
-    const buckets = util.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
+    const buckets = array.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
 
     // assign and update bucket for each pixel
-    const bucketOverlay = util.generate(pixels, i => {
+    const bucketOverlay = array.generate(pixels, i => {
         const r = data[i * 4] / 255
         const g = data[i * 4 + 1] / 255
         const b = data[i * 4 + 2] / 255
@@ -182,7 +182,6 @@ function splitBucket(data: Uint8ClampedArray, bucket: Bucket): Bucket {
 
         default:
             throw new Error("Invalid split axis")
-            break
     }
 
     // left half of array stays in bucket
