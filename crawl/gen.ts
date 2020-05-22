@@ -11,6 +11,7 @@ import * as things from "./things.js"
 import * as maps from "./maps.js"
 import * as gfx from "./gfx.js"
 import * as dom from "../shared/dom.js"
+import { scanRegion } from "../shared/imaging.js"
 
 interface DungeonTileset {
     wall: rl.Tile,
@@ -443,11 +444,20 @@ enum OutdoorTileType {
     sand
 }
 
+enum OutdoorFixtureType {
+    none,
+    hills,
+    mountains,
+    trees,
+    snow
+}
+
 function generateOutdoorTerrain(map: maps.Map) {
     const tiles = grid.generate(map.width, map.height, () => OutdoorTileType.water)
-    const numContinents = 7
-    const maxTilesPerContinent = Math.floor(map.width * map.height * .5 / numContinents)
-    placeContinent(tiles, maxTilesPerContinent)
+    const fixtures = grid.generate(map.width, map.height, () => OutdoorFixtureType.none)
+    placeLandmasses(tiles)
+    placeSnow(tiles, fixtures)
+
     map.player.position = tiles.findPoint(t => t === OutdoorTileType.grass) ?? new geo.Point(0, 0)
 
     for (const [t, x, y] of tiles.scan()) {
@@ -481,9 +491,61 @@ function generateOutdoorTerrain(map: maps.Map) {
                 break
         }
     }
+
+    for (const [f, x, y] of fixtures.scan()) {
+        switch (f) {
+            case (OutdoorFixtureType.hills): {
+                const fixture = things.hills.clone()
+                fixture.position = new geo.Point(x, y)
+                map.fixtures.add(fixture)
+            }
+                break
+
+            case (OutdoorFixtureType.mountains): {
+                const fixture = things.mountains.clone()
+                fixture.position = new geo.Point(x, y)
+                map.fixtures.add(fixture)
+            }
+                break
+
+            case (OutdoorFixtureType.trees): {
+                const fixture = things.trees.clone()
+                fixture.position = new geo.Point(x, y)
+                map.fixtures.add(fixture)
+            }
+                break
+
+            case (OutdoorFixtureType.snow): {
+                const fixture = things.snow.clone()
+                fixture.position = new geo.Point(x, y)
+                map.fixtures.add(fixture)
+            }
+                break
+        }
+    }
 }
 
-function placeContinent(tiles: grid.Grid<OutdoorTileType>, maxTiles: number) {
+function placeLandmasses(tiles: grid.Grid<OutdoorTileType>) {
+    const maxTiles = Math.ceil(tiles.size * rand.float(.3, .5))
+    growLand(tiles, maxTiles)
+
+    // find maximal water rect - if large enough, plant island
+    while (true) {
+        const aabb = grid.findMaximalRect(tiles, t => t === OutdoorTileType.water).shrink(1)
+        if (aabb.area < 12) {
+            break
+        }
+
+        const view = tiles.viewAABB(aabb)
+        const islandTiles = aabb.area * rand.float(.25, 1)
+        growLand(view, islandTiles)
+    }
+
+    // place some islands
+    placeBeaches(tiles)
+}
+
+function growLand(tiles: grid.Grid<OutdoorTileType>, maxTiles: number) {
     // "plant" a continent
     const stack = new Array<geo.Point>()
     const seed = new geo.Point(tiles.width / 2, tiles.height / 2).floor()
@@ -502,6 +564,43 @@ function placeContinent(tiles: grid.Grid<OutdoorTileType>, maxTiles: number) {
         }
 
         rand.shuffle(stack)
+    }
+}
+
+function placeBeaches(tiles: grid.Grid<OutdoorTileType>) {
+    for (const pt of grid.scan(0, 0, tiles.width, tiles.height)) {
+        if (tiles.atPoint(pt) === OutdoorTileType.water) {
+            continue
+        }
+
+        if (pt.x > 0 && tiles.at(pt.x - 1, pt.y) === OutdoorTileType.water) {
+            tiles.setPoint(pt, OutdoorTileType.sand)
+        }
+
+        if (pt.x < tiles.width - 1 && tiles.at(pt.x + 1, pt.y) === OutdoorTileType.water) {
+            tiles.setPoint(pt, OutdoorTileType.sand)
+        }
+
+        if (pt.y > 0 && tiles.at(pt.x, pt.y - 1) === OutdoorTileType.water) {
+            tiles.setPoint(pt, OutdoorTileType.sand)
+        }
+
+        if (pt.y < tiles.height - 1 && tiles.at(pt.x, pt.y + 1) === OutdoorTileType.water) {
+            tiles.setPoint(pt, OutdoorTileType.sand)
+        }
+    }
+}
+
+function placeSnow(tiles: grid.Grid<OutdoorTileType>, fixtures: grid.Grid<OutdoorFixtureType>) {
+    const { width, height } = tiles
+    const snowHeight = Math.ceil(height / 3)
+    for (let y = 0; y < snowHeight; ++y) {
+        for (let x = 0; x < width; ++x) {
+            const t = tiles.at(x, y)
+            if (t !== OutdoorTileType.water) {
+                fixtures.set(x, y, OutdoorFixtureType.snow)
+            }
+        }
     }
 }
 

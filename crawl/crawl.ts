@@ -567,7 +567,7 @@ class App {
 
     async exec() {
         this.canvas.focus()
-        this.map = await gen.generateOutdoorMap(this.renderer, this.player, 64, 64)
+        this.map = await gen.generateOutdoorMap(this.renderer, this.player, 32, 32)
         if (!this.player.position) {
             throw new Error("Player is not positioned")
         }
@@ -999,8 +999,7 @@ class App {
     }
 
     private calcLightRadius(): number {
-        const viewportAABB = this.calcMapViewport()
-        const viewportLightRadius = Math.max(viewportAABB.width, viewportAABB.height)
+        const viewportLightRadius = Math.max(Math.ceil(this.canvas.width / 24), Math.ceil(this.canvas.height / 24))
         if (this.map.lighting === maps.Lighting.Ambient) {
             return viewportLightRadius
         }

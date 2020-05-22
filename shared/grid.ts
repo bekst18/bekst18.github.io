@@ -1,4 +1,5 @@
 import * as geo from "../shared/geo2d.js"
+import * as array from "../shared/array.js"
 
 /**
  * a generic 2d array of data
@@ -10,10 +11,17 @@ export class Grid<T> {
             this.rowPitch = this.width
         }
 
-        const maxOffset = this.offset + this.rowPitch * this.height
+        const maxOffset = this.offset + this.rowPitch * (this.height - 1) + this.width
         if (maxOffset > this.data.length) {
             throw new Error(`Max offset of ${maxOffset} is greater than length of data array - ${this.data.length}`)
         }
+    }
+
+    /**
+     * get total number of entries - width * height
+     */
+    get size(): number {
+        return this.width * this.height
     }
 
     assertBounds(x: number, y: number) {
@@ -330,4 +338,75 @@ export function* visitNeighbors<T>(cells: Grid<T>, pt: geo.Point): Iterable<[T, 
         const n = new geo.Point(pt.x, pt.y - 1)
         yield [cells.atPoint(n), n]
     }
+}
+
+/**
+ * calculate the maximal rectangle that satisfies the specified predicate
+ * @param grd grid
+ * @param f predicate
+ */
+export function findMaximalRect<T>(grd: Grid<T>, f: (x: T) => boolean): geo.AABB {
+    // derived from https://stackoverflow.com/questions/7245/puzzle-find-largest-rectangle-maximal-rectangle-problem
+    // algorithm needs to keep track of rectangle state for every column for every region
+    const { width, height } = grd
+    const ls = array.uniform(0, width)
+    const rs = array.uniform(width, width)
+    const hs = array.uniform(0, width)
+    const sat = array.uniform(false, width)
+
+    let maxArea = 0
+    const aabb = new geo.AABB(new geo.Point(0, 0), new geo.Point(0, 0))
+
+    for (let y = 0; y < height; ++y) {
+        let l = 0
+        let r = grd.width
+
+        // determine whether each cell meets predicate
+        for (let x = 0; x < width; ++x) {
+            sat[x] = f(grd.at(x, y))
+        }
+
+        // height scan
+        for (let x = 0; x < width; ++x) {
+            if (sat[x]) {
+                hs[x] += 1
+            } else {
+                hs[x] = 0
+            }
+        }
+
+        // l scan
+        for (let x = 0; x < width; ++x) {
+            if (sat[x]) {
+                ls[x] = Math.max(ls[x], l)
+            } else {
+                ls[x] = 0
+                l = x + 1
+            }
+        }
+
+        // r scan
+        for (let x = width - 1; x >= 0; --x) {
+            if (sat[x]) {
+                rs[x] = Math.min(rs[x], r)
+            } else {
+                rs[x] = width
+                r = x
+            }
+        }
+
+        // area scan
+        for (let x = 0; x < width; ++x) {
+            const area = hs[x] * (rs[x] - ls[x])
+            if (area > maxArea) {
+                maxArea = area
+                aabb.min.x = ls[x]
+                aabb.max.x = rs[x]
+                aabb.min.y = y - hs[x] + 1
+                aabb.max.y = y + 1
+            }
+        }
+    }
+
+    return aabb
 }

@@ -2,6 +2,7 @@
  * 1st attempt at a simple 2d geometry library
  */
 import * as array from "../shared/array.js"
+import { generateOutdoorMap } from "../crawl/gen.js"
 
 export class Point {
     constructor(public x: number, public y: number) { }
@@ -77,6 +78,14 @@ export class Point {
     clone(): Point {
         return new Point(this.x, this.y)
     }
+
+    static inf() {
+        return new Point(Infinity, Infinity)
+    }
+
+    static negInf() {
+        return new Point(-Infinity, -Infinity)
+    }
 }
 
 export class AABB {
@@ -150,6 +159,14 @@ export class AABB {
 
     clone(): AABB {
         return new AABB(this.min, this.max)
+    }
+
+    static empty(): AABB {
+        return new AABB(Point.inf(), Point.negInf())
+    }
+
+    static inf(): AABB {
+        return new AABB(Point.negInf(), Point.inf())
     }
 }
 

@@ -59,10 +59,17 @@ export const hills = new rl.Fixture({
 })
 
 export const mountains = new rl.Fixture({
-    name: "Mountaihs",
+    name: "Mountains",
     image: "./assets/mountain.png",
     passable: false,
     transparent: false
+})
+
+export const snow = new rl.Fixture({
+    name: "snow",
+    image: "./assets/snow.png",
+    passable: true,
+    transparent: true
 })
 
 export const door = new rl.Door({
