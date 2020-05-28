@@ -248,6 +248,21 @@ export class Grid<T> {
 
         return null
     }
+
+    /**
+     * find the coordinates of all elements in the grid that meet the specified criteria
+     * @param f predicate function
+     */
+    *findPoints(f: (v:T)=>boolean) : Iterable<geo.Point> {
+        for (let y = 0; y < this.height; ++y) {
+            for (let x = 0; x < this.width; ++x) {
+                const v = this.at(x, y)
+                if (f(v)) {
+                    yield new geo.Point(x, y)
+                }
+            }
+        }
+    }
 }
 
 /**

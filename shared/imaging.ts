@@ -240,6 +240,15 @@ export function scan(width: number, height: number, f: (x: number, y: number, of
     }
 }
 
+export function generate(width: number, height: number, f: (x: number, y: number) => number): number[] {
+    const a = new Array<number>()
+    scan(width, height, (x, y) => {
+        a.push(f(x, y))
+    })
+
+    return a
+}
+
 export function scanRegion(x0: number, y0: number, width: number, height: number, rowPitch: number, f: (x: number, y: number, offset: number) => void): void {
     const x1 = x0 + width
     const y1 = y0 + height

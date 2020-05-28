@@ -11,7 +11,8 @@ import * as things from "./things.js"
 import * as maps from "./maps.js"
 import * as gfx from "./gfx.js"
 import * as dom from "../shared/dom.js"
-import { scanRegion } from "../shared/imaging.js"
+import * as noise from "../shared/noise.js"
+import * as imaging from "../shared/imaging.js"
 
 interface DungeonTileset {
     wall: rl.Tile,
@@ -455,10 +456,21 @@ enum OutdoorFixtureType {
 function generateOutdoorTerrain(map: maps.Map) {
     const tiles = grid.generate(map.width, map.height, () => OutdoorTileType.water)
     const fixtures = grid.generate(map.width, map.height, () => OutdoorFixtureType.none)
-    placeLandmasses(tiles)
-    placeSnow(tiles, fixtures)
 
-    map.player.position = tiles.findPoint(t => t === OutdoorTileType.grass) ?? new geo.Point(0, 0)
+    // TODO - randomly bias perlin noise instead
+    // const bias= rand.int(0, 256)
+    const bias = 0
+
+    const heightMap = fbm(map.width, map.height, bias, 8 / map.width, 2, .5, 8)
+
+    imaging.scan(map.width, map.height, (x, y, offset) => {
+        const h = heightMap[offset]
+        if (h > 0) {
+            tiles.set(x, y, OutdoorTileType.dirt)
+        }
+    })
+
+    map.player.position = tiles.findPoint(t => t !== OutdoorTileType.water) ?? new geo.Point(0, 0)
 
     for (const [t, x, y] of tiles.scan()) {
         switch (t) {
@@ -604,6 +616,28 @@ function placeSnow(tiles: grid.Grid<OutdoorTileType>, fixtures: grid.Grid<Outdoo
     }
 }
 
+function placeMountains(tiles: grid.Grid<OutdoorTileType>, fixtures: grid.Grid<OutdoorFixtureType>, maxTiles: number) {
+    // find a suitable start point for mountain range
+    const seed = rand.choose([...tiles.findPoints(x => x !== OutdoorTileType.water && x !== OutdoorTileType.sand)])
+    const stack = new Array<geo.Point>()
+    stack.push(seed)
+    let placed = 0
+
+    while (stack.length > 0 && placed < maxTiles) {
+        const pt = array.pop(stack)
+        fixtures.setPoint(pt, OutdoorFixtureType.mountains)
+        ++placed
+
+        for (const [t, xy] of grid.visitNeighbors(tiles, pt)) {
+            if (t !== OutdoorTileType.water && t !== OutdoorTileType.sand) {
+                stack.push(xy)
+            }
+        }
+
+        rand.shuffle(stack)
+    }
+}
+
 export async function loadSpriteTextures(renderer: gfx.Renderer, map: maps.Map): Promise<void> {
     // bake all 24x24 tile images to a single array texture
     // store mapping from image url to index
@@ -627,4 +661,10 @@ export async function loadSpriteTextures(renderer: gfx.Renderer, map: maps.Map):
         th.texture = texture
         th.textureLayer = layer
     }
+}
+
+function fbm(width: number, height: number, bias: number, freq: number, lacunarity: number, gain: number, octaves: number): number[] {
+    return imaging.generate(width, height, (x, y) => {
+        return noise.fbmPerlin2(x * freq + bias, y * freq + bias, lacunarity, gain, octaves)
+    })
 }

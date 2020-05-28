@@ -1,17 +1,10 @@
-#loadUi {
-    max-width: 512px;
-    padding: 1em;
-}
-
 html, body {
     height: 100%;
 }
 
 #canvas {
     display: block;
-    margin-top: 2em;
-    margin-left: auto;
-    margin-right: auto;
     box-sizing: border-box;
-    border: solid 1px blue;
+    width: 100%;
+    height: 100%;
 }

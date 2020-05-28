@@ -556,6 +556,7 @@ class App {
     private readonly inventoryDialog = new InventoryDialog(this.player, this.canvas)
     private readonly containerDialog = new ContainerDialog(this.player, this.canvas)
     private readonly defeatDialog = new DefeatDialog(this.canvas)
+    private zoom = 1
     private map: maps.Map = new maps.Map(0, 0, this.player)
     private targetCommand: TargetCommand = TargetCommand.None
 
@@ -567,7 +568,7 @@ class App {
 
     async exec() {
         this.canvas.focus()
-        this.map = await gen.generateOutdoorMap(this.renderer, this.player, 32, 32)
+        this.map = await gen.generateOutdoorMap(this.renderer, this.player, 256, 256)
         if (!this.player.position) {
             throw new Error("Player is not positioned")
         }
@@ -592,7 +593,7 @@ class App {
     }
 
 
-    tick() {
+    private tick() {
         this.handleResize()
         const nextCreature = this.getNextCreature()
         if (nextCreature instanceof rl.Player) {
@@ -609,7 +610,7 @@ class App {
         requestAnimationFrame(() => this.tick())
     }
 
-    getNextMonster(): rl.Monster | null {
+    private getNextMonster(): rl.Monster | null {
         // determine whose turn it is
         let nextMonster = null
         for (const monster of this.map.monsters) {
@@ -629,7 +630,7 @@ class App {
         return nextMonster
     }
 
-    getNextCreature(): rl.Monster | rl.Player | null {
+    private getNextCreature(): rl.Monster | rl.Player | null {
         const monster = this.getNextMonster()
         if (this.player.action > 0 && this.player.action > (monster?.action ?? 0)) {
             return this.player
@@ -638,7 +639,7 @@ class App {
         return monster
     }
 
-    tickRound() {
+    private tickRound() {
         // accumulate action points
         for (const monster of iter.filter(this.map.monsters, m => m.state === rl.MonsterState.aggro)) {
             const reserve = Math.min(monster.actionReserve, monster.agility)
@@ -654,27 +655,27 @@ class App {
         this.updateMonsterStates()
     }
 
-    getScrollOffset(): geo.Point {
+    private getScrollOffset(): geo.Point {
         // convert map point to canvas point, noting that canvas is centered on player
         const playerPosition = this.player.position
         const canvasCenter = new geo.Point(this.canvas.width / 2, this.canvas.height / 2)
-        const offset = canvasCenter.subPoint(playerPosition.addScalar(.5).mulScalar(rl.tileSize))
+        const offset = canvasCenter.subPoint(playerPosition.addScalar(.5).mulScalar(this.tileSize))
         return offset.floor()
     }
 
-    canvasToMapPoint(cxy: geo.Point) {
+    private canvasToMapPoint(cxy: geo.Point) {
         const scrollOffset = this.getScrollOffset()
-        const mxy = cxy.subPoint(scrollOffset).divScalar(rl.tileSize).floor()
+        const mxy = cxy.subPoint(scrollOffset).divScalar(this.tileSize).floor()
         return mxy
     }
 
-    mapToCanvasPoint(mxy: geo.Point) {
+    private mapToCanvasPoint(mxy: geo.Point) {
         const scrollOffset = this.getScrollOffset()
-        const cxy = mxy.mulScalar(rl.tileSize).addPoint(scrollOffset)
+        const cxy = mxy.mulScalar(this.tileSize).addPoint(scrollOffset)
         return cxy
     }
 
-    processPlayerMeleeAttack(defender: rl.Monster) {
+    private processPlayerMeleeAttack(defender: rl.Monster) {
         // base 60% chance to hit
         // 10% bonus / penalty for every point difference between attack and defense
         // bottoms out at 5% - always SOME chance to hit
@@ -703,7 +704,7 @@ class App {
         }
     }
 
-    processPlayerRangedAttack(defender: rl.Monster) {
+    private processPlayerRangedAttack(defender: rl.Monster) {
         // base 40% chance to hit
         // 10% bonus / penalty for every point difference between attack and defense
         // bottoms out at 5% - always SOME chance to hit
@@ -736,7 +737,7 @@ class App {
         }
     }
 
-    processMonsterAttack(attacker: rl.Monster, attack: rl.Attack) {
+    private processMonsterAttack(attacker: rl.Monster, attack: rl.Attack) {
         // base 60% chance to hit
         // 10% bonus / penalty for every point difference between attack and defense
         // clamps to out at [5, 95] - always SOME chance to hit or miss
@@ -764,13 +765,13 @@ class App {
         }
     }
 
-    updateMonsterStates() {
+    private updateMonsterStates() {
         for (const monster of this.map.monsters) {
             this.updateMonsterState(monster)
         }
     }
 
-    updateMonsterState(monster: rl.Monster) {
+    private updateMonsterState(monster: rl.Monster) {
         // aggro state
         const map = this.map
         const lightRadius = this.calcLightRadius()
@@ -785,7 +786,7 @@ class App {
         }
     }
 
-    tickMonster(monster: rl.Monster) {
+    private tickMonster(monster: rl.Monster) {
         // if player is within reach (and alive), attack
         if (this.player.health > 0) {
             const distanceToPlayer = geo.calcManhattenDist(this.player.position, monster.position)
@@ -816,7 +817,7 @@ class App {
         }
     }
 
-    handleResize() {
+    private handleResize() {
         const canvas = this.canvas
         if (canvas.width === canvas.clientWidth && canvas.height === canvas.clientHeight) {
             return
@@ -827,7 +828,7 @@ class App {
         this.updateVisibility()
     }
 
-    handleInput(): boolean {
+    private handleInput(): boolean {
         const map = this.map
         const player = this.player
         const inp = this.inp
@@ -992,14 +993,14 @@ class App {
     private calcMapViewport(): geo.AABB {
         const aabb = new geo.AABB(
             this.canvasToMapPoint(new geo.Point(0, 0)),
-            this.canvasToMapPoint(new geo.Point(this.canvas.width + rl.tileSize, this.canvas.height + rl.tileSize)))
+            this.canvasToMapPoint(new geo.Point(this.canvas.width + this.tileSize, this.canvas.height + this.tileSize)))
             .intersection(new geo.AABB(new geo.Point(0, 0), new geo.Point(this.map.width, this.map.height)))
 
         return aabb
     }
 
     private calcLightRadius(): number {
-        const viewportLightRadius = Math.max(Math.ceil(this.canvas.width / 24), Math.ceil(this.canvas.height / 24))
+        const viewportLightRadius = Math.max(Math.ceil(this.canvas.width / this.tileSize), Math.ceil(this.canvas.height / this.tileSize))
         if (this.map.lighting === maps.Lighting.Ambient) {
             return viewportLightRadius
         }
@@ -1049,7 +1050,7 @@ class App {
         this.renderer.flush()
     }
 
-    drawThing(offset: geo.Point, th: rl.Thing) {
+    private drawThing(offset: geo.Point, th: rl.Thing) {
         if (th.visible === rl.Visibility.None) {
             return
         }
@@ -1059,12 +1060,12 @@ class App {
             color.a = .5
         }
 
-        const spritePosition = th.position.mulScalar(rl.tileSize).addPoint(offset)
+        const spritePosition = th.position.mulScalar(this.tileSize).addPoint(offset)
         const sprite = new gfx.Sprite({
             position: spritePosition,
             color: color,
-            width: rl.tileSize,
-            height: rl.tileSize,
+            width: this.tileSize,
+            height: this.tileSize,
             texture: th.texture,
             layer: th.textureLayer,
             flags: gfx.SpriteFlags.ArrayTexture
@@ -1073,7 +1074,7 @@ class App {
         this.renderer.drawSprite(sprite)
     }
 
-    drawHealthBar(offset: geo.Point, creature: rl.Creature) {
+    private drawHealthBar(offset: geo.Point, creature: rl.Creature) {
         if (!creature.position) {
             return
         }
@@ -1081,7 +1082,7 @@ class App {
         const health = Math.max(creature.health, 0)
         const borderWidth = health * 4 + 2
         const interiorWidth = health * 4
-        const spritePosition = creature.position.mulScalar(rl.tileSize).addPoint(offset).subPoint(new geo.Point(0, rl.tileSize / 2))
+        const spritePosition = creature.position.mulScalar(this.tileSize).addPoint(offset).subPoint(new geo.Point(0, this.tileSize / 2))
         this.renderer.drawSprite(new gfx.Sprite({
             position: spritePosition,
             color: gfx.Color.white,
@@ -1100,6 +1101,10 @@ class App {
     private hideDialogs() {
         this.inventoryDialog.hide()
         this.statsDialog.hide()
+    }
+
+    private get tileSize() {
+        return rl.tileSize * this.zoom
     }
 
     private handleKeyPress(ev: KeyboardEvent) {
@@ -1139,6 +1144,14 @@ class App {
             case "L":
                 this.targetCommand = TargetCommand.Shoot
                 break;
+
+            case "=":
+                this.zoom = Math.min(this.zoom * 2, 16)
+                break
+
+            case "-":
+                this.zoom = Math.max(this.zoom / 2, .125)
+                break
         }
     }
 }
