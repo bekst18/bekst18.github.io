@@ -1,5 +1,5 @@
 /* webgl utility library */
-import * as dom from "../shared/dom.js"
+import * as dom from "./dom.js"
 
 /**
  * create webgl2 rendering context

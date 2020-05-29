@@ -2,7 +2,6 @@
  * 1st attempt at a simple 2d geometry library
  */
 import * as array from "../shared/array.js"
-import { generateOutdoorMap } from "../crawl/gen.js"
 
 export class Point {
     constructor(public x: number, public y: number) { }

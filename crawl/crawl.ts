@@ -1147,10 +1147,12 @@ class App {
 
             case "=":
                 this.zoom = Math.min(this.zoom * 2, 16)
+                this.updateVisibility()
                 break
 
             case "-":
                 this.zoom = Math.max(this.zoom / 2, .125)
+                this.updateVisibility()
                 break
         }
     }

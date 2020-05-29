@@ -1,0 +1,10 @@
+html, body {
+    height: 100%;
+}
+
+#canvas {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+}

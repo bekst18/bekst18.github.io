@@ -1,7 +1,7 @@
 /**
  * web gl sprite rendering utilities
  */
-import * as glu from "./glu.js"
+import * as glu from "../shared/glu.js"
 import * as geo from "../shared/geo2d.js"
 
 export class Color {
