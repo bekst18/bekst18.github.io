@@ -310,15 +310,12 @@ export class Renderer {
         gl.useProgram(this.spriteProgram)
         gl.uniform2f(this.spriteViewportSizeUniformLocation, gl.drawingBufferWidth, gl.drawingBufferHeight)
         gl.bindVertexArray(this.spriteVao)
-
         gl.activeTexture(gl.TEXTURE0)
         gl.bindTexture(gl.TEXTURE_2D, this.white1x1Texture.texture)
         gl.bindSampler(0, this.sampler)
-
         gl.activeTexture(gl.TEXTURE1)
         gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.white1x1ArrayTexture.texture)
         gl.bindSampler(1, this.arraySampler)
-
         gl.uniform1i(this.spriteSamplerUniformLocation, 0)
         gl.uniform1i(this.spriteArraySamplerUniformLocation, 1)
 

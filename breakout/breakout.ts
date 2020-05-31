@@ -1,27 +1,50 @@
 import * as dom from "../shared/dom.js"
-import * as glu from "../shared/glu.js"
+import * as geo from "../shared/geo3d.js"
+import * as gfx from "./gfx.js"
 
 // step 1 - clear screen, init gl, etc...
-
+// step 2 - draw a clip space triangle
+// step 3 - draw a world space triangle
 class App {
     private readonly canvas = dom.byId("canvas") as HTMLCanvasElement
-    private readonly gl = glu.createContext(this.canvas)
+    private readonly renderer = new gfx.Renderer(this.canvas)
+    private ticks = 0
+    private batches: Array<gfx.Batch> = []
 
     exec() {
         requestAnimationFrame(() => this.tick())
+        this.initScene()
+    }
+
+    private initScene() {
+        this.renderer.viewMatrix = geo.Mat4.lookAt(new geo.Vec3(0, 0, 8), new geo.Vec3(0, 0, -1), new geo.Vec3(0, 1, 0)).invert()
+
+        const ixm = gfx.cube()
+        const vao = this.renderer.createMesh(ixm)
+
+        this.batches.push({
+            vao: vao,
+            worldMatrix: geo.Mat4.identity(),
+            offset: 0,
+            numIndices: ixm.indices.length
+        })
     }
 
     private tick() {
-        this.present()
+        // const rate =  Math.PI / 60
+        // this.renderer.worldMatrix = geo.Mat4.rotationY(this.ticks * rate).matmul(geo.Mat4.translation(new geo.Vec3(0, 0, -16)))
+        // this.renderer.worldMatrix = geo.Mat4.translation(new geo.Vec3(0, 0, -4))
+        this.drawScene()
         requestAnimationFrame(() => this.tick())
+        ++this.ticks
     }
 
-    private present() {
-        const gl = this.gl
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-        gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
-        gl.clearColor(0, 0, 1, 1)
-        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+    private drawScene() {
+        for (const batch of this.batches) {
+            this.renderer.drawBatch(batch)
+        }
+
+        this.renderer.present()
     }
 }
 
