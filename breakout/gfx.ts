@@ -32,15 +32,187 @@ void main() {
     out_color = frag_color;
 }`
 
-export interface Vertex {
+interface VertexOptions {
+    position?: geo.Vec3
+    normal?: geo.Vec3
+    color?: geo.Vec4
+}
+
+export class Vertex {
     position: geo.Vec3
     normal: geo.Vec3
     color: geo.Vec4
+
+    constructor(options: VertexOptions = {}) {
+        this.position = options.position?.clone() ?? new geo.Vec3(0, 0, 0)
+        this.normal = options.normal?.clone() ?? new geo.Vec3(0, 0, 0)
+        this.color = options.color?.clone() ?? new geo.Vec4(1, 1, 1, 1)
+    }
+
+    clone(): Vertex {
+        return new Vertex(this)
+    }
 }
 
-export interface IxMesh {
-    vertices: Vertex[]
-    indices: number[]
+interface IxMeshOptions {
+    vertices?: Vertex[]
+    indices?: number[]
+}
+
+export class IxMesh {
+    public vertices: Vertex[] = []
+    public indices: number[] = []
+
+    constructor(options: IxMeshOptions = {}) {
+        if (options.vertices) {
+            this.vertices.push(...options.vertices)
+        }
+
+        if (options.indices) {
+            this.indices.push(...options.indices)
+        }
+    }
+
+    clear() {
+        this.vertices = []
+        this.indices = []
+    }
+
+    transform(mat: geo.Mat4) {
+        transform(mat, this.vertices)
+    }
+
+    cat(ixm: IxMesh): void {
+        const offset = this.vertices.length
+        this.vertices.push(...ixm.vertices.map(v => v.clone()))
+        this.indices.push(...ixm.indices.map(ix => ix + offset))
+    }
+
+    static cube(): IxMesh {
+        // -x, +x, -y, +y, -z, +z
+        const vertices = new Array<Vertex>(
+            // -x
+            new Vertex({ position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) }),
+            // +x
+            new Vertex({ position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) }),
+            // -y
+            new Vertex({ position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) }),
+            // +y
+            new Vertex({ position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) }),
+            // -z
+            new Vertex({ position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) }),
+            // +z
+            new Vertex({ position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) })
+        )
+
+        return new IxMesh({
+            vertices,
+            indices: quadIndices(vertices.length / 4)
+        })
+    }
+
+    static sphere(rows: number, cols: number): IxMesh {
+        // create north pole
+        const vertices = new Array<Vertex>()
+        const indices = new Array<number>()
+        const northPole = new Vertex({ position: new geo.Vec3(0, 1, 0), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(1, 1, 1, 1) })
+        vertices.push(northPole)
+
+        // iterate over angles, essentially forming polar coordinates of each point
+        // let theta = elevation angle above xy plane
+        // let phi = xy plane angle
+        const dtheta = Math.PI / (rows + 1)
+        const dphi = 2 * Math.PI / cols
+
+        for (let j = 0; j < cols; ++j) {
+            const phi = dphi * j
+            const theta = dtheta
+            const position = new geo.Vec3(
+                Math.sin(theta) * Math.cos(phi),
+                Math.cos(theta),
+                Math.sin(theta) * Math.sin(phi)
+            )
+
+            vertices.push(new Vertex({ position: position, normal: position, color: new geo.Vec4(1, 1, 1, 1) }))
+
+            // connect to pole to form triangle
+            indices.push(j + 1, (j + 1) % cols + 1, 0)
+        }
+
+        // interior
+        for (let i = 1; i < rows; ++i) {
+            const theta = dtheta * (i + 1)
+            const prevRowOffset = (i - 1) * cols + 1
+            const rowOffset = prevRowOffset + cols
+            for (let j = 0; j < cols; ++j) {
+                const phi = dphi * j
+                const position = new geo.Vec3(
+                    Math.sin(theta) * Math.cos(phi),
+                    Math.cos(theta),
+                    Math.sin(theta) * Math.sin(phi)
+                )
+                vertices.push(new Vertex({ position: position, normal: position, color: new geo.Vec4(1, 1, 1, 1) }))
+
+                const a = prevRowOffset + j
+                const b = rowOffset + j
+                const c = rowOffset + (j + 1) % cols
+                const d = prevRowOffset + (j + 1) % cols
+                indices.push(a, b, c, a, c, d)
+            }
+        }
+
+        // create south pole
+        const southPole = new Vertex({ position: new geo.Vec3(0, -1, 0), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 1, 1, 1) })
+        vertices.push(southPole)
+        const southPoleIdx = vertices.length - 1
+
+        // connect south pole to rest of mesh
+        for (let j = 0; j < cols; ++j) {
+            const offset = southPoleIdx - cols
+
+            // connect to pole to form triangle
+            indices.push(offset + j, southPoleIdx, offset + (j + 1) % cols)
+        }
+
+        return new IxMesh({
+            vertices,
+            indices
+        })
+    }
+
+    static rect(aabb: geo.AABB): IxMesh {
+        // -x, +x, -y, +y, -z, +z
+        const mesh = IxMesh.cube()
+        const halfExtents = aabb.extents.divX(2)
+        const negHalfExtents = halfExtents.neg()
+        const translation = geo.Mat4.translation(aabb.min.sub(negHalfExtents))
+        const scaling = geo.Mat4.scaling(halfExtents)
+        const mat = scaling.matmul(translation)
+        mesh.transform(mat)
+        return mesh
+    }
+}
+
+function quadIndices(quads: number): number[] {
+    return array.generate(quads, i => [i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3]).flat()
 }
 
 export interface MeshData {
@@ -81,7 +253,7 @@ export class Renderer {
     public present() {
         const gl = this.gl
 
-        this.projectionMatrix = geo.Mat4.perspective(Math.PI / 4, gl.drawingBufferWidth / gl.drawingBufferHeight, 1, 100)
+        this.projectionMatrix = geo.Mat4.perspective(Math.PI / 2, gl.drawingBufferWidth / gl.drawingBufferHeight, 1, 512)
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null)
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
@@ -122,6 +294,8 @@ export class Renderer {
         gl.vertexAttribPointer(normalAttribIdx, 3, gl.FLOAT, false, vertexStride, 12)
         gl.vertexAttribPointer(colorAttribIdx, 4, gl.FLOAT, false, vertexStride, 24)
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo)
+
+        gl.bindVertexArray(null)
         return vao
     }
 
@@ -150,117 +324,10 @@ function toFloatArray(vertices: Vertex[]): Float32Array {
     return a
 }
 
-export function cube(): IxMesh {
-    // -x, +x, -y, +y, -z, +z
-    const vertices = new Array<Vertex>(
-        // -x
-        { position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) },
-        { position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) },
-        { position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) },
-        { position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) },
-        // +x
-        { position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) },
-        { position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) },
-        { position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) },
-        { position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) },
-        // -y
-        { position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) },
-        { position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) },
-        { position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) },
-        { position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) },
-        // +y
-        { position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) },
-        { position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) },
-        { position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) },
-        { position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) },
-        // -z
-        { position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) },
-        { position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) },
-        { position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) },
-        { position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) },
-        // +z
-        { position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) },
-        { position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) },
-        { position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) },
-        { position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) }
-    )
-
-    return {
-        vertices,
-        indices: quadIndices(vertices.length / 4)
+export function transform(mat: geo.Mat4, vertices: Vertex[]) {
+    const basis = mat.toMat3()
+    for (const v of vertices) {
+        v.position = mat.transform3(v.position)
+        v.normal = basis.transform(v.normal)
     }
-}
-
-export function sphere(rows: number, cols: number): IxMesh {
-    // create north pole
-    const vertices = new Array<Vertex>()
-    const indices = new Array<number>()
-    const northPole: Vertex = { position: new geo.Vec3(0, 1, 0), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(1, 1, 1, 1) }
-    vertices.push(northPole)
-
-    // iterate over angles, essentially forming polar coordinates of each point
-    // let theta = elevation angle above xy plane
-    // let phi = xy plane angle
-    const dtheta = Math.PI / (rows + 1)
-    const dphi = 2 * Math.PI / cols
-
-    for (let j = 0; j < cols; ++j) {
-        const phi = dphi * j
-        const theta = dtheta
-        const position = new geo.Vec3(
-            Math.sin(theta) * Math.cos(phi),
-            Math.cos(theta),
-            Math.sin(theta) * Math.sin(phi)
-        )
-
-        console.log(position.toString())
-        vertices.push({ position: position, normal: position, color: new geo.Vec4(1, 1, 1, 1) })
-
-        // connect to pole to form triangle
-        indices.push(j + 1, (j + 1) % cols + 1, 0)
-    }
-
-    // interior
-    for (let i = 1; i < rows; ++i) {
-        const theta = dtheta * (i + 1)
-        const prevRowOffset = (i - 1) * cols + 1
-        const rowOffset = prevRowOffset + cols
-        for (let j = 0; j < cols; ++j) {
-            const phi = dphi * j
-            const position = new geo.Vec3(
-                Math.sin(theta) * Math.cos(phi),
-                Math.cos(theta),
-                Math.sin(theta) * Math.sin(phi)
-            )
-            vertices.push({ position: position, normal: position, color: new geo.Vec4(1, 1, 1, 1) })
-
-            const a = prevRowOffset + j
-            const b = rowOffset + j
-            const c = rowOffset + (j + 1) % cols
-            const d = prevRowOffset + (j + 1) % cols
-            indices.push(a, b, c, a, c, d)
-        }
-    }
-
-    // create south pole
-    const southPole: Vertex = { position: new geo.Vec3(0, -1, 0), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 1, 1, 1) }
-    vertices.push(southPole)
-    const southPoleIdx = vertices.length - 1
-
-    // connect south pole to rest of mesh
-    for (let j = 0; j < cols; ++j) {
-        const offset = southPoleIdx - cols
-
-        // connect to pole to form triangle
-        indices.push(offset + j, southPoleIdx, offset + (j + 1) % cols)
-    }
-
-    return {
-        vertices: vertices,
-        indices: indices
-    }
-}
-
-function quadIndices(quads: number): number[] {
-    return array.generate(quads, i => [i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3]).flat()
 }
