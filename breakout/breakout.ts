@@ -17,9 +17,9 @@ class App {
     }
 
     private initScene() {
-        this.renderer.viewMatrix = geo.Mat4.lookAt(new geo.Vec3(0, 0, 8), new geo.Vec3(0, 0, -1), new geo.Vec3(0, 1, 0)).invert()
+        this.renderer.viewMatrix = geo.Mat4.lookAt(new geo.Vec3(0, 0, 4), new geo.Vec3(0, 0, -1), new geo.Vec3(0, 1, 0)).invert()
 
-        const ixm = gfx.cube()
+        const ixm = gfx.sphere(8, 8)
         const vao = this.renderer.createMesh(ixm)
 
         this.batches.push({
@@ -31,16 +31,17 @@ class App {
     }
 
     private tick() {
-        // const rate =  Math.PI / 60
-        // this.renderer.worldMatrix = geo.Mat4.rotationY(this.ticks * rate).matmul(geo.Mat4.translation(new geo.Vec3(0, 0, -16)))
-        // this.renderer.worldMatrix = geo.Mat4.translation(new geo.Vec3(0, 0, -4))
         this.drawScene()
         requestAnimationFrame(() => this.tick())
         ++this.ticks
     }
 
     private drawScene() {
+        const rate =  Math.PI / 60
+        //const worldMatrix = geo.Mat4.rotationY(this.ticks * rate)
+
         for (const batch of this.batches) {
+            // batch.worldMatrix = worldMatrix
             this.renderer.drawBatch(batch)
         }
 

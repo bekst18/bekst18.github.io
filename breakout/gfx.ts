@@ -201,7 +201,7 @@ export function sphere(rows: number, cols: number): IxMesh {
     // iterate over angles, essentially forming polar coordinates of each point
     // let theta = elevation angle above xy plane
     // let phi = xy plane angle
-    const dtheta = Math.PI / rows
+    const dtheta = Math.PI / (rows + 1)
     const dphi = 2 * Math.PI / cols
 
     for (let j = 0; j < cols; ++j) {
@@ -213,35 +213,47 @@ export function sphere(rows: number, cols: number): IxMesh {
             Math.sin(theta) * Math.sin(phi)
         )
 
-        vertices.push({ position: position, normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(1, 1, 1, 1) })
+        console.log(position.toString())
+        vertices.push({ position: position, normal: position, color: new geo.Vec4(1, 1, 1, 1) })
 
         // connect to pole to form triangle
-        const base = 1
-        indices.push(base + j, base + (j + 1) % cols, 0)
+        indices.push(j + 1, (j + 1) % cols + 1, 0)
     }
 
-    // for (let i = 1; i < rows; ++i) {
-    //     const theta = dtheta * i
-    //     for (let j = 0; j < cols; ++j) {
-    //         const phi = dphi * j
-    //         const position = new geo.Vec3(
-    //             Math.sin(theta) * Math.cos(phi),
-    //             Math.cos(theta),
-    //             Math.sin(theta) * Math.sin(phi)
-    //         )
-    //         vertices.push({ position: position, normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(1, 1, 1, 1) })
+    // interior
+    for (let i = 1; i < rows; ++i) {
+        const theta = dtheta * (i + 1)
+        const prevRowOffset = (i - 1) * cols + 1
+        const rowOffset = prevRowOffset + cols
+        for (let j = 0; j < cols; ++j) {
+            const phi = dphi * j
+            const position = new geo.Vec3(
+                Math.sin(theta) * Math.cos(phi),
+                Math.cos(theta),
+                Math.sin(theta) * Math.sin(phi)
+            )
+            vertices.push({ position: position, normal: position, color: new geo.Vec4(1, 1, 1, 1) })
 
-    // create quad with above vertices
-    //         if (i === 0) {
-
-    //         } else {
-
-    //         }
-    //     }
-    // }
+            const a = prevRowOffset + j
+            const b = rowOffset + j
+            const c = rowOffset + (j + 1) % cols
+            const d = prevRowOffset + (j + 1) % cols
+            indices.push(a, b, c, a, c, d)
+        }
+    }
 
     // create south pole
-    // const southPole: Vertex = { position: new geo.Vec3(0, 1, 0), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(1, 1, 1, 1) }
+    const southPole: Vertex = { position: new geo.Vec3(0, -1, 0), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 1, 1, 1) }
+    vertices.push(southPole)
+    const southPoleIdx = vertices.length - 1
+
+    // connect south pole to rest of mesh
+    for (let j = 0; j < cols; ++j) {
+        const offset = southPoleIdx - cols
+
+        // connect to pole to form triangle
+        indices.push(offset + j, southPoleIdx, offset + (j + 1) % cols)
+    }
 
     return {
         vertices: vertices,
