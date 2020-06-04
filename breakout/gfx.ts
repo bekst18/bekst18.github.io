@@ -1,12 +1,14 @@
 import * as glu from "../shared/glu.js"
 import * as geo from "../shared/geo3d.js"
 import * as array from "../shared/array.js"
+import * as iter from "../shared/iter.js"
 
 const vertexSrc = `#version 300 es
 precision mediump float;
 uniform mat4 world_matrix;
 uniform mat4 view_matrix;
 uniform mat4 projection_matrix;
+uniform vec4 diffuse_color;
 in vec3 vert_position;
 in vec3 vert_normal;
 in vec4 vert_color;
@@ -14,7 +16,7 @@ out vec3 frag_normal;
 out vec4 frag_color;
 
 void main() {
-    frag_color = vert_color;
+    frag_color = vert_color * diffuse_color;
     frag_normal - vert_normal;
     gl_Position = projection_matrix * view_matrix * world_matrix * vec4(vert_position, 1.f);
 }`
@@ -88,39 +90,43 @@ export class IxMesh {
         this.indices.push(...ixm.indices.map(ix => ix + offset))
     }
 
+    calcAABB(): geo.AABB {
+        return calcAABB(this.vertices)
+    }
+
     static cube(): IxMesh {
         // -x, +x, -y, +y, -z, +z
         const vertices = new Array<Vertex>(
             // -x
-            new Vertex({ position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(-1, 0, 0), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(-1, 0, 0) }),
+            new Vertex({ position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(-1, 0, 0) }),
+            new Vertex({ position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(-1, 0, 0), }),
+            new Vertex({ position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(-1, 0, 0) }),
             // +x
-            new Vertex({ position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(1, 0, 0), color: new geo.Vec4(0, 1, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(1, 0, 0) }),
+            new Vertex({ position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(1, 0, 0) }),
+            new Vertex({ position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(1, 0, 0) }),
+            new Vertex({ position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(1, 0, 0) }),
             // -y
-            new Vertex({ position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(0, -1, 0), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(0, -1, 0) }),
+            new Vertex({ position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(0, -1, 0) }),
+            new Vertex({ position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(0, -1, 0) }),
+            new Vertex({ position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(0, -1, 0) }),
             // +y
-            new Vertex({ position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(0, 1, 0), color: new geo.Vec4(0, 1, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(0, 1, 0) }),
+            new Vertex({ position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(0, 1, 0) }),
+            new Vertex({ position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(0, 1, 0) }),
+            new Vertex({ position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(0, 1, 0) }),
             // -z
-            new Vertex({ position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(0, 0, -1), color: new geo.Vec4(1, 0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, -1, -1), normal: new geo.Vec3(0, 0, -1) }),
+            new Vertex({ position: new geo.Vec3(-1, 1, -1), normal: new geo.Vec3(0, 0, -1) }),
+            new Vertex({ position: new geo.Vec3(1, 1, -1), normal: new geo.Vec3(0, 0, -1) }),
+            new Vertex({ position: new geo.Vec3(1, -1, -1), normal: new geo.Vec3(0, 0, -1) }),
             // +z
-            new Vertex({ position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) }),
-            new Vertex({ position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(0, 0, 1), color: new geo.Vec4(0, 1, 0, 1) })
+            new Vertex({ position: new geo.Vec3(-1, -1, 1), normal: new geo.Vec3(0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, -1, 1), normal: new geo.Vec3(0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(1, 1, 1), normal: new geo.Vec3(0, 0, 1) }),
+            new Vertex({ position: new geo.Vec3(-1, 1, 1), normal: new geo.Vec3(0, 0, 1) })
         )
 
         return new IxMesh({
@@ -209,6 +215,10 @@ export class IxMesh {
         mesh.transform(mat)
         return mesh
     }
+
+    static rectFromCoords(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): IxMesh {
+        return this.rect(geo.AABB.fromCoords(minX, minY, minZ, maxX, maxY, maxZ))
+    }
 }
 
 function quadIndices(quads: number): number[] {
@@ -221,11 +231,28 @@ export interface MeshData {
     indexOffset: number
 }
 
-export interface Batch {
-    worldMatrix: geo.Mat4
-    vao: WebGLVertexArrayObject
-    offset: number
-    numIndices: number
+export interface BatchOptions {
+    worldMatrix?: geo.Mat4
+    diffuseColor?: geo.Vec4
+    vao?: WebGLVertexArrayObject
+    offset?: number
+    numIndices?: number
+}
+
+export class Batch {
+    public worldMatrix: geo.Mat4
+    public diffuseColor: geo.Vec4 = new geo.Vec4(1, 1, 1, 1)
+    public vao: WebGLVertexArrayObject | null
+    public offset: number
+    public numIndices: number
+
+    constructor(options: BatchOptions = {}) {
+        this.worldMatrix = options.worldMatrix ?? geo.Mat4.identity()
+        this.diffuseColor = options.diffuseColor ?? new geo.Vec4(1, 1, 1, 1)
+        this.vao = options.vao ?? null
+        this.offset = options.offset ?? 0
+        this.numIndices = options.numIndices ?? 0
+    }
 }
 
 const elemsPerVertex = 10
@@ -237,6 +264,7 @@ export class Renderer {
     private readonly worldMatrixLoc: WebGLUniformLocation
     private readonly viewMatrixLoc: WebGLUniformLocation
     private readonly projectionMatrixLoc: WebGLUniformLocation
+    private readonly diffuseColorLoc: WebGLUniformLocation
     public projectionMatrix: geo.Mat4 = geo.Mat4.identity()
     public viewMatrix: geo.Mat4 = geo.Mat4.identity()
     private batches: Batch[] = []
@@ -248,6 +276,8 @@ export class Renderer {
         this.worldMatrixLoc = glu.getUniformLocation(gl, this.program, "world_matrix")
         this.viewMatrixLoc = glu.getUniformLocation(gl, this.program, "view_matrix")
         this.projectionMatrixLoc = glu.getUniformLocation(gl, this.program, "projection_matrix")
+        this.projectionMatrixLoc = glu.getUniformLocation(gl, this.program, "projection_matrix")
+        this.diffuseColorLoc = glu.getUniformLocation(gl, this.program, "diffuse_color")
     }
 
     public present() {
@@ -306,7 +336,16 @@ export class Renderer {
         gl.uniformMatrix4fv(this.viewMatrixLoc, false, this.viewMatrix.toArray())
 
         for (const batch of this.batches) {
+            if (!batch.vao) {
+                continue
+            }
+
+            if (batch.numIndices <= 0) {
+                continue
+            }
+
             gl.uniformMatrix4fv(this.worldMatrixLoc, false, batch.worldMatrix.toArray())
+            gl.uniform4fv(this.diffuseColorLoc, batch.diffuseColor.toArray())
             gl.bindVertexArray(batch.vao)
             gl.drawElements(gl.TRIANGLES, batch.numIndices, gl.UNSIGNED_INT, batch.offset)
         }
@@ -330,4 +369,9 @@ export function transform(mat: geo.Mat4, vertices: Vertex[]) {
         v.position = mat.transform3(v.position)
         v.normal = basis.transform(v.normal)
     }
+}
+
+export function calcAABB(vertices: Iterable<Vertex>): geo.AABB {
+    const aabb = geo.AABB.fromPoints(iter.map(vertices, v => v.position))
+    return aabb
 }

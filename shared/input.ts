@@ -135,20 +135,17 @@ export class Input {
     private handleTouchStart(ev: TouchEvent) {
         // prevent default here will stop sinulated mouse events
         ev.preventDefault()
-        console.log("start: ", ev)
         this._mouseLeft = KeyState.Down
     }
 
     private handleTouchEnd(ev: TouchEvent) {
         // prevent default here will stop sinulated mouse events
         ev.preventDefault()
-        console.log("end: ", ev)
         this._mouseLeft = KeyState.Up
     }
 
     private handleTouchMove(ev: TouchEvent) {
         // prevent default here will stop sinulated mouse events
-        console.log("move: ", ev)
         const rect = (ev.target as HTMLElement).getBoundingClientRect();
         const offsetX = ev.targetTouches[0].pageX - rect.left;
         const offsetY = ev.targetTouches[0].pageY - rect.top;

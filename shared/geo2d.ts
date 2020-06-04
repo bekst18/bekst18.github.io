@@ -157,7 +157,7 @@ export class AABB {
     }
 
     clone(): AABB {
-        return new AABB(this.min, this.max)
+        return new AABB(this.min.clone(), this.max.clone())
     }
 
     static empty(): AABB {

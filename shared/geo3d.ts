@@ -1,10 +1,14 @@
-import { findMaximalRect } from "./grid"
+import * as math from "../shared/math.js"
 
 /**
  * 3d math library
  */
 export class Vec2 {
     constructor(public x: number, public y: number) { }
+
+    static inf(): Vec2 {
+        return new Vec2(Infinity, Infinity)
+    }
 
     equal(b: Vec2): boolean {
         return this.x === b.x && this.y === b.y
@@ -74,6 +78,18 @@ export class Vec2 {
         return new Vec2(-this.x, -this.y)
     }
 
+    min(b: Vec2): Vec2 {
+        return new Vec2(Math.min(this.x, b.x), Math.min(this.y, b.y))
+    }
+
+    max(b: Vec2): Vec2 {
+        return new Vec2(Math.max(this.x, b.x), Math.max(this.y, b.y))
+    }
+
+    clamp(min: Vec2, max: Vec2): Vec2 {
+        return new Vec2(math.clamp(this.x, min.x, max.x), math.clamp(this.y, min.y, max.y))
+    }
+
     toString(): string {
         return `(${this.x},${this.y})`
     }
@@ -89,6 +105,10 @@ export class Vec2 {
 
 export class Vec3 {
     constructor(public x: number, public y: number, public z: number) { }
+
+    static inf(): Vec3 {
+        return new Vec3(Infinity, Infinity, Infinity)
+    }
 
     equal(b: Vec3): boolean {
         return this.x === b.x && this.y === b.y && this.z === b.z
@@ -165,6 +185,18 @@ export class Vec3 {
         return new Vec3(-this.x, -this.y, -this.z)
     }
 
+    min(b: Vec3): Vec3 {
+        return new Vec3(Math.min(this.x, b.x), Math.min(this.y, b.y), Math.min(this.z, b.z))
+    }
+
+    max(b: Vec3): Vec3 {
+        return new Vec3(Math.max(this.x, b.x), Math.max(this.y, b.y), Math.max(this.z, b.z))
+    }
+
+    clamp(min: Vec3, max: Vec3): Vec3 {
+        return new Vec3(math.clamp(this.x, min.x, max.x), math.clamp(this.y, min.y, max.y), math.clamp(this.z, min.z, max.z))
+    }
+
     toString(): string {
         return `(${this.x},${this.y},${this.z})`
     }
@@ -192,6 +224,10 @@ export class Vec3 {
 
 export class Vec4 {
     constructor(public x: number, public y: number, public z: number, public w: number) { }
+
+    static inf(): Vec4 {
+        return new Vec4(Infinity, Infinity, Infinity, Infinity)
+    }
 
     equal(b: Vec4): boolean {
         return this.x === b.x && this.y === b.y && this.z === b.z && this.w == b.w
@@ -259,6 +295,18 @@ export class Vec4 {
 
     neg(): Vec4 {
         return new Vec4(-this.x, -this.y, -this.z, -this.w)
+    }
+
+    min(b: Vec4): Vec4 {
+        return new Vec4(Math.min(this.x, b.x), Math.min(this.y, b.y), Math.min(this.z, b.z), Math.min(this.w, b.w))
+    }
+
+    max(b: Vec4): Vec4 {
+        return new Vec4(Math.max(this.x, b.x), Math.max(this.y, b.y), Math.max(this.z, b.z), Math.max(this.w, b.w))
+    }
+
+    clamp(min: Vec4, max: Vec4): Vec4 {
+        return new Vec4(math.clamp(this.x, min.x, max.x), math.clamp(this.y, min.y, max.y), math.clamp(this.z, min.z, max.z), math.clamp(this.w, min.w, max.w))
     }
 
     toString(): string {
@@ -658,7 +706,85 @@ export class Mat4 {
 export class AABB {
     constructor(public readonly min: Vec3, public readonly max: Vec3) { }
 
+    static fromPoints(pts: Iterable<Vec3>): AABB {
+        let min = Vec3.inf()
+        let max = min.neg()
+
+        for (const pt of pts) {
+            min = min.min(pt)
+            max = max.max(pt)
+        }
+
+        const aabb = new AABB(min, max)
+        return aabb
+    }
+
+    static fromHalfExtents(halfExtents: Vec3): AABB {
+        return new AABB(halfExtents.neg(), halfExtents)
+    }
+
+    static fromPositionHalfExtents(position: Vec3, halfExtents: Vec3): AABB {
+        return new AABB(position.sub(halfExtents), position.add(halfExtents))
+    }
+
+    static fromCoords(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): AABB {
+        return new AABB(new Vec3(minX, minY, minZ), new Vec3(maxX, maxY, maxZ))
+    }
+
     get extents(): Vec3 {
         return this.max.sub(this.min)
+    }
+
+    union(aabb: AABB): AABB {
+        const u = new AABB(this.min.min(aabb.min), this.max.max(aabb.max))
+        return u
+    }
+
+    intersection(aabb: AABB): AABB {
+        const ix = new AABB(this.min.max(aabb.min), this.max.min(aabb.max))
+        return ix
+    }
+
+    overlaps(aabb: AABB): boolean {
+        return (
+            this.max.x >= aabb.min.x &&
+            this.max.y >= aabb.min.y &&
+            this.max.z >= aabb.min.z &&
+            this.min.x <= aabb.max.x &&
+            this.min.y <= aabb.max.y &&
+            this.min.z <= aabb.max.z
+        )
+    }
+
+    contains(pt: Vec3): boolean {
+        return (
+            pt.x >= this.min.x &&
+            pt.y >= this.min.y &&
+            pt.z >= this.min.z &&
+            pt.x < this.max.x &&
+            pt.y < this.max.y &&
+            pt.z < this.max.z
+        )
+    }
+
+    translate(offset: Vec3): AABB {
+        return new AABB(this.min.add(offset), this.max.add(offset))
+    }
+
+    scale(s: number): AABB {
+        return new AABB(this.min.mulX(s), this.max.mulX(s))
+    }
+
+    buffer(padding: number): AABB {
+        const aabb = new AABB(this.min.addX(-padding), this.max.addX(padding))
+        return aabb
+    }
+
+    shrink(amount: number): AABB {
+        return this.buffer(-amount)
+    }
+
+    clone(): AABB {
+        return new AABB(this.min.clone(), this.max.clone())
     }
 }
