@@ -76,7 +76,7 @@ class App {
     }
 
     private initScene() {
-        this.renderer.viewMatrix = geo.Mat4.lookAt(new geo.Vec3(0, 0, 16), new geo.Vec3(0, 0, -1), new geo.Vec3(0, 1, 0)).invert()
+        this.renderer.viewMatrix = geo.Mat4.lookAt(new geo.Vec3(0, -8, 16), new geo.Vec3(0, 0, -1), new geo.Vec3(0, 1, 0)).invert()
         this.initPlayingField()
     }
 
@@ -240,7 +240,6 @@ class App {
             const nearest = ballPosition.clamp(aabb.min, aabb.max)
             const t = math.unlerp(aabb.min.x, aabb.max.x, nearest.x)
             const rot = geo.Mat4.rotationZ(math.lerp(-Math.PI / 4, Math.PI / 4, t))
-            console.log(t)
 
             // choose a random deviation from standard reflection angle
             // const rot = geo.Mat4.rotationZ(rand.float(-Math.PI / 8, Math.PI / 8))

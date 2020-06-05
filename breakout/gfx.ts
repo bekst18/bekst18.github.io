@@ -17,7 +17,7 @@ out vec4 frag_color;
 
 void main() {
     frag_color = vert_color * diffuse_color;
-    frag_normal - vert_normal;
+    frag_normal = mat3(world_matrix) * vert_normal;
     gl_Position = projection_matrix * view_matrix * world_matrix * vec4(vert_position, 1.f);
 }`
 
@@ -31,7 +31,10 @@ in vec3 frag_normal;
 out vec4 out_color;
 
 void main() {
-    out_color = frag_color;
+    const vec3 to_light = vec3(-1, -1, 1);
+    vec3 surface_normal = normalize(frag_normal);
+    float ndl = clamp(dot(to_light, frag_normal), 0.f, 1.f);
+    out_color = vec4(frag_color.rgb * ndl, frag_color.a);
 }`
 
 interface VertexOptions {
@@ -289,6 +292,7 @@ export class Renderer {
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
         gl.clearColor(0, 0, 0, 1)
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+        gl.enable(gl.DEPTH_TEST)
         this.renderBatches()
     }
 
