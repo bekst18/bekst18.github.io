@@ -3,6 +3,9 @@ import * as geo from "../shared/geo3d.js"
 import * as input from "../shared/input.js"
 import * as rand from "../shared/rand.js"
 import * as math from "../shared/math.js"
+import * as array from "../shared/array.js"
+import * as noise from "../shared/noise.js"
+import * as audio from "../shared/audio.js"
 import * as gfx from "./gfx.js"
 
 const brickWidth = 2
@@ -13,7 +16,7 @@ const paddleHeight = 1
 const paddleDepth = .5
 const ballRadius = .5
 const paddleSpeed = .25
-const ballSpeed = .25
+const ballSpeed = .35
 const brickRows = 5
 const brickCols = 10
 const borderWidth = 1
@@ -68,16 +71,28 @@ class App {
     private readonly paddle = new Paddle()
     private readonly ball = new Ball()
     private bricks = new Set<Brick>()
+    private readonly ac = new AudioContext()
+    private impactSounds = new Array<AudioBuffer>()
 
-    exec() {
+    async exec() {
         this.initScene()
+        await this.initAudio()
         this.canvas.focus()
         requestAnimationFrame(() => this.tick())
     }
 
     private initScene() {
-        this.renderer.viewMatrix = geo.Mat4.lookAt(new geo.Vec3(0, -8, 16), new geo.Vec3(0, 0, -1), new geo.Vec3(0, 1, 0)).invert()
+        this.renderer.viewMatrix = geo.Mat4.lookAt(new geo.Vec3(0, -8, 8), new geo.Vec3(0, 0, -1), new geo.Vec3(0, 1, 0)).invert()
         this.initPlayingField()
+    }
+
+    private async initAudio() {
+        const numImpactSounds = 15
+        for (let i = 1; i <= numImpactSounds; ++i) {
+            const url = `./assets/impact${i}.wav`
+            const buffer = await audio.loadAudio(this.ac, url)
+            this.impactSounds.push(buffer)
+        }
     }
 
     private initPlayingField() {
@@ -88,7 +103,7 @@ class App {
             // floor
             {
                 const floor = gfx.IxMesh.rectFromCoords(fieldLeft, fieldBottom, -1.25, fieldRight, fieldTop, -1)
-                floor.vertices.forEach(v => v.color = new geo.Vec4(1, 1, 1, 1))
+                floor.vertices.forEach(v => v.color = new geo.Vec4(.5, .5, .5, .5))
                 ixm.cat(floor)
             }
 
@@ -105,7 +120,8 @@ class App {
             const vao = this.renderer.createMesh(ixm)
             this.fieldBatch = new gfx.Batch({
                 vao: vao,
-                numIndices: ixm.indices.length
+                numIndices: ixm.indices.length,
+                roughness: 1
             })
         }
 
@@ -126,11 +142,12 @@ class App {
                     brick.batch = new gfx.Batch({
                         worldMatrix: geo.Mat4.translation(position),
                         diffuseColor: rand.choose(brickColors),
+                        roughness: .8,
                         vao: this.renderer.createMesh(ixm),
                         numIndices: ixm.indices.length,
                     })
 
-                    brick.position = new geo.Vec3(xOffset + Brick.halfExtents.x, yOffset + Brick.halfExtents.y, Brick.halfExtents.z)
+                    brick.position = new geo.Vec3(xOffset + Brick.halfExtents.x, yOffset + Brick.halfExtents.y, -1 + Brick.halfExtents.z)
                     this.bricks.add(brick)
                 }
             }
@@ -146,6 +163,7 @@ class App {
             this.paddle.position = new geo.Vec3(0, fieldBottom + Paddle.halfExtents.y + paddleBottomMargin, -Paddle.halfExtents.z)
             this.paddle.batch = new gfx.Batch({
                 vao,
+                roughness: .5,
                 numIndices: ixm.indices.length
             })
         }
@@ -161,6 +179,7 @@ class App {
             this.ball.batch = new gfx.Batch({
                 vao,
                 offset: 0,
+                roughness: 0,
                 numIndices: ixm.indices.length
             })
         }
@@ -193,17 +212,19 @@ class App {
     }
 
     private handleInput() {
-        if (this.inp.down("a")) {
+        const center = new geo.Vec2(this.canvas.width / 2, this.canvas.height / 2)
+
+        if (this.inp.down("a") || (this.inp.mouseLeftDown && this.inp.mouseX - center.x < -5)) {
             this.paddle.velocity = new geo.Vec3(-1, 0, 0)
-        } else if (this.inp.down("d")) {
+        } else if (this.inp.down("d") || (this.inp.mouseLeftDown && this.inp.mouseX - center.x > 5)) {
             this.paddle.velocity = new geo.Vec3(1, 0, 0)
         } else {
             this.paddle.velocity = new geo.Vec3(0, 0, 0)
         }
 
         // launch ball
-        if (this.inp.released(" ")) {
-            this.ball.velocity = new geo.Vec3(0, ballSpeed, 0)
+        if (Math.abs(this.ball.velocity.lengthSq()) < .1 && (this.inp.released(" ") || this.inp.mouseLeftReleased)) {
+            this.ball.velocity = new geo.Vec3(0, 1, 0).normalize().mulX(ballSpeed)
         }
 
         if (this.paddle.velocity.lengthSq() > 0) {
@@ -214,8 +235,8 @@ class App {
     private handleCollision() {
         // is paddle going to cross boundary?
         const bounds = geo.AABB.fromCoords(
-            fieldLeft + borderWidth, fieldBottom + borderWidth, -1,
-            fieldRight - borderWidth, fieldTop - borderWidth, 1)
+            fieldLeft, fieldBottom, -1,
+            fieldRight, fieldTop, 1)
 
         const paddlePosition = this.paddle.position.add(this.paddle.velocity)
         const paddleBounds = geo.AABB.fromPositionHalfExtents(paddlePosition, Paddle.halfExtents)
@@ -242,71 +263,93 @@ class App {
             const rot = geo.Mat4.rotationZ(math.lerp(-Math.PI / 4, Math.PI / 4, t))
 
             // choose a random deviation from standard reflection angle
-            // const rot = geo.Mat4.rotationZ(rand.float(-Math.PI / 8, Math.PI / 8))
             velocity = rot.transform3(velocity)
             velocity.z = 0
             this.ball.velocity = velocity.normalize().mulX(ballSpeed)
         }
 
-        // ball / brick hit checkd
-        for (const brick of this.bricks) {
-            const aabb = geo.AABB.fromPositionHalfExtents(brick.position, Brick.halfExtents)
+        // handle brick hit
+        const nearestBrick = this.findNearestBrick(ballPosition, Ball.radius)
+        if (nearestBrick) {
+            const aabb = geo.AABB.fromPositionHalfExtents(nearestBrick.position, Brick.halfExtents)
+            const nearestPt = this.findNearestPointOnBrick(nearestBrick, ballPosition)
             let velocity = this.ball.velocity
-            const nearest = ballPosition.clamp(aabb.min, aabb.max)
-            const r2 = Ball.radius * Ball.radius
-            if (nearest.sub(ballPosition).lengthSq() > r2) {
-                continue
-            }
-            if (nearest.y < aabb.min.y + Brick.halfExtents.y) {
+
+            if (nearestPt.y <= aabb.min.y + .01) {
                 velocity.y = -velocity.y
             }
 
-            if (nearest.x < aabb.min.x + Brick.halfExtents.x) {
+            if (nearestPt.x <= aabb.min.x + .01) {
                 velocity.x = -velocity.x
             }
 
-            if (nearest.x > aabb.max.x - Brick.halfExtents.x) {
+            if (nearestPt.x >= aabb.max.x - .01) {
                 velocity.x = -velocity.x
             }
 
-            if (nearest.y > aabb.max.y - Brick.halfExtents.y) {
+            if (nearestPt.y > aabb.max.y - .01) {
                 velocity.y = -velocity.y
             }
 
             this.ball.velocity = velocity.normalize().mulX(ballSpeed)
             this.ball.velocity.z = 0
-
-            this.bricks.delete(brick)
+            this.bricks.delete(nearestBrick)
+            this.playImpactSound()
         }
 
         // is ball going to cross boundary?
         if (ballBounds.min.x < bounds.min.x || ballBounds.max.x > bounds.max.x) {
             let velocity = this.ball.velocity
             velocity.x = -velocity.x
-
-            // choose a random deviation from standard reflection angle
-            const rot = geo.Mat4.rotationZ(rand.float(-Math.PI / 8, Math.PI / 8))
-            velocity = rot.transform3(velocity)
             velocity.z = 0
             this.ball.velocity = velocity.normalize().mulX(ballSpeed)
+            this.playImpactSound()
         }
 
         if (ballBounds.max.y > bounds.max.y) {
             let velocity = this.ball.velocity
             velocity.y = -velocity.y
-
-            // choose a random deviation from standard reflection angle
-            const rot = geo.Mat4.rotationZ(rand.float(-Math.PI / 8, Math.PI / 8))
-            velocity = rot.transform3(velocity)
             velocity.z = 0
             this.ball.velocity = velocity.normalize().mulX(ballSpeed)
+            this.playImpactSound()
         }
 
         // ball off board
         if (ballBounds.min.y < bounds.min.y) {
             this.ball.velocity = new geo.Vec3(0, 0, 0)
             this.ball.position = new geo.Vec3(0, this.paddle.position.y + Ball.radius * 2 + .1, -Ball.radius)
+            this.playImpactSound()
         }
+    }
+
+    private playImpactSound(): void {
+        const sound = rand.choose(this.impactSounds)
+        const src = this.ac.createBufferSource()
+        src.buffer = sound
+        src.connect(this.ac.destination)
+        src.start()
+    }
+
+    private findNearestPointOnBrick(brick: Brick, position: geo.Vec3): geo.Vec3 {
+        const aabb = geo.AABB.fromPositionHalfExtents(brick.position, Brick.halfExtents)
+        const nearest = position.clamp(aabb.min, aabb.max)
+        return nearest
+    }
+
+    private findNearestBrick(position: geo.Vec3, radius: number): Brick | null {
+        const r2 = radius * radius
+        let minDistSq = r2
+        let nearestBrick: Brick | null = null
+        for (const brick of this.bricks) {
+            const nearestPt = this.findNearestPointOnBrick(brick, position)
+            const distSq = nearestPt.sub(position).lengthSq()
+            if (distSq < minDistSq) {
+                nearestBrick = brick
+                minDistSq = distSq
+            }
+        }
+
+        return nearestBrick
     }
 
     private updateWorldMatrices() {
@@ -315,6 +358,10 @@ class App {
     }
 
     private drawScene() {
+        // configure camera
+        this.renderer.viewMatrix = geo.Mat4.lookAt(
+            new geo.Vec3(0, 0, 16), new geo.Vec3(0, 1, 0), new geo.Vec3(0, 1, 0)).invert()
+
         this.renderer.drawBatch(this.fieldBatch)
         this.renderer.drawBatch(this.ball.batch)
         this.renderer.drawBatch(this.paddle.batch)

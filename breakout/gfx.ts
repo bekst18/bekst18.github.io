@@ -9,16 +9,20 @@ uniform mat4 world_matrix;
 uniform mat4 view_matrix;
 uniform mat4 projection_matrix;
 uniform vec4 diffuse_color;
+
 in vec3 vert_position;
 in vec3 vert_normal;
 in vec4 vert_color;
 out vec3 frag_normal;
+out vec3 frag_position;
 out vec4 frag_color;
 
 void main() {
     frag_color = vert_color * diffuse_color;
     frag_normal = mat3(world_matrix) * vert_normal;
-    gl_Position = projection_matrix * view_matrix * world_matrix * vec4(vert_position, 1.f);
+    vec4 position_world = world_matrix * vec4(vert_position, 1.f);
+    gl_Position = projection_matrix * view_matrix * position_world;
+    frag_position = position_world.xyz / position_world.w;
 }`
 
 const fragmentSrc = `#version 300 es
@@ -26,15 +30,25 @@ precision highp float;
 precision highp sampler2D;
 precision highp sampler2DArray;
 
+uniform vec3 eye_position;
+uniform float roughness;
 in vec4 frag_color;
+in vec3 frag_position;
 in vec3 frag_normal;
 out vec4 out_color;
 
 void main() {
-    const vec3 to_light = vec3(-1, -1, 1);
+    float specular_intensity = 1.f - roughness;
+    float specular_pow = mix(.1f, 32.f, specular_intensity);
     vec3 surface_normal = normalize(frag_normal);
-    float ndl = clamp(dot(to_light, frag_normal), 0.f, 1.f);
-    out_color = vec4(frag_color.rgb * ndl, frag_color.a);
+    vec3 to_light = normalize(vec3(-1, 0, 1));
+    vec3 half_vec = normalize(normalize(eye_position - frag_position) + to_light);
+    float ndl = clamp(dot(to_light, surface_normal), 0.f, 1.f);
+    float ndh = pow(clamp(dot(half_vec, surface_normal), 0.0, 1.f), specular_pow);
+
+    vec3 directional = frag_color.rgb * ndl;
+    vec3 specular = vec3(1, 1, 1) * ndh * specular_intensity;
+    out_color = vec4(directional + specular, frag_color.a);
 }`
 
 interface VertexOptions {
@@ -237,6 +251,7 @@ export interface MeshData {
 export interface BatchOptions {
     worldMatrix?: geo.Mat4
     diffuseColor?: geo.Vec4
+    roughness?: number
     vao?: WebGLVertexArrayObject
     offset?: number
     numIndices?: number
@@ -245,6 +260,7 @@ export interface BatchOptions {
 export class Batch {
     public worldMatrix: geo.Mat4
     public diffuseColor: geo.Vec4 = new geo.Vec4(1, 1, 1, 1)
+    public roughness: number = 0
     public vao: WebGLVertexArrayObject | null
     public offset: number
     public numIndices: number
@@ -252,6 +268,7 @@ export class Batch {
     constructor(options: BatchOptions = {}) {
         this.worldMatrix = options.worldMatrix ?? geo.Mat4.identity()
         this.diffuseColor = options.diffuseColor ?? new geo.Vec4(1, 1, 1, 1)
+        this.roughness = options.roughness ?? 0
         this.vao = options.vao ?? null
         this.offset = options.offset ?? 0
         this.numIndices = options.numIndices ?? 0
@@ -268,6 +285,8 @@ export class Renderer {
     private readonly viewMatrixLoc: WebGLUniformLocation
     private readonly projectionMatrixLoc: WebGLUniformLocation
     private readonly diffuseColorLoc: WebGLUniformLocation
+    private readonly eyePositionLoc: WebGLUniformLocation
+    private readonly roughnessLoc: WebGLUniformLocation
     public projectionMatrix: geo.Mat4 = geo.Mat4.identity()
     public viewMatrix: geo.Mat4 = geo.Mat4.identity()
     private batches: Batch[] = []
@@ -281,6 +300,8 @@ export class Renderer {
         this.projectionMatrixLoc = glu.getUniformLocation(gl, this.program, "projection_matrix")
         this.projectionMatrixLoc = glu.getUniformLocation(gl, this.program, "projection_matrix")
         this.diffuseColorLoc = glu.getUniformLocation(gl, this.program, "diffuse_color")
+        this.eyePositionLoc = glu.getUniformLocation(gl, this.program, "eye_position")
+        this.roughnessLoc = glu.getUniformLocation(gl, this.program, "roughness")
     }
 
     public present() {
@@ -339,6 +360,13 @@ export class Renderer {
         gl.uniformMatrix4fv(this.projectionMatrixLoc, false, this.projectionMatrix.toArray())
         gl.uniformMatrix4fv(this.viewMatrixLoc, false, this.viewMatrix.toArray())
 
+        // determine eye position and set uniform
+        {
+            const invViewMatrix = this.viewMatrix.invert()
+            const eyePosition = invViewMatrix.transform3(new geo.Vec3(0, 0, 0))
+            gl.uniform3fv(this.eyePositionLoc, eyePosition.toArray())
+        }
+
         for (const batch of this.batches) {
             if (!batch.vao) {
                 continue
@@ -350,6 +378,7 @@ export class Renderer {
 
             gl.uniformMatrix4fv(this.worldMatrixLoc, false, batch.worldMatrix.toArray())
             gl.uniform4fv(this.diffuseColorLoc, batch.diffuseColor.toArray())
+            gl.uniform1f(this.roughnessLoc, batch.roughness)
             gl.bindVertexArray(batch.vao)
             gl.drawElements(gl.TRIANGLES, batch.numIndices, gl.UNSIGNED_INT, batch.offset)
         }
