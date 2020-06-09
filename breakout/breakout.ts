@@ -369,10 +369,24 @@ class App {
     }
 
     private drawScene() {
-        // configure camera
+        // configure camera - fit play area to screen with some small margin
+        let z = 0
+        const height = fieldTop - fieldBottom + borderWidth * 2
+        const width = fieldRight - fieldLeft + borderWidth * 2
+        const fieldAspect = width / height
+        if (fieldAspect < this.renderer.aspect) {
+            z = height / 2 / Math.tan(this.renderer.fov / 2)
+        } else {
+            z = width / 2 / Math.tan(this.renderer.fov * this.renderer.aspect / 2);
+        }
+
+        this.renderer.viewMatrix = geo.Mat4.lookAt(
+            new geo.Vec3(0, 0, 1 + z), new geo.Vec3(0, 0, -1), new geo.Vec3(0, 1, 0)).invert()
+        // cameraZ = width / 2 / Math.tan(fov * camera.aspect / 2);
+        /*
         this.renderer.viewMatrix = geo.Mat4.lookAt(
             new geo.Vec3(0, 0, 16), new geo.Vec3(0, 1, 0), new geo.Vec3(0, 1, 0)).invert()
-
+        */
         this.renderer.drawBatch(this.fieldBatch)
         this.renderer.drawBatch(this.ball.batch)
         this.renderer.drawBatch(this.paddle.batch)

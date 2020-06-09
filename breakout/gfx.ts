@@ -281,6 +281,7 @@ const vertexStride = elemsPerVertex * 4
 export class Renderer {
     private readonly gl: WebGL2RenderingContext
     private readonly program: WebGLProgram
+    public readonly fov = Math.PI / 2
     private readonly worldMatrixLoc: WebGLUniformLocation
     private readonly viewMatrixLoc: WebGLUniformLocation
     public readonly projectionMatrixLoc: WebGLUniformLocation
@@ -304,10 +305,14 @@ export class Renderer {
         this.roughnessLoc = glu.getUniformLocation(gl, this.program, "roughness")
     }
 
+    public get aspect(): number {
+        return this.gl.drawingBufferWidth / this.gl.drawingBufferHeight
+    }
+
     public present() {
         const gl = this.gl
 
-        this.projectionMatrix = geo.Mat4.perspective(Math.PI / 2, gl.drawingBufferWidth / gl.drawingBufferHeight, 1, 512)
+        this.projectionMatrix = geo.Mat4.perspective(this.fov, this.aspect, 1, 512)
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, null)
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
