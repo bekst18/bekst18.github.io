@@ -283,7 +283,7 @@ export class Renderer {
     private readonly program: WebGLProgram
     private readonly worldMatrixLoc: WebGLUniformLocation
     private readonly viewMatrixLoc: WebGLUniformLocation
-    private readonly projectionMatrixLoc: WebGLUniformLocation
+    public readonly projectionMatrixLoc: WebGLUniformLocation
     private readonly diffuseColorLoc: WebGLUniformLocation
     private readonly eyePositionLoc: WebGLUniformLocation
     private readonly roughnessLoc: WebGLUniformLocation

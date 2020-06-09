@@ -175,7 +175,7 @@ class App {
             ixm.vertices.forEach(v => v.color = new geo.Vec4(0, 0, 1, 1))
 
             const vao = this.renderer.createMesh(ixm)
-            this.ball.position = new geo.Vec3(0, this.paddle.position.y + Ball.radius * 2 + .1, -Ball.radius)
+            this.ball.position = new geo.Vec3(0, Ball.radius, -1 + Ball.radius)
             this.ball.batch = new gfx.Batch({
                 vao,
                 offset: 0,
@@ -212,19 +212,30 @@ class App {
     }
 
     private handleInput() {
-        const center = new geo.Vec2(this.canvas.width / 2, this.canvas.height / 2)
+        this.paddle.velocity = new geo.Vec3(0, 0, 0)
 
-        if (this.inp.down("a") || (this.inp.mouseLeftDown && this.inp.mouseX - center.x < -5)) {
+        // mouse / touch paddle movement
+        if (this.inp.mouseLeftDown && this.ball.velocity.lengthSq() > 0) {
+            const worldMouseRay = this.canvasToWorldRay(new geo.Vec2(this.inp.mouseX, this.inp.mouseY))
+            const fieldPlane = geo.Plane.fromPointNormal(this.paddle.position, new geo.Vec3(0, 0, 1))
+            const fieldIx = worldMouseRay.lerp(worldMouseRay.cast(fieldPlane))
+            if (fieldIx.x > this.paddle.position.x) {
+                this.paddle.velocity = new geo.Vec3(1, 0, 0)
+            } else if (fieldIx.x < this.paddle.position.x) {
+                this.paddle.velocity = new geo.Vec3(-1, 0, 0)
+            }
+        }
+
+        // keyboard paddle movement
+        if (this.inp.down("a") && this.ball.velocity.lengthSq() > 0) {
             this.paddle.velocity = new geo.Vec3(-1, 0, 0)
-        } else if (this.inp.down("d") || (this.inp.mouseLeftDown && this.inp.mouseX - center.x > 5)) {
+        } else if (this.inp.down("d") && this.ball.velocity.lengthSq() > 0) {
             this.paddle.velocity = new geo.Vec3(1, 0, 0)
-        } else {
-            this.paddle.velocity = new geo.Vec3(0, 0, 0)
         }
 
         // launch ball
         if (Math.abs(this.ball.velocity.lengthSq()) < .1 && (this.inp.released(" ") || this.inp.mouseLeftReleased)) {
-            this.ball.velocity = new geo.Vec3(0, 1, 0).normalize().mulX(ballSpeed)
+            this.ball.velocity = new geo.Vec3(0, -1, 0).normalize().mulX(ballSpeed)
         }
 
         if (this.paddle.velocity.lengthSq() > 0) {
@@ -317,7 +328,7 @@ class App {
         // ball off board
         if (ballBounds.min.y < bounds.min.y) {
             this.ball.velocity = new geo.Vec3(0, 0, 0)
-            this.ball.position = new geo.Vec3(0, this.paddle.position.y + Ball.radius * 2 + .1, -Ball.radius)
+            this.ball.position = new geo.Vec3(0, Ball.radius, -1 + Ball.radius)
             this.playImpactSound()
         }
     }
@@ -371,6 +382,40 @@ class App {
         }
 
         this.renderer.present()
+    }
+
+    private canvasToNDC(cc: geo.Vec2): geo.Vec2 {
+        const ndc = new geo.Vec2(
+            cc.x / this.canvas.width * 2 - 1,
+            -cc.y / this.canvas.height * 2 + 1
+        )
+
+        return ndc
+    }
+
+    private canvasToNDCRay(cc: geo.Vec2): geo.Ray {
+        const ndc = this.canvasToNDC(cc)
+        const ray = new geo.Ray(new geo.Vec3(ndc.x, ndc.y, -1), new geo.Vec3(0, 0, 1))
+        return ray
+    }
+
+    private canvasToWorldRay(cc: geo.Vec2): geo.Ray {
+        const ndcRay = this.canvasToNDCRay(cc)
+        const invProj = this.renderer.projectionMatrix.invert()
+        const invView = this.renderer.viewMatrix.invert()
+        const invViewProj = this.renderer.projectionMatrix.matmul(this.renderer.viewMatrix).invert()
+        const viewRay = ndcRay.transform(invProj)
+        const worldRay = viewRay.transform(invView)
+
+        if (this.inp.mouseLeftReleased) {
+            console.log("cc: ", cc.toString())
+            console.log("ndc: ", ndcRay.toString())
+            console.log("view: ", viewRay.toString())
+            console.log("world: ", worldRay.toString())
+            console.log("world2: ", ndcRay.transform(invViewProj).toString())
+        }
+
+        return worldRay
     }
 }
 

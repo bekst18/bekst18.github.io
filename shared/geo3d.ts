@@ -632,9 +632,9 @@ export class Mat4 {
     transform3(a: Vec3): Vec3 {
         const w = a.x * this.m14 + a.y * this.m24 + a.z * this.m34 + this.m44
         const invW = 1 / w
-        const x = (a.x * this.m11 + a.y * this.m21 + a.z * this.m31 + this.m41) / invW
-        const y = (a.x * this.m12 + a.y * this.m22 + a.z * this.m32 + this.m42) / invW
-        const z = (a.x * this.m13 + a.y * this.m23 + a.z * this.m33 + this.m43) / invW
+        const x = (a.x * this.m11 + a.y * this.m21 + a.z * this.m31 + this.m41) * invW
+        const y = (a.x * this.m12 + a.y * this.m22 + a.z * this.m32 + this.m42) * invW
+        const z = (a.x * this.m13 + a.y * this.m23 + a.z * this.m33 + this.m43) * invW
         return new Vec3(x, y, z)
     }
 
@@ -786,5 +786,128 @@ export class AABB {
 
     clone(): AABB {
         return new AABB(this.min.clone(), this.max.clone())
+    }
+}
+
+export class Ray {
+    constructor(public readonly orig: Vec3, public readonly dir: Vec3) { }
+
+    /**
+     * normalize ray direction
+     */
+    normalize(): Ray {
+        return new Ray(this.orig, this.dir.normalize())
+    }
+
+    /**
+     * transform ray by specified matrix
+     * @param mat matrix
+     */
+    transform(mat: Mat4): Ray {
+        const orig = mat.transform3(this.orig)
+        const dest = mat.transform3(this.orig.add(this.dir))
+        const ray = Ray.fromOrigDest(orig, dest)
+        return ray
+    }
+
+    /**
+     * cast ray against plane, optional return value because it may not intersect
+     * if plane is parallel with ray, will return Infinity
+     * @param plane plane to cast ray against
+     */
+    cast(plane: Plane): number {
+        const d = plane.normal.dot(this.dir);
+        const t = plane.center().sub(this.orig).dot(plane.normal) / d;
+        return t;
+    }
+
+    /**
+     * interpolate along ray
+     * @param t t value (0 = origin, 1 = origin + dir)
+     */
+    lerp(t: number): Vec3 {
+        return this.orig.add(this.dir.mulX(t))
+    }
+
+    /**
+     * convert to string
+     */
+    toString(): string {
+        return `orig: ${this.orig} dir: ${this.dir}`
+    }
+
+    /**
+     * construct plane from origin and destination
+     * @param orig orig point
+     * @param dest destination point
+     */
+    static fromOrigDest(orig: Vec3, dest: Vec3): Ray {
+        const dir = dest.sub(orig).normalize()
+        return new Ray(orig, dir)
+    }
+}
+
+export class Plane {
+    constructor(public readonly normal: Vec3, public readonly d: number) { }
+
+    /**
+     * construct a plane from point and normal
+     * @param pt point on plane
+     * @param n plane normal
+     */
+    static fromPointNormal(pt: Vec3, n: Vec3): Plane {
+        n = n.normalize()
+        return new Plane(n, pt.dot(n))
+    }
+
+    /**
+     * construct a plane from three points, points are assumed to be specified in CCW order
+     * @param a 1st point
+     * @param b 2nd point
+     * @param c 3rd point
+     */
+    static fromPoints(a: Vec3, b: Vec3, c: Vec3): Plane {
+        const n = b.sub(a).cross(c.sub(a)).normalize()
+        const d = a.dot(b)
+        return new Plane(n, d);
+    }
+
+    /**
+     * returns normalized plane
+     */
+    normalize(): Plane {
+        const len = this.normal.length()
+        return new Plane(this.normal.divX(len), this.d / len)
+    }
+
+    /**
+     * returns the "center" of the plane - the point described by the normal and distance
+     */
+    center(): Vec3 {
+        return this.normal.mulX(this.d)
+    }
+
+    /**
+     * calculate signed distance from plane to point
+     * positive distance indicates pt is in-front of plane
+     * negative distance indicates pt is behind plane
+     * @param pt point
+     */
+    distanceTo(pt: Vec3): number {
+        return this.normal.dot(pt) - this.d;
+    }
+
+    /**
+     * transform plane by matrix
+     * @param mat matrix
+     */
+    transform(mat: Mat4): Plane {
+        const center = mat.transform3(this.center())
+        const normal = mat.toMat3().transform(this.normal)
+        return Plane.fromPointNormal(center, normal);
+    }
+
+    toString(): string {
+        return `${this.normal} ${this.d}`
     }
 }
