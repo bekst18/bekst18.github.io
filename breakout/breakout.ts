@@ -3,8 +3,6 @@ import * as geo from "../shared/geo3d.js"
 import * as input from "../shared/input.js"
 import * as rand from "../shared/rand.js"
 import * as math from "../shared/math.js"
-import * as array from "../shared/array.js"
-import * as noise from "../shared/noise.js"
 import * as audio from "../shared/audio.js"
 import * as gfx from "./gfx.js"
 
@@ -21,7 +19,7 @@ const brickRows = 5
 const brickCols = 10
 const borderWidth = 1
 const fieldWidth = brickWidth * brickCols
-const topRowMargin = .5
+const topRowMargin = 1
 const fieldHeight = brickHeight * brickRows * 4 + topRowMargin
 const fieldLeft = -fieldWidth / 2
 const fieldRight = fieldLeft + fieldWidth
@@ -272,7 +270,7 @@ class App {
             const nearest = ballPosition.clamp(aabb.min, aabb.max)
             const t = math.unlerp(aabb.min.x, aabb.max.x, nearest.x)
             const rot = geo.Mat4.rotationZ(math.lerp(-Math.PI / 4, Math.PI / 4, t))
-
+            
             // choose a random deviation from standard reflection angle
             velocity = rot.transform3(velocity)
             velocity.z = 0
@@ -330,6 +328,12 @@ class App {
             this.ball.velocity = new geo.Vec3(0, 0, 0)
             this.ball.position = new geo.Vec3(0, Ball.radius, -1 + Ball.radius)
             this.playImpactSound()
+        }
+
+        // clamp y velocity to avoid horizontal angles
+        if (this.ball.velocity.lengthSq() > 0 && Math.abs(this.ball.velocity.y) < ballSpeed * .25) {
+            this.ball.velocity.y = Math.sign(this.ball.velocity.y) * ballSpeed * .25
+            this.ball.velocity = this.ball.velocity.normalize().mulX(ballSpeed)
         }
     }
 
