@@ -41,7 +41,7 @@ void main() {
     float specular_intensity = 1.f - roughness;
     float specular_pow = mix(.1f, 32.f, specular_intensity);
     vec3 surface_normal = normalize(frag_normal);
-    vec3 to_light = normalize(vec3(-1, 0, 1));
+    vec3 to_light = normalize(vec3(-1, -1, 1));
     vec3 half_vec = normalize(normalize(eye_position - frag_position) + to_light);
     float ndl = clamp(dot(to_light, surface_normal), 0.f, 1.f);
     float ndh = pow(clamp(dot(half_vec, surface_normal), 0.0, 1.f), specular_pow);

@@ -387,6 +387,51 @@ export class Mat3 {
             0, 0, 1)
     }
 
+    static rotationX(theta: number): Mat3 {
+        const cosTheta = Math.cos(theta)
+        const sinTheta = Math.sin(theta)
+
+        return new Mat3(
+            1, 0, 0,
+            0, cosTheta, -sinTheta,
+            0, sinTheta, cosTheta)
+    }
+
+    static rotationY(theta: number): Mat3 {
+        const cosTheta = Math.cos(theta)
+        const sinTheta = Math.sin(theta)
+
+        return new Mat3(
+            cosTheta, 0, sinTheta,
+            0, 1, 0,
+            -sinTheta, 0, cosTheta)
+    }
+
+    static rotationZ(theta: number): Mat3 {
+        const cosTheta = Math.cos(theta)
+        const sinTheta = Math.sin(theta)
+
+        return new Mat3(
+            cosTheta, -sinTheta, 0,
+            sinTheta, cosTheta, 0,
+            0, 0, 1)
+    }
+
+    static rotation_axis(axis: Vec3, theta: number): Mat3 {
+        const cosTheta = Math.cos(theta)
+        const sinTheta = Math.sin(theta)
+        const { x, y, z } = axis
+        const xSinTheta = x * sinTheta
+        const ySinTheta = y * sinTheta
+        const zSinTheta = z * sinTheta
+        const oneMinusCosTheta = 1 - cosTheta
+
+        return new Mat3(
+            cosTheta + x * x * oneMinusCosTheta, x * y * oneMinusCosTheta - zSinTheta, x * z * oneMinusCosTheta + ySinTheta,
+            y * x * oneMinusCosTheta + zSinTheta, cosTheta + y * y * oneMinusCosTheta, y * z * oneMinusCosTheta - xSinTheta,
+            z * x * oneMinusCosTheta - ySinTheta, z * y * oneMinusCosTheta + xSinTheta, cosTheta + z * z * oneMinusCosTheta)
+    }
+
     constructor(
         public m11: number, public m12: number, public m13: number,
         public m21: number, public m22: number, public m23: number,

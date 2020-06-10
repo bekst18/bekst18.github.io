@@ -9,24 +9,23 @@ import * as gfx from "./gfx.js"
 const brickWidth = 2
 const brickHeight = 1
 const brickDepth = .5
-const paddleWidth = 4
-const paddleHeight = 1
+const paddleHeight = .5
 const paddleDepth = .5
-const ballRadius = .5
-const paddleSpeed = .25
-const ballSpeed = .35
-const brickRows = 5
-const brickCols = 10
+const paddleSpeed = .5
 const borderWidth = 1
-const fieldWidth = brickWidth * brickCols
 const topRowMargin = 1
-const fieldHeight = brickHeight * brickRows * 4 + topRowMargin
-const fieldLeft = -fieldWidth / 2
-const fieldRight = fieldLeft + fieldWidth
-const fieldBottom = -fieldHeight / 2
-const fieldTop = fieldBottom + fieldHeight
 const brickMargin = .05
 const paddleBottomMargin = 1
+
+const startMessage = "Tap, click, or press any key to launch ball."
+const gameOverMessage = "Game over! Tap, click, or press any key to restart."
+const nextLevelMessage = "Level Clear! Tap, click, or press any key to advance."
+
+const ballSpeedByLevel = [.2, .3, .35, .4, .4, .4, .5, .5, .6, .7]
+const ballRadiusByLevel = [1.5, 1, .5, .5, .5, .5, .25, .25, .25, .125]
+const paddleWidthByLevel = [8, 8, 6, 6, 4, 4, 4, 4, 3, 2]
+const brickRowsByLevel = [3, 3, 4, 4, 5, 5, 6, 6, 7, 8]
+const brickColsByLevel = [6, 6, 8, 8, 10, 10, 12, 12, 14, 16]
 
 const brickColors = new Array<geo.Vec4>(
     new geo.Vec4(1, 0, 0, 1),
@@ -34,27 +33,80 @@ const brickColors = new Array<geo.Vec4>(
     new geo.Vec4(0, 0, 1, 1),
     new geo.Vec4(0, 1, 1, 1),
     new geo.Vec4(1, 0, 1, 1),
-    new geo.Vec4(.5, .5, .5, 1),
+    new geo.Vec4(1, 1, 1, 1),
+    new geo.Vec4(.5, .5, 0, 1),
+    new geo.Vec4(0, .5, .5, 1),
+    new geo.Vec4(.5, 0, .5, 1),
+    new geo.Vec4(.25, .75, 0, 1),
+    new geo.Vec4(0, .25, .75, 1),
+    new geo.Vec4(.25, 0, .75, 1),
+    new geo.Vec4(.75, .25, 0, 1),
+    new geo.Vec4(0, .75, .25, 1),
+    new geo.Vec4(.75, 0, .25, 1),
 )
 
+interface PaddleOptions {
+    halfExtents: geo.Vec3
+    position: geo.Vec3
+    batch: gfx.Batch
+    velocity?: geo.Vec3
+}
+
 class Paddle {
-    batch = new gfx.Batch()
+    public readonly halfExtents: geo.Vec3
+    public readonly batch = new gfx.Batch()
     position = new geo.Vec3(0, 0, 0)
     velocity = new geo.Vec3(0, 0, 0)
-    static readonly halfExtents = new geo.Vec3(paddleWidth / 2, paddleHeight / 2, paddleDepth)
+
+    constructor(options: PaddleOptions) {
+        this.halfExtents = options.halfExtents.clone()
+        this.batch = options.batch
+        this.position = options.position.clone()
+        this.velocity = options.velocity?.clone() ?? new geo.Vec3(0, 0, 0)
+    }
+}
+
+interface BrickOptions {
+    position: geo.Vec3
+    batch: gfx.Batch
 }
 
 class Brick {
-    batch = new gfx.Batch()
-    static readonly halfExtents = new geo.Vec3(brickWidth / 2 - brickMargin, brickHeight / 2 - brickMargin, brickDepth)
-    position = new geo.Vec3(0, 0, 0)
+    public readonly batch = new gfx.Batch()
+    public readonly position = new geo.Vec3(0, 0, 0)
+    static readonly halfExtents = new geo.Vec3(brickWidth / 2 - brickMargin, brickHeight / 2 - brickMargin, brickDepth / 2)
+
+    constructor(options: BrickOptions) {
+        this.position = options.position.clone()
+        this.batch = options.batch
+    }
+}
+
+interface BallOptions {
+    radius: number
+    position: geo.Vec3
+    batch: gfx.Batch
+    velocity?: geo.Vec3
 }
 
 class Ball {
-    batch: gfx.Batch = new gfx.Batch()
-    position: geo.Vec3 = new geo.Vec3(0, 0, 0)
-    velocity: geo.Vec3 = new geo.Vec3(0, 0, 0)
-    static readonly radius: number = ballRadius
+    radius: number = 1
+    position: geo.Vec3
+    batch: gfx.Batch
+    velocity: geo.Vec3
+
+    constructor(options: BallOptions) {
+        this.radius = options.radius
+        this.position = options.position.clone()
+        this.batch = options.batch
+        this.velocity = options.velocity?.clone() ?? new geo.Vec3(0, 0, 0)
+    }
+}
+
+enum GameState {
+    Play,
+    Launch,
+    Wait
 }
 
 // step 1 - clear screen, init gl, etc...
@@ -62,26 +114,30 @@ class Ball {
 // step 3 - draw a world space triangle
 class App {
     private readonly canvas = dom.byId("canvas") as HTMLCanvasElement
+    private readonly levelSpan = dom.byId("level") as HTMLDivElement
+    private readonly ballsRemainingSpan = dom.byId("ballsRemaining") as HTMLDivElement
+    private readonly messageDiv = dom.byId("message") as HTMLDivElement
     private readonly renderer = new gfx.Renderer(this.canvas)
     private readonly inp = new input.Input(this.canvas)
-    private ticks = 0
     private fieldBatch: gfx.Batch = new gfx.Batch()
-    private readonly paddle = new Paddle()
-    private readonly ball = new Ball()
-    private bricks = new Set<Brick>()
+    private paddle!: Paddle
+    private ball!: Ball
+    private readonly bricks = new Set<Brick>()
     private readonly ac = new AudioContext()
     private impactSounds = new Array<AudioBuffer>()
+    private ballsRemaining = 3
+    private level = 9
+    private state = GameState.Launch
+    private continue = () => { }
 
     async exec() {
-        this.initScene()
+        this.message = startMessage
+        document.addEventListener("keyup", () => this.handleKeyUp())
+
+        this.initLevel()
         await this.initAudio()
         this.canvas.focus()
         requestAnimationFrame(() => this.tick())
-    }
-
-    private initScene() {
-        this.renderer.viewMatrix = geo.Mat4.lookAt(new geo.Vec3(0, -8, 8), new geo.Vec3(0, 0, -1), new geo.Vec3(0, 1, 0)).invert()
-        this.initPlayingField()
     }
 
     private async initAudio() {
@@ -93,102 +149,11 @@ class App {
         }
     }
 
-    private initPlayingField() {
-        // playing field
-        {
-            const ixm = new gfx.IxMesh()
-
-            // floor
-            {
-                const floor = gfx.IxMesh.rectFromCoords(fieldLeft, fieldBottom, -1.25, fieldRight, fieldTop, -1)
-                floor.vertices.forEach(v => v.color = new geo.Vec4(.5, .5, .5, .5))
-                ixm.cat(floor)
-            }
-
-            // border
-            {
-                const walls = new gfx.IxMesh()
-                walls.cat(gfx.IxMesh.rectFromCoords(fieldLeft - borderWidth, fieldBottom, -1, fieldLeft, fieldTop, 1))
-                walls.cat(gfx.IxMesh.rectFromCoords(fieldRight, fieldBottom, -1, fieldRight + borderWidth, fieldTop, 1))
-                walls.cat(gfx.IxMesh.rectFromCoords(fieldLeft - borderWidth, fieldTop, -1, fieldRight + borderWidth, fieldTop + borderWidth, 1))
-                walls.vertices.forEach(v => v.color = new geo.Vec4(1, 0, 0, 1))
-                ixm.cat(walls)
-            }
-
-            const vao = this.renderer.createMesh(ixm)
-            this.fieldBatch = new gfx.Batch({
-                vao: vao,
-                numIndices: ixm.indices.length,
-                roughness: 1
-            })
-        }
-
-        // bricks
-        {
-            const fieldXOffset = fieldLeft + Brick.halfExtents.x
-            const fieldYOffset = fieldTop - topRowMargin - brickHeight * brickRows
-
-            for (let i = 0; i < brickRows; ++i) {
-                const yOffset = fieldYOffset + i * brickHeight + brickMargin
-                for (let j = 0; j < brickCols; ++j) {
-                    const xOffset = fieldXOffset + j * (brickWidth + brickMargin)
-                    const aabb = geo.AABB.fromHalfExtents(Brick.halfExtents).shrink(brickMargin)
-                    const ixm = gfx.IxMesh.rect(aabb)
-                    const position = new geo.Vec3(xOffset, yOffset, -.5)
-
-                    const brick = new Brick()
-                    brick.batch = new gfx.Batch({
-                        worldMatrix: geo.Mat4.translation(position),
-                        diffuseColor: rand.choose(brickColors),
-                        roughness: .8,
-                        vao: this.renderer.createMesh(ixm),
-                        numIndices: ixm.indices.length,
-                    })
-
-                    brick.position = new geo.Vec3(xOffset + Brick.halfExtents.x, yOffset + Brick.halfExtents.y, -1 + Brick.halfExtents.z)
-                    this.bricks.add(brick)
-                }
-            }
-        }
-
-        // add paddle
-        {
-            const aabb = geo.AABB.fromHalfExtents(Paddle.halfExtents)
-            const ixm = gfx.IxMesh.rect(aabb)
-            ixm.vertices.forEach(v => v.color = new geo.Vec4(0, 1, 1, 1))
-
-            const vao = this.renderer.createMesh(ixm)
-            this.paddle.position = new geo.Vec3(0, fieldBottom + Paddle.halfExtents.y + paddleBottomMargin, -Paddle.halfExtents.z)
-            this.paddle.batch = new gfx.Batch({
-                vao,
-                roughness: .5,
-                numIndices: ixm.indices.length
-            })
-        }
-
-        // add ball
-        {
-            const ixm = gfx.IxMesh.sphere(16, 16)
-            ixm.transform(geo.Mat4.scaling(new geo.Vec3(Ball.radius, Ball.radius, Ball.radius)))
-            ixm.vertices.forEach(v => v.color = new geo.Vec4(0, 0, 1, 1))
-
-            const vao = this.renderer.createMesh(ixm)
-            this.ball.position = new geo.Vec3(0, Ball.radius, -1 + Ball.radius)
-            this.ball.batch = new gfx.Batch({
-                vao,
-                offset: 0,
-                roughness: 0,
-                numIndices: ixm.indices.length
-            })
-        }
-    }
-
     private tick() {
         this.checkSize()
         this.update()
         this.drawScene()
         requestAnimationFrame(() => this.tick())
-        ++this.ticks
     }
 
     private checkSize() {
@@ -206,14 +171,106 @@ class App {
         this.handleInput()
         this.handleCollision()
         this.updateWorldMatrices()
+        this.updateUI()
         this.inp.flush()
     }
 
+    private updateUI() {
+        this.ballsRemainingSpan.textContent = this.ballsRemaining.toString()
+        this.levelSpan.textContent = this.level.toString()
+
+        if (this.message) {
+            this.messageDiv.hidden = false
+        } else {
+            this.messageDiv.hidden = true
+        }
+    }
+
+    private get brickRows(): number {
+        return brickRowsByLevel[this.level - 1]
+    }
+
+    private get brickCols(): number {
+        return brickColsByLevel[this.level - 1]
+    }
+
+    private get fieldWidth(): number {
+        return brickWidth * this.brickCols
+    }
+
+    private get fieldHeight(): number {
+        return brickHeight * this.brickRows * 4 + topRowMargin
+    }
+
+    private get fieldLeft(): number {
+        return -this.fieldWidth / 2
+    }
+
+    private get fieldRight(): number {
+        return this.fieldLeft + this.fieldWidth
+    }
+
+    private get fieldBottom(): number {
+        return -this.fieldHeight / 2
+    }
+
+    private get fieldTop(): number {
+        return this.fieldBottom + this.fieldHeight
+    }
+
+    private get ballSpeed(): number {
+        return ballSpeedByLevel[this.level - 1]
+    }
+
+    private get message(): string {
+        return this.messageDiv.textContent ?? ""
+    }
+
+    private set message(text: string) {
+        this.messageDiv.textContent = text
+    }
+
+    private handleKeyUp() {
+        if (this.state === GameState.Play) {
+            return
+        }
+
+        if (this.state === GameState.Wait) {
+            this.continue()
+            return
+        }
+
+        this.launchBall()
+    }
+
     private handleInput() {
+        switch (this.state) {
+            case GameState.Launch:
+                this.handleInputLaunch()
+                break
+
+            case GameState.Play:
+                this.handleInputPlay()
+                break
+
+            case GameState.Wait:
+                this.handleInputWait()
+                break
+        }
+    }
+
+    private handleInputLaunch(): void {
+        // start game on mouse cick
+        if (this.inp.mouseLeftPressed) {
+            this.launchBall()
+        }
+    }
+
+    private handleInputPlay() {
         this.paddle.velocity = new geo.Vec3(0, 0, 0)
 
         // mouse / touch paddle movement
-        if (this.inp.mouseLeftDown && this.ball.velocity.lengthSq() > 0) {
+        if (this.inp.mouseLeftDown) {
             const worldMouseRay = this.canvasToWorldRay(new geo.Vec2(this.inp.mouseX, this.inp.mouseY))
             const fieldPlane = geo.Plane.fromPointNormal(this.paddle.position, new geo.Vec3(0, 0, 1))
             const fieldIx = worldMouseRay.lerp(worldMouseRay.cast(fieldPlane))
@@ -225,15 +282,10 @@ class App {
         }
 
         // keyboard paddle movement
-        if (this.inp.down("a") && this.ball.velocity.lengthSq() > 0) {
+        if (this.inp.down("a")) {
             this.paddle.velocity = new geo.Vec3(-1, 0, 0)
-        } else if (this.inp.down("d") && this.ball.velocity.lengthSq() > 0) {
+        } else if (this.inp.down("d")) {
             this.paddle.velocity = new geo.Vec3(1, 0, 0)
-        }
-
-        // launch ball
-        if (Math.abs(this.ball.velocity.lengthSq()) < .1 && (this.inp.released(" ") || this.inp.mouseLeftReleased)) {
-            this.ball.velocity = new geo.Vec3(0, -1, 0).normalize().mulX(ballSpeed)
         }
 
         if (this.paddle.velocity.lengthSq() > 0) {
@@ -241,20 +293,39 @@ class App {
         }
     }
 
+    private handleInputWait() {
+        if (this.inp.mouseLeftDown) {
+            this.continue()
+        }
+    }
+
+    private launchBall() {
+        // choose random upward launch direction
+        const rot = geo.Mat3.rotationZ(rand.float(-Math.PI / 4, Math.PI / 4))
+        const v = rot.transform(new geo.Vec3(0, 1, 0)).normalize()
+        this.ball.velocity = v.mulX(this.ballSpeed)
+        this.state = GameState.Play
+        this.message = ""
+    }
+
     private handleCollision() {
+        if (this.state !== GameState.Play) {
+            return
+        }
+
         // is paddle going to cross boundary?
         const bounds = geo.AABB.fromCoords(
-            fieldLeft, fieldBottom, -1,
-            fieldRight, fieldTop, 1)
+            this.fieldLeft, this.fieldBottom, -1,
+            this.fieldRight, this.fieldTop, 1)
 
         const paddlePosition = this.paddle.position.add(this.paddle.velocity)
-        const paddleBounds = geo.AABB.fromPositionHalfExtents(paddlePosition, Paddle.halfExtents)
+        const paddleBounds = geo.AABB.fromPositionHalfExtents(paddlePosition, this.paddle.halfExtents)
 
         const ballPosition = this.ball.position.add(this.ball.velocity)
-        const ballBounds = geo.AABB.fromPositionHalfExtents(ballPosition, new geo.Vec3(Ball.radius, Ball.radius, Ball.radius))
+        const ballBounds = geo.AABB.fromPositionHalfExtents(ballPosition, new geo.Vec3(this.ball.radius, this.ball.radius, this.ball.radius))
 
         // check paddle against boundary
-        if (paddleBounds.min.x < fieldLeft || paddleBounds.max.x > fieldRight) {
+        if (paddleBounds.min.x < this.fieldLeft || paddleBounds.max.x > this.fieldRight) {
             this.paddle.velocity = new geo.Vec3(0, 0, 0)
         }
 
@@ -266,19 +337,19 @@ class App {
             // allow player some control
             // right side of paddle rotates angle right
             // left side of paddle rotates angle left
-            const aabb = geo.AABB.fromPositionHalfExtents(paddlePosition, Paddle.halfExtents)
+            const aabb = geo.AABB.fromPositionHalfExtents(paddlePosition, this.paddle.halfExtents)
             const nearest = ballPosition.clamp(aabb.min, aabb.max)
             const t = math.unlerp(aabb.min.x, aabb.max.x, nearest.x)
             const rot = geo.Mat4.rotationZ(math.lerp(-Math.PI / 4, Math.PI / 4, t))
-            
+
             // choose a random deviation from standard reflection angle
             velocity = rot.transform3(velocity)
             velocity.z = 0
-            this.ball.velocity = velocity.normalize().mulX(ballSpeed)
+            this.ball.velocity = velocity.normalize().mulX(this.ballSpeed)
         }
 
         // handle brick hit
-        const nearestBrick = this.findNearestBrick(ballPosition, Ball.radius)
+        const nearestBrick = this.findNearestBrick(ballPosition, this.ball.radius)
         if (nearestBrick) {
             const aabb = geo.AABB.fromPositionHalfExtents(nearestBrick.position, Brick.halfExtents)
             const nearestPt = this.findNearestPointOnBrick(nearestBrick, ballPosition)
@@ -300,10 +371,15 @@ class App {
                 velocity.y = -velocity.y
             }
 
-            this.ball.velocity = velocity.normalize().mulX(ballSpeed)
+            this.ball.velocity = velocity.normalize().mulX(this.ballSpeed)
             this.ball.velocity.z = 0
             this.bricks.delete(nearestBrick)
             this.playImpactSound()
+
+            // if no bricks, move to next level
+            if (this.bricks.size === 0) {
+                this.wait(nextLevelMessage, () => this.nextLevel())
+            }
         }
 
         // is ball going to cross boundary?
@@ -311,7 +387,7 @@ class App {
             let velocity = this.ball.velocity
             velocity.x = -velocity.x
             velocity.z = 0
-            this.ball.velocity = velocity.normalize().mulX(ballSpeed)
+            this.ball.velocity = velocity.normalize().mulX(this.ballSpeed)
             this.playImpactSound()
         }
 
@@ -319,21 +395,154 @@ class App {
             let velocity = this.ball.velocity
             velocity.y = -velocity.y
             velocity.z = 0
-            this.ball.velocity = velocity.normalize().mulX(ballSpeed)
+            this.ball.velocity = velocity.normalize().mulX(this.ballSpeed)
             this.playImpactSound()
         }
 
         // ball off board
         if (ballBounds.min.y < bounds.min.y) {
             this.ball.velocity = new geo.Vec3(0, 0, 0)
-            this.ball.position = new geo.Vec3(0, Ball.radius, -1 + Ball.radius)
+            this.ball.position = new geo.Vec3(0, this.paddle.position.y + this.paddle.halfExtents.y + this.ball.radius, this.ball.radius),
             this.playImpactSound()
+            this.state = GameState.Launch
+            this.ballsRemaining--
+
+            if (this.ballsRemaining <= 0) {
+                this.gameOver()
+            }
         }
 
         // clamp y velocity to avoid horizontal angles
-        if (this.ball.velocity.lengthSq() > 0 && Math.abs(this.ball.velocity.y) < ballSpeed * .25) {
-            this.ball.velocity.y = Math.sign(this.ball.velocity.y) * ballSpeed * .25
-            this.ball.velocity = this.ball.velocity.normalize().mulX(ballSpeed)
+        if (this.ball.velocity.lengthSq() > 0 && Math.abs(this.ball.velocity.y) < this.ballSpeed * .25) {
+            this.ball.velocity.y = Math.sign(this.ball.velocity.y) * this.ballSpeed * .25
+            this.ball.velocity = this.ball.velocity.normalize().mulX(this.ballSpeed)
+        }
+    }
+
+    private gameOver() {
+        this.ballsRemaining = 3
+        this.level = 1
+        this.wait(gameOverMessage, () => this.initLevel())
+    }
+
+    private nextLevel() {
+        this.level++
+        this.initLevel()
+    }
+
+    private wait(msg: string, f: () => void) {
+        this.message = msg
+        this.continue = f
+        this.state = GameState.Wait
+    }
+
+    private initLevel() {
+        this.bricks.clear()
+        this.state = GameState.Launch
+        this.message = startMessage
+
+        // playing field
+        {
+            const ixm = new gfx.IxMesh()
+
+            // floor
+            {
+                const floor = gfx.IxMesh.rectFromCoords(this.fieldLeft, this.fieldBottom, -.25, this.fieldRight, this.fieldTop, 0)
+                floor.vertices.forEach(v => v.color = new geo.Vec4(.5, .5, .5, .5))
+                ixm.cat(floor)
+            }
+
+            // border
+            {
+                const walls = new gfx.IxMesh()
+                walls.cat(gfx.IxMesh.rectFromCoords(this.fieldLeft - borderWidth, this.fieldBottom, -.25, this.fieldLeft, this.fieldTop, 1))
+                walls.cat(gfx.IxMesh.rectFromCoords(this.fieldRight, this.fieldBottom, -.25, this.fieldRight + borderWidth, this.fieldTop, 1))
+                walls.cat(gfx.IxMesh.rectFromCoords(this.fieldLeft - borderWidth, this.fieldTop, -.25, this.fieldRight + borderWidth, this.fieldTop + borderWidth, 1))
+                walls.vertices.forEach(v => v.color = new geo.Vec4(1, 0, 0, 1))
+                ixm.cat(walls)
+            }
+
+            const vao = this.renderer.createMesh(ixm)
+            this.fieldBatch = new gfx.Batch({
+                vao: vao,
+                numIndices: ixm.indices.length,
+                roughness: 1
+            })
+        }
+
+        // bricks
+        {
+            const brickHalfWidth = brickWidth / 2
+            const brickHalfHeight = brickHeight / 2
+            const brickHalfDepth = brickDepth / 2
+
+            const fieldXOffset = this.fieldLeft + Brick.halfExtents.x
+            const fieldYOffset = this.fieldTop - topRowMargin - brickHeight * this.brickRows
+
+            for (let i = 0; i < this.brickRows; ++i) {
+                const yOffset = fieldYOffset + i * brickHeight + brickMargin
+                for (let j = 0; j < this.brickCols; ++j) {
+                    const xOffset = fieldXOffset + j * (brickWidth + brickMargin)
+                    const brickMin = new geo.Vec3(-brickHalfWidth + brickMargin, -brickHalfHeight + brickMargin, -brickHalfDepth)
+                    const brickMax = new geo.Vec3(brickHalfWidth - brickMargin, brickHalfHeight - brickMargin, brickHalfDepth)
+                    const aabb = new geo.AABB(brickMin, brickMax)
+                    const ixm = gfx.IxMesh.rect(aabb)
+                    const position = new geo.Vec3(xOffset, yOffset, brickHalfDepth)
+
+                    const brick = new Brick({
+                        position: position,
+                        batch: new gfx.Batch({
+                            worldMatrix: geo.Mat4.translation(position),
+                            diffuseColor: rand.choose(brickColors),
+                            roughness: .8,
+                            vao: this.renderer.createMesh(ixm),
+                            numIndices: ixm.indices.length,
+                        })
+                    })
+
+                    this.bricks.add(brick)
+                }
+            }
+        }
+
+        // add paddle
+        {
+            const width = paddleWidthByLevel[this.level - 1]
+            const halfExtents = new geo.Vec3(width / 2, paddleHeight / 2, paddleDepth / 2)
+            const aabb = geo.AABB.fromHalfExtents(halfExtents)
+            const ixm = gfx.IxMesh.rect(aabb)
+            ixm.vertices.forEach(v => v.color = new geo.Vec4(0, 1, 1, 1))
+
+            const vao = this.renderer.createMesh(ixm)
+            this.paddle = new Paddle({
+                halfExtents: halfExtents,
+                position: new geo.Vec3(0, this.fieldBottom + halfExtents.y + paddleBottomMargin, halfExtents.z),
+                batch: new gfx.Batch({
+                    vao,
+                    roughness: .5,
+                    numIndices: ixm.indices.length
+                })
+            })
+        }
+
+        // add ball
+        {
+            const radius = ballRadiusByLevel[this.level - 1]
+            const ixm = gfx.IxMesh.sphere(16, 16)
+            ixm.transform(geo.Mat4.scaling(new geo.Vec3(radius, radius, radius)))
+            ixm.vertices.forEach(v => v.color = new geo.Vec4(0, 0, 1, 1))
+
+            const vao = this.renderer.createMesh(ixm)
+            this.ball = new Ball({
+                radius: radius,
+                position: new geo.Vec3(0, this.paddle.position.y + this.paddle.halfExtents.y + radius, radius),
+                batch: new gfx.Batch({
+                    vao,
+                    offset: 0,
+                    roughness: 0,
+                    numIndices: ixm.indices.length
+                })
+            })
         }
     }
 
@@ -375,8 +584,8 @@ class App {
     private drawScene() {
         // configure camera - fit play area to screen with some small margin
         let z = 0
-        const height = fieldTop - fieldBottom + borderWidth * 2
-        const width = fieldRight - fieldLeft + borderWidth * 2
+        const height = this.fieldTop - this.fieldBottom + borderWidth * 2
+        const width = this.fieldRight - this.fieldLeft + borderWidth * 2
         const fieldAspect = width / height
         if (fieldAspect < this.renderer.aspect) {
             z = height / 2 / Math.tan(this.renderer.fov / 2)
@@ -386,11 +595,11 @@ class App {
 
         this.renderer.viewMatrix = geo.Mat4.lookAt(
             new geo.Vec3(0, 0, 1 + z), new geo.Vec3(0, 0, -1), new geo.Vec3(0, 1, 0)).invert()
-        // cameraZ = width / 2 / Math.tan(fov * camera.aspect / 2);
-        /*
-        this.renderer.viewMatrix = geo.Mat4.lookAt(
-            new geo.Vec3(0, 0, 16), new geo.Vec3(0, 1, 0), new geo.Vec3(0, 1, 0)).invert()
-        */
+
+        // show from side view for debugging
+        // this.renderer.viewMatrix = geo.Mat4.lookAt(
+        //     new geo.Vec3(0, -16, 0), new geo.Vec3(0, 1, 0), new geo.Vec3(0, 0, 1)).invert()
+
         this.renderer.drawBatch(this.fieldBatch)
         this.renderer.drawBatch(this.ball.batch)
         this.renderer.drawBatch(this.paddle.batch)

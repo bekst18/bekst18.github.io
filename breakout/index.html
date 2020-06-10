@@ -7,7 +7,14 @@
     <link rel="stylesheet" type="text/css" href="breakout.css">
 </head>
 <body>
-    <canvas id="canvas" tabindex="1"></canvas>
+    <div id="container">
+        <div id="stats">
+            <div class="m-3">Level:&nbsp;<span id="level">1</span></div>
+            <div class="m-3">Balls Remaining:&nbsp;<span id="ballsRemaining">3</span></div>
+            <div class="m-3" id="message" hidden></div>
+        </div>
+        <canvas id="canvas" tabindex="1"></canvas>
+    </div>
     <script type="module" src="breakout.js"></script>
 </body>
 </html>
