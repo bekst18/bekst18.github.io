@@ -233,7 +233,7 @@ class App {
     private readonly ac = new AudioContext()
     private impactSounds = new Array<AudioBuffer>()
     private ballsRemaining = 3
-    private level = 10
+    private level = 1
     private state = GameState.Launch
     private continue = () => { }
 
