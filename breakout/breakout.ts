@@ -481,6 +481,7 @@ class App {
             if (this.bricks.size === 0) {
                 this.ball.velocity = new geo.Vec3(0, 0, 0)
                 this.wait(nextLevelMessage, () => this.nextLevel())
+                return
             }
         }
 
@@ -504,14 +505,19 @@ class App {
         // ball off board
         if (ballBounds.min.y < bounds.min.y) {
             this.ball.velocity = new geo.Vec3(0, 0, 0)
-            this.ball.position = new geo.Vec3(0, this.paddle.position.y + this.paddle.halfExtents.y + this.ball.radius, this.ball.radius),
-                this.playImpactSound()
+            this.ball.position = new geo.Vec3(0, this.paddle.position.y + this.paddle.halfExtents.y + this.ball.radius, this.ball.radius)
+            this.playImpactSound()
             this.state = GameState.Launch
+            this.paddle.position = new geo.Vec3(0, this.fieldBottom + this.paddle.halfExtents.y + paddleBottomMargin, this.paddle.halfExtents.z)
+            this.paddle.velocity = new geo.Vec3(0, 0, 0)
             this.ballsRemaining--
 
             if (this.ballsRemaining <= 0) {
                 this.gameOver()
+                return
             }
+
+            return
         }
 
         // clamp y velocity to avoid horizontal angles

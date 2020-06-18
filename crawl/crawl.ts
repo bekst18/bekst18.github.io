@@ -568,7 +568,7 @@ class App {
 
     async exec() {
         this.canvas.focus()
-        this.map = await gen.generateOutdoorMap(this.renderer, this.player, 256, 256)
+        this.map = await gen.generateDungeonLevel(this.renderer, this.player, 32, 32)
         if (!this.player.position) {
             throw new Error("Player is not positioned")
         }
