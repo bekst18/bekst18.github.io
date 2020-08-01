@@ -39,3 +39,15 @@ export function compare<T>(x: T, y: T): number {
 
     return 0
 }
+
+/**
+ * wait, and then resolve
+ * @param ms milliseconds to wait
+ */
+export function wait(ms: number): Promise<void> {
+    const promise = new Promise<void>((resolve, _) => {
+        setTimeout(() => resolve(), ms)
+    })
+
+    return promise
+}

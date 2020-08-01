@@ -10,6 +10,10 @@ export class Vec2 {
         return new Vec2(Infinity, Infinity)
     }
 
+    static negInf(): Vec2 {
+        return new Vec2(-Infinity, -Infinity)
+    }
+
     equal(b: Vec2): boolean {
         return this.x === b.x && this.y === b.y
     }
@@ -745,6 +749,109 @@ export class Mat4 {
             this.m31, this.m32, this.m33, this.m34,
             this.m41, this.m42, this.m43, this.m44,
         ]
+    }
+}
+
+export class Rect {
+    constructor(public readonly min: Vec2, public readonly max: Vec2) { }
+
+    static empty(): Rect {
+        return new Rect(Vec2.inf(), Vec2.negInf())
+    }
+
+    static fromPoints(pts: Iterable<Vec2>): Rect {
+        let min = Vec2.inf()
+        let max = min.neg()
+
+        for (const pt of pts) {
+            min = min.min(pt)
+            max = max.max(pt)
+        }
+
+        const rect = new Rect(min, max)
+        return rect
+    }
+
+    static fromHalfExtents(halfExtents: Vec2): Rect {
+        return new Rect(halfExtents.neg(), halfExtents)
+    }
+
+    static fromPositionHalfExtents(position: Vec2, halfExtents: Vec2): Rect {
+        return new Rect(position.sub(halfExtents), position.add(halfExtents))
+    }
+
+    static fromCoords(minX: number, minY: number, maxX: number, maxY: number): Rect {
+        return new Rect(new Vec2(minX, minY), new Vec2(maxX, maxY))
+    }
+
+    get extents(): Vec2 {
+        return this.max.sub(this.min)
+    }
+
+    get width(): number {
+        return this.max.x - this.min.x
+    }
+
+    get height(): number {
+        return this.max.y - this.min.y
+    }
+
+    get center(): Vec2 {
+        return new Vec2(this.min.x + this.width / 2, this.min.y + this.height / 2)
+    }
+
+    union(rect: Rect): Rect {
+        const u = new Rect(this.min.min(rect.min), this.max.max(rect.max))
+        return u
+    }
+
+    extend(pt: Vec2): Rect {
+        const r = new Rect(this.min.min(pt), this.max.max(pt))
+        return r
+    }
+
+    intersection(rect: Rect): Rect {
+        const ix = new Rect(this.min.max(rect.min), this.max.min(rect.max))
+        return ix
+    }
+
+    overlaps(aabb: AABB): boolean {
+        return (
+            this.max.x >= aabb.min.x &&
+            this.max.y >= aabb.min.y &&
+            this.min.x <= aabb.max.x &&
+            this.min.y <= aabb.max.y
+        )
+    }
+
+    contains(pt: Vec2): boolean {
+        return (
+            pt.x >= this.min.x &&
+            pt.y >= this.min.y &&
+            pt.x < this.max.x &&
+            pt.y < this.max.y
+        )
+    }
+
+    translate(offset: Vec2): Rect {
+        return new Rect(this.min.add(offset), this.max.add(offset))
+    }
+
+    scale(s: number): Rect {
+        return new Rect(this.min.mulX(s), this.max.mulX(s))
+    }
+
+    buffer(padding: number): Rect {
+        const rect = new Rect(this.min.addX(-padding), this.max.addX(padding))
+        return rect
+    }
+
+    shrink(amount: number): Rect {
+        return this.buffer(-amount)
+    }
+
+    clone(): Rect {
+        return new Rect(this.min.clone(), this.max.clone())
     }
 }
 

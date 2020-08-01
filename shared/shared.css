@@ -481,3 +481,8 @@ a {
 a:hover {
     text-decoration: underline;
 }
+
+/* give hidden attribute more power */
+[hidden] { 
+    display: none !important; 
+}

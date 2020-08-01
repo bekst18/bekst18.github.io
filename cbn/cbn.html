@@ -31,15 +31,14 @@
     </div>
     <div id="playUi" hidden>
         <canvas id="canvas"></canvas>
-        <div id="palette"></div>
-        <button id="returnButton" class="button-primary my-2 no-print">Choose a Different Image</button>
+        <div id="palette">
+            <div class="palette-entry">0<!-- required for sizing! --></div>
+        </div>
+        <button id="returnButton" class="button-primary no-print">Choose a Different Image</button>
     </div>
     <script type="module" src="cbn.js"></script>
     <template id="paletteEntry">
-        <div class="palette-entry">
-            <div class="palette-label"></div>
-            <div class="palette-color"></div>
-        </div>
+        <div class="palette-entry"></div>
     </template>
 </body>
 </html>

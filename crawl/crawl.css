@@ -72,6 +72,10 @@ body {
     min-width: 20em;
 }
 
+#statsTable {
+    width: 100%;
+}
+
 #statsTable td {
     padding: .25em;
 }
@@ -108,9 +112,17 @@ table, tr, td {
     border-collapse: collapse;
 }
 
+#inventoryTable {
+    width: 100%;
+}
+
 #inventoryTable td {
     margin: 0;
     padding: .25em;
+}
+
+#containerTable {
+    width: 100%;
 }
 
 #containerTable td {
