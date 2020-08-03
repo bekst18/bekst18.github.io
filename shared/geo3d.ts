@@ -233,12 +233,23 @@ export class Vec4 {
         return new Vec4(Infinity, Infinity, Infinity, Infinity)
     }
 
+    static zero(): Vec4 {
+        return new Vec4(0, 0, 0, 0)
+    }
+
     equal(b: Vec4): boolean {
-        return this.x === b.x && this.y === b.y && this.z === b.z && this.w == b.w
+        return this.x === b.x && this.y === b.y && this.z === b.z && this.w === b.w
     }
 
     clone(): Vec4 {
         return new Vec4(this.x, this.y, this.z, this.w)
+    }
+
+    set(v: Vec4) {
+        this.x = v.x
+        this.y = v.y
+        this.z = v.z
+        this.w = v.w
     }
 
     addX(x: number): Vec4 {
@@ -299,6 +310,14 @@ export class Vec4 {
 
     neg(): Vec4 {
         return new Vec4(-this.x, -this.y, -this.z, -this.w)
+    }
+
+    floor(): Vec4 {
+        return new Vec4(Math.floor(this.x), Math.floor(this.y), Math.floor(this.z), Math.floor(this.w))
+    }
+
+    ceil(): Vec4 {
+        return new Vec4(Math.ceil(this.x), Math.ceil(this.y), Math.ceil(this.z), Math.ceil(this.w))
     }
 
     min(b: Vec4): Vec4 {

@@ -1,6 +1,6 @@
 import * as array from "../shared/array.js"
-import * as iter from "../shared/iter.js"
 import * as imaging from "../shared/imaging.js"
+import * as imaging2 from "../shared/imaging2.js"
 import * as dom from "../shared/dom.js"
 import * as geo from "../shared/geo3d.js"
 import * as util from "../shared/util.js"
@@ -39,10 +39,14 @@ class Channel<T> {
     }
 }
 
-type CBNImageSource = HTMLVideoElement | HTMLImageElement
+interface CBNImageSource {
+    width: number
+    height: number
+    source: HTMLVideoElement | HTMLImageElement
+}
 
 interface ProcessedImage {
-    palette: imaging.Color[]
+    palette: imaging2.Color[]
     regions: Region[]
     regionOverlay: RegionOverlay
 }
@@ -80,7 +84,7 @@ class LoadUi {
 
     public show() {
         this.loadUiDiv.hidden = false
-        // this.loadFromUrl("/cbn/assets/bowser.png")
+        // this.loadFromUrl("/cbn/assets/acorn.jpg")
     }
 
     public hide() {
@@ -182,7 +186,7 @@ class LoadUi {
             return
         }
 
-        this.imageLoaded.publish(this.camera)
+        this.imageLoaded.publish({ width: this.camera.videoWidth, height: this.camera.videoHeight, source: this.camera })
     }
 
     private processFile(file: File) {
@@ -194,7 +198,7 @@ class LoadUi {
     private async loadFromUrl(url: string) {
         this.clearErrorMessages()
         const img = await dom.loadImage(url)
-        this.imageLoaded.publish(img)
+        this.imageLoaded.publish({ width: img.width, height: img.height, source: img })
     }
 
     private clearErrorMessages() {
@@ -217,7 +221,7 @@ class PlayUi {
     private dragLast = new geo.Vec2(0, 0)
     private initialImageData: ImageData = new ImageData(1, 1)
     private processedImageData: ImageData = new ImageData(1, 1)
-    private palette: imaging.Color[] = []
+    private palette: imaging2.Color[] = []
     private regions: Region[] = []
     private regionOverlay: RegionOverlay = []
     private selectedPaletteIndex: number = -1
@@ -243,7 +247,7 @@ class PlayUi {
 
     public show(img: CBNImageSource) {
         this.playUiDiv.hidden = false
-
+        
         // clientWidth / clientHeight are css set width / height
         // before drawing, must set canvas width / height for drawing surface pixels
         this.canvas.width = this.canvas.clientWidth
@@ -262,31 +266,21 @@ class PlayUi {
         this.canvas.width = width
         this.scratchCanvas.width = this.canvas.width
         this.scratchCanvas.height = this.canvas.height
-
-        this.scratchCtx.drawImage(img, 0, 0, width, height)
+        this.scratchCtx.fillStyle = "white"
+        this.scratchCtx.fillRect(0, 0, this.canvas.width, this.canvas.height)
+        this.scratchCtx.drawImage(img.source, 0, 0, width, height)
 
         // at this point, image should be drawn to scratch canvas
         // get (flat) image data from scratch canvas
-        this.initialImageData = imaging.copyImageData(this.scratchCtx.getImageData(0, 0, this.canvas.width, this.canvas.height))
+        this.initialImageData = dom.copyImageData(this.scratchCtx.getImageData(0, 0, this.canvas.width, this.canvas.height))
         const processedImage = processImage(this.scratchCtx)
-        this.processedImageData = imaging.copyImageData(this.scratchCtx.getImageData(0, 0, this.scratchCtx.canvas.width, this.scratchCtx.canvas.height))
+        this.processedImageData = dom.copyImageData(this.scratchCtx.getImageData(0, 0, this.scratchCtx.canvas.width, this.scratchCtx.canvas.height))
         this.palette = processedImage.palette
         this.regions = processedImage.regions
         this.regionOverlay = processedImage.regionOverlay
         this.sequence = []
         this.createPaletteUi()
         this.selectPaletteEntry(0)
-
-        // // for testing purposes - fill all regions but final
-        // for (const r of iter.drop(this.regions.filter(r=>r.color !== -1), 1)) {
-        //     if (r.color === -1) {
-        //         continue
-        //     }
-
-        //     this.sequence.push(r)
-        //     this.fillRegion(r)
-        // }
-
         this.redraw()
     }
 
@@ -301,12 +295,12 @@ class PlayUi {
     private createPaletteUi() {
         dom.removeAllChildren(this.paletteDiv)
         for (let i = 0; i < this.palette.length; ++i) {
-            const color = this.palette[i]
-            const lum = imaging.calcLuminance(color)
+            const color = imaging2.toCanvasColor(this.palette[i])
+            const lum = imaging2.calcLuminance(color)
             const fragment = this.paletteEntryTemplate.content.cloneNode(true) as DocumentFragment
             const entryDiv = dom.bySelector(fragment, ".palette-entry") as HTMLElement
             entryDiv.textContent = `${i + 1}`
-            entryDiv.style.backgroundColor = `rgb(${color[0]}, ${color[1]}, ${color[2]})`
+            entryDiv.style.backgroundColor = `rgb(${color.x}, ${color.y}, ${color.z})`
             entryDiv.style.color = lum < .5 ? "white" : "black"
             this.paletteDiv.appendChild(fragment)
         }
@@ -361,7 +355,7 @@ class PlayUi {
         const bounds = region.bounds
         const imageData = this.scratchCtx.getImageData(bounds.min.x, bounds.min.y, bounds.width, bounds.height)
         const data = imageData.data
-        const color = this.palette[region.color]
+        const color = imaging2.toCanvasColor(this.palette[region.color])
 
         imaging.scanImageData(imageData, (x, y, offset) => {
             const imageX = x + bounds.min.x
@@ -372,9 +366,9 @@ class PlayUi {
                 return
             }
 
-            data[offset * 4] = color[0]
-            data[offset * 4 + 1] = color[1]
-            data[offset * 4 + 2] = color[2]
+            data[offset * 4] = color.x
+            data[offset * 4 + 1] = color.y
+            data[offset * 4 + 2] = color.z
         })
 
         this.scratchCtx.putImageData(imageData, bounds.min.x, bounds.min.y)
@@ -438,6 +432,49 @@ class PlayUi {
         if (idx !== -1) {
             entries[idx].classList.add("selected")
         }
+
+        // display a pattern on these entries (or clear checkerboard from prevous)
+        this.fillColorCheckerboard(idx)
+        this.redraw()
+    }
+
+    private fillColorCheckerboard(idx: number) {
+        const imageData = this.scratchCtx.getImageData(0, 0, this.scratchCtx.canvas.width, this.scratchCtx.canvas.height)
+        const data = imageData.data
+        let n = 0
+
+        for (let i = 0; i < this.regionOverlay.length; ++i) {
+            const region = this.regionOverlay[i]
+
+            if (!region) {
+                continue
+            }
+
+            if (region.filled) {
+                continue
+            }
+
+            if (region.color === -1) {
+                continue
+            }
+
+            const ii = i * 4
+            if (region.color === idx) {
+                data[ii] = n % 3 == 0 ? 127 : 255
+                data[ii + 1] = n % 3 == 0 ? 127 : 255
+                data[ii + 2] = n % 3 == 0 ? 127 : 255
+                data[ii + 3] = 255
+                ++n
+            } else {
+                data[ii] = 255
+                data[ii + 1] = 255
+                data[ii + 2] = 255
+                data[ii + 3] = 255
+            }
+        }
+
+        this.scratchCtx.putImageData(imageData, 0, 0)
+        drawRegionLabels(this.scratchCtx, this.regions)
     }
 
     private findNextUnfinishedRegion(): number {
@@ -471,7 +508,6 @@ class PlayUi {
         // color as user did
         await util.wait(500)
         for (const r of this.sequence) {
-            console.log(r)
             this.fillRegion(r)
             this.redraw()
             await util.wait(200)
@@ -506,23 +542,30 @@ class CBN {
 function processImage(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D): ProcessedImage {
     // at this point, image should be drawn to scratch canvas
     // get (flat) image data from scratch canvas
-    const imageData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
-    const { width, height } = imageData
+    const img = imaging2.fromCanvasImageData(ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height))
+    imaging2.palettizeHistogram(img, 8, 128)
 
-    // convert to xyz colors and palettize data
-    let [palette, paletteOverlay] = palettize(imageData, 3, 512)
-    imaging.applyPalette(palette, paletteOverlay, imageData)
+    // note - unique colors maps colors to integers and back again
+    // this results in slightly different colors than the histogram calculated colors
+    // pack / unpack to make these equal
+    let palette = imaging2.uniqueColors(img)
+    for (const color of img) {
+        color.set(imaging2.unpackColor(imaging2.packColor(color)))
+    }
 
-    let [regions, regionOverlay] = createRegionOverlay(width, height, paletteOverlay)
-    regions = pruneRegions(width, height, regions, regionOverlay)
+    palette = palette.filter(c => c.x < .9 && c.y < .9 && c.z < .9)
+    const paletteOverlay = imaging2.indexByColor(img, palette)
+
+    let [regions, regionOverlay] = createRegionOverlay(img.width, img.height, paletteOverlay)
+    regions = pruneRegions(img.width, img.height, regions, regionOverlay)
 
     // some pallette entries will now be unused by regions, remove these
     palette = removeUnusedPaletteEntries(palette, regions)
 
-    drawBorders(regionOverlay, imageData)
-    fillInterior(imageData.data, regionOverlay)
-    ctx.putImageData(imageData, 0, 0)
-
+    drawBorders(regionOverlay, img)
+    fillInterior(regionOverlay, img)
+    ctx.fillStyle = "black"
+    ctx.putImageData(imaging2.toCanvasImageData(img), 0, 0)
     drawRegionLabels(ctx, regions)
 
     return {
@@ -530,103 +573,6 @@ function processImage(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingCo
         regions: regions,
         regionOverlay: regionOverlay
     }
-}
-
-// specialized to ignore white
-function palettize(imageData: ImageData, bucketsPerComponent: number, maxColors: number): [imaging.Color[], number[]] {
-    const { width, height, data } = imageData
-    const pixels = width * height
-    const bucketPitch = bucketsPerComponent * bucketsPerComponent
-    const numBuckets = bucketPitch * bucketsPerComponent
-
-    // creat intial buckets
-    let buckets = array.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
-
-    // assign and update bucket for each pixel
-    const bucketOverlay = array.generate(pixels, i => {
-        const r = data[i * 4] / 255
-        const g = data[i * 4 + 1] / 255
-        const b = data[i * 4 + 2] / 255
-
-        // ignore white
-        if (r >= .95 && g >= .95 && b >= .95) {
-            return null
-        }
-
-        const rb = Math.min(Math.floor(r * bucketsPerComponent), bucketsPerComponent - 1)
-        const gb = Math.min(Math.floor(g * bucketsPerComponent), bucketsPerComponent - 1)
-        const bb = Math.min(Math.floor(b * bucketsPerComponent), bucketsPerComponent - 1)
-
-        const bucketIdx = rb * bucketPitch + gb * bucketsPerComponent + bb
-        const bucket = buckets[bucketIdx]
-        bucket.color = imaging.addXYZ([r, g, b], bucket.color)
-        bucket.pixels++
-        return bucket
-    })
-
-    // prune empty buckets
-    buckets = buckets.filter(b => b.pixels > 0)
-
-    // calculate bucket colors
-    for (const bucket of buckets) {
-        bucket.color = imaging.divXYZ(bucket.color, bucket.pixels)
-    }
-
-    // combine buckets that are very close in color after color averaging
-    let bucketSet = new Set(buckets)
-    while (bucketSet.size > 1) {
-        // proceed for as long as buckets can be combined
-        let merge = false
-        for (const bucket of bucketSet) {
-            // find "nearest" color
-            const nearest = [...bucketSet]
-                .filter(b => b != bucket)
-                .reduce((b1, b2) => imaging.calcDistSq(bucket.color, b1.color) < imaging.calcDistSq(bucket.color, b2.color) ? b1 : b2)
-
-            const dist = imaging.calcDist(bucket.color, nearest.color)
-            if (dist > .1) {
-                continue
-            }
-
-            // merge the buckets
-            bucket.color = imaging.divXYZ(
-                imaging.addXYZ(imaging.mulXYZ(bucket.color, bucket.pixels), imaging.mulXYZ(nearest.color, nearest.pixels)),
-                bucket.pixels + nearest.pixels)
-
-            bucketSet.delete(nearest)
-            merge = true
-        }
-
-        if (!merge) {
-            break
-        }
-    }
-
-    buckets = [...bucketSet]
-        .sort((b1, b2) => b2.pixels - b1.pixels)
-        .slice(0, maxColors)
-
-    // map all colors to top N buckets
-    for (let i = 0; i < bucketOverlay.length; ++i) {
-        // otherwise, map to new bucket
-        const r = data[i * 4] / 255
-        const g = data[i * 4 + 1] / 255
-        const b = data[i * 4 + 2] / 255
-
-        if (r >= .95 && g >= .95 && b >= .95) {
-            bucketOverlay[i] = null
-            continue
-        }
-
-        const color: [number, number, number] = [r, g, b]
-        const bucket = buckets.reduce((b1, b2) => imaging.calcDistSq(b1.color, color) < imaging.calcDistSq(b2.color, color) ? b1 : b2)
-        bucketOverlay[i] = bucket
-    }
-
-    // determine palette colors
-    const palette = buckets.map(b => imaging.mulXYZ(b.color, 255))
-    const paletteOverlay = bucketOverlay.map(b => b ? buckets.indexOf(b) : -1)
-    return [palette, paletteOverlay]
 }
 
 function createRegionOverlay(width: number, height: number, paletteOverlay: number[]): [Region[], RegionOverlay] {
@@ -651,7 +597,6 @@ function createRegionOverlay(width: number, height: number, paletteOverlay: numb
         exploreRegion(width, height, paletteOverlay, x, y, regionOverlay)
     })
 
-    // prune some regions
     return [regions, regionOverlay]
 }
 
@@ -710,7 +655,7 @@ function pruneRegions(width: number, height: number, regions: Region[], regionOv
     return [...regionSet]
 }
 
-function removeUnusedPaletteEntries(palette: imaging.Color[], regions: Region[]): imaging.Color[] {
+function removeUnusedPaletteEntries(palette: imaging2.Color[], regions: Region[]): imaging2.Color[] {
     // create a map from current color index to new color index
     const usedSet = new Set(regions.map(r => r.color))
     usedSet.delete(-1)
@@ -898,10 +843,12 @@ function exploreRegion(width: number, height: number, paletteOverlay: number[], 
     }
 }
 
-function drawBorders(regionOverlay: RegionOverlay, imageData: ImageData) {
+function drawBorders(regionOverlay: RegionOverlay, img: imaging2.Image) {
     // color borders
-    const { width, height, data } = imageData
-    imaging.scanImageData(imageData, (x, y, offset) => {
+    const { width, height } = img
+    const black = new geo.Vec4(0, 0, 0, 1)
+
+    img.scan((x, y, offset) => {
         const region = regionOverlay[offset]
         if (!region) {
             return
@@ -919,48 +866,40 @@ function drawBorders(regionOverlay: RegionOverlay, imageData: ImageData) {
 
         const lRegion = regionOverlay[offset - 1]
         if (lRegion && lRegion !== region) {
-            data[offset * 4] = 0
-            data[offset * 4 + 1] = 0
-            data[offset * 4 + 2] = 0
+            img.atf(offset).set(black)
             regionOverlay[offset] = null
         }
 
         const rRegion = regionOverlay[offset + 1]
         if (rRegion && rRegion !== region) {
-            data[offset * 4] = 0
-            data[offset * 4 + 1] = 0
-            data[offset * 4 + 2] = 0
+            img.atf(offset).set(black)
             regionOverlay[offset] = null
         }
 
         const tRegion = regionOverlay[offset - width]
         if (tRegion && tRegion !== region) {
-            data[offset * 4] = 0
-            data[offset * 4 + 1] = 0
-            data[offset * 4 + 2] = 0
+            img.atf(offset).set(black)
             regionOverlay[offset] = null
         }
 
         const bRegion = regionOverlay[offset + width]
         if (bRegion && bRegion !== region) {
-            data[offset * 4] = 0
-            data[offset * 4 + 1] = 0
-            data[offset * 4 + 2] = 0
+            img.atf(offset).set(black)
             regionOverlay[offset] = null
         }
     })
 }
 
-function fillInterior(data: Uint8ClampedArray, regionOverlay: RegionOverlay) {
+function fillInterior(regionOverlay: RegionOverlay, img: imaging2.Image) {
+    const white = new geo.Vec4(1, 1, 1, 1)
+
     for (let i = 0; i < regionOverlay.length; ++i) {
         const region = regionOverlay[i]
         if (!region) {
             continue
         }
 
-        data[i * 4] = 255
-        data[i * 4 + 1] = 255
-        data[i * 4 + 2] = 255
+        img.atf(i).set(white)
     }
 }
 

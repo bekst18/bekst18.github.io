@@ -44,7 +44,7 @@ export function palettizeHistogram(imageData: ImageData, bucketsPerComponent: nu
     const bucketPitch = bucketsPerComponent * bucketsPerComponent
     const numBuckets = bucketPitch * bucketsPerComponent
 
-    // creat intial buckets
+    // create intial buckets
     const buckets = array.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
 
     // assign and update bucket for each pixel
@@ -81,8 +81,8 @@ export function palettizeHistogram(imageData: ImageData, bucketsPerComponent: nu
 
         // otherwise, map to new bucket
         const r = data[i * 4] / 255
-        const g = data[i * 4] / 255
-        const b = data[i * 4] / 255
+        const g = data[i * 4 + 1] / 255
+        const b = data[i * 4 + 2] / 255
         const color: [number, number, number] = [r, g, b]
         const bucket = topBuckets.reduce((b1, b2) => calcDistSq(b1.color, color) < calcDistSq(b2.color, color) ? b1 : b2)
         bucketOverlay[i] = bucket
@@ -93,6 +93,86 @@ export function palettizeHistogram(imageData: ImageData, bucketsPerComponent: nu
     const paletteOverlay = bucketOverlay.map(b => buckets.indexOf(b))
 
     return [palette, paletteOverlay]
+}
+
+export function palettizeHistogram2(imageData: ImageData, bucketsPerComponent: number, maxColors: number) {
+    const { width, height, data } = imageData
+    const pixels = width * height
+    const bucketPitch = bucketsPerComponent * bucketsPerComponent
+    const numBuckets = bucketPitch * bucketsPerComponent
+
+    // create intial buckets
+    const buckets = array.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
+
+    // assign and update bucket for each pixel
+    const bucketOverlay = array.generate(pixels, i => {
+        const r = data[i * 4] / 255
+        const g = data[i * 4 + 1] / 255
+        const b = data[i * 4 + 2] / 255
+        const rb = Math.min(Math.floor(r * bucketsPerComponent), bucketsPerComponent - 1)
+        const gb = Math.min(Math.floor(g * bucketsPerComponent), bucketsPerComponent - 1)
+        const bb = Math.min(Math.floor(b * bucketsPerComponent), bucketsPerComponent - 1)
+        const bucketIdx = rb * bucketPitch + gb * bucketsPerComponent + bb
+        const bucket = buckets[bucketIdx]
+        bucket.color = addXYZ([r, g, b], bucket.color)
+        bucket.pixels++
+        return bucket
+    })
+
+    // calculate bucket colors
+    for (const bucket of buckets) {
+        bucket.color = divXYZ(bucket.color, bucket.pixels)
+    }
+
+    const topBuckets = buckets
+        .sort((b1, b2) => b2.pixels - b1.pixels)
+        .slice(0, maxColors)
+
+    const bucketSet = new Set(topBuckets)
+
+    // map all colors to top N buckets
+    for (let i = 0; i < bucketOverlay.length; ++i) {
+        if (bucketSet.has(bucketOverlay[i])) {
+            continue
+        }
+
+        // otherwise, map to new bucket
+        const r = data[i * 4] / 255
+        const g = data[i * 4 + 1] / 255
+        const b = data[i * 4 + 2] / 255
+        const color: [number, number, number] = [r, g, b]
+        const bucket = topBuckets.reduce((b1, b2) => calcDistSq(b1.color, color) < calcDistSq(b2.color, color) ? b1 : b2)
+        bucketOverlay[i] = bucket
+    }
+
+    // determine palette colors
+    for (let i = 0; i < bucketOverlay.length; ++i) {
+        const bucket = bucketOverlay[i]
+        const [r, g, b] = bucket.color
+        data[i * 4] = r * 255
+        data[i * 4 + 1] = g * 255
+        data[i * 4 + 2] = b * 255
+    }
+}
+
+/**
+ * return a list of unique colors in an image
+ * @param imageData imageData
+ */
+export function uniqueColors(imageData: ImageData): Color[] {
+    const data = imageData.data
+    const numPixels = imageData.width * imageData.height
+    const colors: Color[] = []
+
+    for (let i = 0; i < numPixels; ++i) {
+        const color = [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]] as Color
+        if (!colors.some(c => equalXYZ(c, color))) {
+            colors.push(color)
+        }
+    }
+
+    console.log(colors)
+    return colors
 }
 
 export function applyPalette(palette: Color[], palleteOverlay: number[], imageData: ImageData) {

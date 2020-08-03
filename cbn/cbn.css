@@ -50,8 +50,8 @@ canvas {
 
 #palette {
     display: flex;
-    flex-flow: row nowrap;
-    height: 2.5em;
+    flex-flow: row;
+    overflow-x: scroll;
 }
 
 .palette-entry {
@@ -60,6 +60,7 @@ canvas {
     padding: .25em;
     cursor: pointer;
     border: transparent solid .25em;
+    min-width: 3em;
 }
 
 .palette-entry.selected {
