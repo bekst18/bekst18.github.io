@@ -914,6 +914,10 @@ function drawRegionLabels(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderi
             continue
         }
 
+        if (region.filled) {
+            continue
+        }
+
         const label = `${region.color + 1}`
         const metrics = ctx.measureText(label)
         const center = region.maxRect.center
