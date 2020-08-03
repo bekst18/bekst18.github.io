@@ -187,6 +187,7 @@ class LoadUi {
         }
 
         this.imageLoaded.publish({ width: this.camera.videoWidth, height: this.camera.videoHeight, source: this.camera })
+        this.stopCamera()
     }
 
     private processFile(file: File) {
