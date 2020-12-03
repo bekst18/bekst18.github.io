@@ -7,7 +7,7 @@ import * as iter from "../shared/iter.js"
 import * as rand from "../shared/rand.js"
 
 // size that each image pixel is blown up to
-const cellSize = 24
+const cellSize = 32
 
 // max height / width of image
 const maxDim = 128
@@ -262,7 +262,10 @@ class PlayUi {
     private centerY = 0
     private zoom = 1
     private drag = false
-    private dragged = false
+    private touch1Start: geo.Vec2 | null = null
+    private touch2Start: geo.Vec2 | null = null
+    private touch1Cur: geo.Vec2 | null = null
+    private touch2Cur: geo.Vec2 | null = null
     private dragLast = new geo.Vec2(0, 0)
 
     // list of colors use used in image
@@ -286,11 +289,10 @@ class PlayUi {
             throw new Error("OffscreenCanvas not supported")
         }
 
-        this.canvas.addEventListener("click", e => this.onCanvasClick(e))
-        this.canvas.addEventListener("mousedown", e => this.onCanvasMouseDown(e))
-        this.canvas.addEventListener("mousemove", e => this.onCanvasMouseMove(e))
-        document.addEventListener("mouseup", e => this.onCanvasMouseUp(e))
-        this.canvas.addEventListener("wheel", e => this.onCanvasMouseWheel(e))
+        this.canvas.addEventListener("pointerdown", e => this.onPointerDown(e))
+        this.canvas.addEventListener("pointermove", e => this.onPointerMove(e))
+        this.canvas.addEventListener("pointerup", e => this.onPointerUp(e))
+        this.canvas.addEventListener("wheel", e => this.onWheel(e))
         dom.delegate(this.playUiDiv, "click", ".palette-entry", (e) => this.onPaletteEntryClick(e as MouseEvent))
         this.returnButton.addEventListener("click", () => this.onReturn())
     }
@@ -377,82 +379,71 @@ class PlayUi {
         }
     }
 
-    private onCanvasClick(evt: MouseEvent) {
+    private onPointerDown(e: PointerEvent) {
         if (this.complete) {
             return
         }
 
-        // don't count drag as click
-        if (this.dragged) {
-            this.dragged = false
+        if (!e.isPrimary) {
+            this.touch2Start = new geo.Vec2(e.offsetX, e.offsetY)
             return
         }
 
-        // transform click coordinates to canvas coordinates
-        const invTransform = this.ctx.getTransform().inverse()
-        const domPt = invTransform.transformPoint({ x: evt.offsetX, y: evt.offsetY })
-        const [x, y] = cell2Image(domPt.x, domPt.y)
-
-        // if not correct palette color, do nothing
-        const paletteIdx = this.paletteOverlay[flat(x, y, this.imageWidth)]
-        if (paletteIdx !== this.selectedPaletteIndex) {
-            return
-        }
-
-        // if already filled, do nothing
-        const flatXY = flat(x, y, this.imageWidth)
-        const pixels = this.pixelOverlay[paletteIdx]
-        if (!pixels.has(flatXY)) {
-            return
-        }
-
-        const [r, g, b] = unpackColor(this.palette[paletteIdx])
-        const [cx, cy] = image2Cell(x, y)
-        this.colorCtx.fillStyle = color2RGBAStyle(r, g, b)
-        this.colorCtx.fillRect(cx, cy, cellSize, cellSize)
-
-        // remove the pixel from overlay
-        pixels.delete(flatXY)
-        this.sequence.push(flatXY)
-
-        if (pixels.size > 0) {
-            this.redraw()
-            return
-        }
-
-        // mark palette entry as done
-        const entry = document.querySelectorAll(".palette-entry")[paletteIdx]
-        entry.innerHTML = "&check;"
-        const nextPaletteIdx = this.findNextUnfinishedEntry(paletteIdx)
-        this.selectPaletteEntry(nextPaletteIdx)
-
-        if (nextPaletteIdx !== -1) {
-            return
-        }
-
-        // all colors complete! show animation of user coloring original image
-        this.execDoneSequence()
-    }
-
-    private onCanvasMouseDown(e: MouseEvent) {
-        if (this.complete) {
-            return
-        }
-
+        // are we overtop of a selected palette entry pixel?
+        this.canvas.setPointerCapture(e.pointerId)
         this.drag = true
         this.dragLast = new geo.Vec2(e.offsetX, e.offsetY)
+        this.touch1Start = new geo.Vec2(e.offsetX, e.offsetY)
+
+        // transform click coordinates to canvas coordinates
+        const [x, y] = this.canvas2Cell(e.offsetX, e.offsetY)
+        this.tryFillCell(x, y)
     }
 
-    private onCanvasMouseUp(_: MouseEvent) {
+    /**
+     * convert a canvas coordinate into a cell coordinate
+     * @param x x canvas coordinate
+     * @param y y canvas coordinate
+     */
+    private canvas2Cell(x: number, y: number): [number, number] {
+        const invTransform = this.ctx.getTransform().inverse()
+        const domPt = invTransform.transformPoint({ x: x, y: y })
+        return cell2Image(domPt.x, domPt.y)
+    }
+
+    private onPointerUp(e: PointerEvent) {
+        if (!e.isPrimary) {
+            this.touch2Start = null
+            return
+        }
+
         if (this.complete) {
             return
         }
 
+        this.touch1Start = null
         this.drag = false
     }
 
-    private onCanvasMouseMove(e: MouseEvent) {
+    private onPointerMove(e: PointerEvent) {
         if (this.complete) {
+            return
+        }
+
+        if (e.isPrimary) {
+            this.touch1Cur = new geo.Vec2(e.offsetX, e.offsetY)
+        } else {
+            this.touch2Cur = new geo.Vec2(e.offsetX, e.offsetY)
+        }
+
+        // handle pinch zoom
+        if (this.touch2Start && this.touch1Start) {
+            this.touch1Cur = this.touch1Cur ?? this.touch1Start
+            this.touch2Cur = this.touch2Cur ?? this.touch2Start
+            const d0 = this.touch1Start.sub(this.touch2Start).length()
+            const d1 = this.touch1Cur.sub(this.touch2Cur).length()
+            this.zoom = d1 / d0
+            this.redraw()
             return
         }
 
@@ -466,16 +457,25 @@ class PlayUi {
         const end = geo.Vec2.fromDOM(transform.transformPoint(position))
         const delta = end.sub(start)
 
+        // check for drag over palette color
+        const [x, y] = this.canvas2Cell(e.offsetX, e.offsetY)
+        if (this.paletteOverlay[flat(x, y, this.imageWidth)] === this.selectedPaletteIndex) {
+            if (this.tryFillCell(x, y)) {
+                this.redraw()
+            }
+
+            return
+        }
+
         if (Math.abs(delta.x) > 3 || Math.abs(delta.y) > 3) {
             this.centerX -= delta.x
             this.centerY -= delta.y
             this.dragLast = position
-            this.dragged = true
             this.redraw()
         }
     }
 
-    private onCanvasMouseWheel(e: WheelEvent) {
+    private onWheel(e: WheelEvent) {
         if (this.complete) {
             return
         }
@@ -504,6 +504,61 @@ class PlayUi {
         }
 
         this.selectPaletteEntry(idx)
+    }
+
+    /**
+     * true if specified cell is unfilled, and has specified palette index
+     * @param x x cell coordinate
+     * @param y y cell coordinate
+     */
+    private checkCell(x: number, y: number): boolean {
+        // if already filled, do nothing
+        const flatXY = flat(x, y, this.imageWidth)
+        const pixels = this.pixelOverlay[this.selectedPaletteIndex]
+        return pixels.has(flatXY)
+    }
+
+    /**
+     * attempt to fill the specified cell
+     * returns true if filled, false if cell is not selected palette or already filled
+     * @param x 
+     * @param y 
+     */
+    private tryFillCell(x: number, y: number): boolean {
+        // if already filled, do nothing
+        if (!this.checkCell(x, y)) {
+            return false
+        }
+
+        const [r, g, b] = unpackColor(this.palette[this.selectedPaletteIndex])
+        const [cx, cy] = image2Cell(x, y)
+        this.colorCtx.fillStyle = color2RGBAStyle(r, g, b)
+        this.colorCtx.fillRect(cx, cy, cellSize, cellSize)
+
+        // remove the pixel from overlay
+        const pixels = this.pixelOverlay[this.selectedPaletteIndex]
+        const flatXY = flat(x, y, this.imageWidth)
+        pixels.delete(flatXY)
+        this.sequence.push(flatXY)
+
+        if (pixels.size > 0) {
+            this.redraw()
+            return true
+        }
+
+        // mark palette entry as done
+        const entry = document.querySelectorAll(".palette-entry")[this.selectedPaletteIndex]
+        entry.innerHTML = "&check;"
+        const nextPaletteIdx = this.findNextUnfinishedEntry(this.selectedPaletteIndex)
+        this.selectPaletteEntry(nextPaletteIdx)
+
+        if (nextPaletteIdx !== -1) {
+            return true
+        }
+
+        // all colors complete! show animation of user coloring original image
+        this.execDoneSequence()
+        return true
     }
 
     private selectPaletteEntry(idx: number) {

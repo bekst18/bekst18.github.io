@@ -46,6 +46,10 @@ canvas {
     margin: 1em auto;
 }
 
+#canvas {
+    touch-action: none;
+}
+
 #palette {
     display: flex;
     flex-flow: row;
