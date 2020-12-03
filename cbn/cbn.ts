@@ -5,16 +5,15 @@ import * as math from "../shared/math.js"
 import * as util from "../shared/util.js"
 import * as iter from "../shared/iter.js"
 import * as rand from "../shared/rand.js"
-import { tileSize } from "../crawl/rl.js"
 
 // size that each image pixel is blown up to
 const cellSize = 24
 
 // max height / width of image
-const maxDim = 256
+const maxDim = 128
 
 // tolerance before splitting colors - higher = less colors
-const colorRangeTolerance = 32
+const colorRangeTolerance = 64
 
 // max bg pixels before removal
 const maxBackgroundPixels = 1024
@@ -91,7 +90,7 @@ class LoadUi {
 
     public show() {
         this.loadUiDiv.hidden = false
-        this.loadFromUrl("/cbn/assets/larryKoopa.jpg")
+        // this.loadFromUrl("/cbn/assets/larryKoopa.jpg")
         // this.loadFromUrl("/cbn/assets/olts_flower.jpg")
     }
 
@@ -345,15 +344,15 @@ class PlayUi {
 
         this.sequence = []
 
-        // // debug - go straight to end state
-        // for (let y = 0; y < this.imageHeight; ++y) {
-        //     for (let x = 0; x < this.imageWidth; ++x) {
-        //         this.sequence.push(flat(x, y, this.imageWidth))
-        //     }
-        // }
+        // debug - go straight to end state
+        for (let y = 0; y < this.imageHeight; ++y) {
+            for (let x = 0; x < this.imageWidth; ++x) {
+                this.sequence.push(flat(x, y, this.imageWidth))
+            }
+        }
 
-        // rand.shuffle(this.sequence)
-        // this.execDoneSequence()
+        rand.shuffle(this.sequence)
+        this.execDoneSequence()
     }
 
     public hide() {
