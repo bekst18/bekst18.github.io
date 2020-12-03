@@ -26,13 +26,26 @@
                 <button id="stopCameraButton" class="button-primary my-2">Close</button>
             </div>
         </div>
+        <p class="text-info">OR choose an image from the library.</p>
+        <button id="libraryButton" class="button-primary my-2">Choose From Library</button>
         <div id="errors">
         </div>
+    </div>
+    <div id="libraryUi" class="m-auto" hidden="true">
+        <div class="button-group">
+            <button id="stockButton" class="button-primary my-2 selected">Stock</button>
+            <button id="coltonButton" class="button-primary my-2">Colton</button>
+            <button id="anaButton" class="button-primary my-2">Ana</button>
+            <button id="daniButton" class="button-primary my-2">Dani</button>
+        </div>
+        <button id="returnFromLibraryButton" class="button-primary my-2">Return</button>
     </div>
     <div id="playUi" hidden>
         <canvas id="canvas"></canvas>
         <div id="palette">
-            <div class="palette-entry">0<!-- required for sizing! --></div>
+            <div class="palette-entry">0
+                <!-- required for sizing! -->
+            </div>
         </div>
         <button id="returnButton" class="button-primary no-print">Choose a Different Image</button>
     </div>

@@ -27,10 +27,10 @@ export function choose<T>(a: ArrayLike<T>) {
 }
 
 /**
- * randomly shuffle the specified array
+ * randomly shuffle the specified array in place
  * @param a array to shuffle
  */
-export function shuffle<T>(a: Array<T>) {
+export function shuffle<T>(a: Array<T>) : Array<T>{
     for (let i = a.length - 1; i >= 0; --i) {
         const j = Math.floor(Math.random() * i)
         const tmp = a[i]

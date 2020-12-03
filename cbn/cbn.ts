@@ -1,9 +1,23 @@
 import * as array from "../shared/array.js"
-import * as imaging from "../shared/imaging.js"
-import * as imaging2 from "../shared/imaging2.js"
 import * as dom from "../shared/dom.js"
 import * as geo from "../shared/geo3d.js"
+import * as math from "../shared/math.js"
 import * as util from "../shared/util.js"
+import * as iter from "../shared/iter.js"
+import * as rand from "../shared/rand.js"
+import { tileSize } from "../crawl/rl.js"
+
+// size that each image pixel is blown up to
+const cellSize = 24
+
+// max height / width of image
+const maxDim = 256
+
+// tolerance before splitting colors - higher = less colors
+const colorRangeTolerance = 32
+
+// max bg pixels before removal
+const maxBackgroundPixels = 1024
 
 enum CameraMode {
     None,
@@ -11,15 +25,7 @@ enum CameraMode {
     Environment,
 }
 
-interface Region {
-    color: number
-    pixels: number
-    bounds: geo.Rect
-    maxRect: geo.Rect
-    filled: boolean
-}
-
-type RegionOverlay = (Region | null)[]
+type Color = [number, number, number, number]
 
 class Channel<T> {
     private readonly subscribers = new Set<(x: T) => void>()
@@ -45,12 +51,6 @@ interface CBNImageSource {
     source: HTMLVideoElement | HTMLImageElement
 }
 
-interface ProcessedImage {
-    palette: imaging2.Color[]
-    regions: Region[]
-    regionOverlay: RegionOverlay
-}
-
 class LoadUi {
     private readonly camera = dom.byId("camera") as HTMLVideoElement
     private cameraMode = CameraMode.None
@@ -63,8 +63,10 @@ class LoadUi {
     private readonly useCameraButton = dom.byId("useCameraButton") as HTMLButtonElement
     private readonly flipCameraButton = dom.byId("flipCameraButton") as HTMLButtonElement
     private readonly stopCameraButton = dom.byId("stopCameraButton") as HTMLButtonElement
+    private readonly libraryButton = dom.byId("libraryButton") as HTMLButtonElement
     private readonly errorsDiv = dom.byId("errors");
     public readonly imageLoaded = new Channel<CBNImageSource>()
+    private readonly libraryUi = new LibraryUi()
 
     constructor() {
         this.fileButton.addEventListener("click", () => {
@@ -80,11 +82,17 @@ class LoadUi {
         this.stopCameraButton.addEventListener("click", () => this.stopCamera())
         this.captureImageButton.addEventListener("click", () => this.captureImage())
         this.camera.addEventListener("loadedmetadata", () => this.onCameraLoad())
+        this.libraryButton.addEventListener("click", () => this.showLibrary())
+
+        this.libraryUi.cancel.subcribe(() => {
+            this.loadUiDiv.hidden = false
+        })
     }
 
     public show() {
         this.loadUiDiv.hidden = false
-        // this.loadFromUrl("/cbn/assets/acorn.jpg")
+        this.loadFromUrl("/cbn/assets/larryKoopa.jpg")
+        // this.loadFromUrl("/cbn/assets/olts_flower.jpg")
     }
 
     public hide() {
@@ -190,6 +198,11 @@ class LoadUi {
         this.stopCamera()
     }
 
+    private showLibrary() {
+        this.loadUiDiv.hidden = true
+        this.libraryUi.show()
+    }
+
     private processFile(file: File) {
         this.clearErrorMessages()
         const url = URL.createObjectURL(file)
@@ -207,40 +220,77 @@ class LoadUi {
     }
 }
 
+class LibraryUi {
+    private readonly libraryDiv = dom.byId("libraryUi")
+    private readonly returnButton = dom.byId("returnFromLibraryButton")
+    public readonly imageChosen = new Channel<string>()
+    public readonly cancel = new Channel<void>();
+
+    constructor() {
+        this.returnButton.addEventListener("click", () => this.onReturnClick())
+    }
+
+    show() {
+        this.libraryDiv.hidden = false
+    }
+
+    private onReturnClick() {
+        this.libraryDiv.hidden = true
+        this.cancel.publish()
+    }
+}
+
 class PlayUi {
     private readonly canvas = dom.byId("canvas") as HTMLCanvasElement
-    private readonly scratchCanvas = new OffscreenCanvas(0, 0)
+    private readonly ctx = this.canvas.getContext("2d")!
     private readonly paletteDiv = dom.byId("palette") as HTMLDivElement
     private readonly paletteEntryTemplate = dom.byId("paletteEntry") as HTMLTemplateElement
     private readonly playUiDiv = dom.byId("playUi") as HTMLDivElement
     private readonly returnButton = dom.byId("returnButton") as HTMLButtonElement
-    private readonly imageCtx = this.canvas.getContext("2d") as CanvasRenderingContext2D
-    private readonly scratchCtx = this.scratchCanvas.getContext("2d") as OffscreenCanvasRenderingContext2D
+    private readonly imageCanvas = new OffscreenCanvas(0, 0)
+    private readonly imageCtx = this.imageCanvas.getContext("2d")!
+    private readonly cellCanvas = new OffscreenCanvas(0, 0)
+    private readonly cellCtx = this.cellCanvas.getContext("2d")!
+    private readonly paletteCanvas = new OffscreenCanvas(0, 0)
+    private readonly paletteCtx = this.paletteCanvas.getContext("2d")!
+    private readonly colorCanvas = new OffscreenCanvas(0, 0)
+    private readonly colorCtx = this.colorCanvas.getContext("2d")!
+    private complete = false
     public readonly return = new Channel<void>()
+    private imageWidth = 0
+    private imageHeight = 0
+    private centerX = 0
+    private centerY = 0
+    private zoom = 1
     private drag = false
     private dragged = false
     private dragLast = new geo.Vec2(0, 0)
-    private initialImageData: ImageData = new ImageData(1, 1)
-    private processedImageData: ImageData = new ImageData(1, 1)
-    private palette: imaging2.Color[] = []
-    private regions: Region[] = []
-    private regionOverlay: RegionOverlay = []
+
+    // list of colors use used in image
+    private palette: number[] = []
+
+    // image overlay of pixel to palette index
+    private paletteOverlay: number[] = []
+
+    // palette overlay of palette index to list of pixels having that color
+    private pixelOverlay: Set<number>[] = []
+
     private selectedPaletteIndex: number = -1
-    private sequence: Region[] = []
+    private sequence: number[] = []
 
     constructor() {
-        if (!this.imageCtx) {
+        if (!this.ctx) {
             throw new Error("Canvas element not supported")
         }
 
-        if (!this.scratchCtx) {
-            throw new Error("OffscreenCanvas  not supported")
+        if (!this.cellCtx) {
+            throw new Error("OffscreenCanvas not supported")
         }
 
         this.canvas.addEventListener("click", e => this.onCanvasClick(e))
         this.canvas.addEventListener("mousedown", e => this.onCanvasMouseDown(e))
         this.canvas.addEventListener("mousemove", e => this.onCanvasMouseMove(e))
-        this.canvas.addEventListener("mouseup", e => this.onCanvasMouseUp(e))
+        document.addEventListener("mouseup", e => this.onCanvasMouseUp(e))
         this.canvas.addEventListener("wheel", e => this.onCanvasMouseWheel(e))
         dom.delegate(this.playUiDiv, "click", ".palette-entry", (e) => this.onPaletteEntryClick(e as MouseEvent))
         this.returnButton.addEventListener("click", () => this.onReturn())
@@ -248,41 +298,62 @@ class PlayUi {
 
     public show(img: CBNImageSource) {
         this.playUiDiv.hidden = false
-        
-        // clientWidth / clientHeight are css set width / height
-        // before drawing, must set canvas width / height for drawing surface pixels
+        this.complete = false
+
         this.canvas.width = this.canvas.clientWidth
         this.canvas.height = this.canvas.clientHeight
 
-        // fit width
-        const aspect = img.width / img.height
-        let width = document.body.clientWidth
-        let height = width / aspect
-
-        if (height > this.canvas.height) {
-            height = this.canvas.height
-            width = height * aspect
+        // fit image
+        {
+            const [w, h] = fit(img.width, img.height, maxDim)
+            this.imageWidth = w
+            this.imageHeight = h
         }
 
-        this.canvas.width = width
-        this.scratchCanvas.width = this.canvas.width
-        this.scratchCanvas.height = this.canvas.height
-        this.scratchCtx.fillStyle = "white"
-        this.scratchCtx.fillRect(0, 0, this.canvas.width, this.canvas.height)
-        this.scratchCtx.drawImage(img.source, 0, 0, width, height)
+        // // debug
+        // this.canvas.width = this.imageWidth
+        // this.canvas.height = this.imageHeight
+        // this.ctx.drawImage(img.source, 0, 0, this.canvas.width, this.canvas.height)
+        // quantMedianCut(this.ctx, 64)
 
-        // at this point, image should be drawn to scratch canvas
-        // get (flat) image data from scratch canvas
-        this.initialImageData = dom.copyImageData(this.scratchCtx.getImageData(0, 0, this.canvas.width, this.canvas.height))
-        const processedImage = processImage(this.scratchCtx)
-        this.processedImageData = dom.copyImageData(this.scratchCtx.getImageData(0, 0, this.scratchCtx.canvas.width, this.scratchCtx.canvas.height))
-        this.palette = processedImage.palette
-        this.regions = processedImage.regions
-        this.regionOverlay = processedImage.regionOverlay
-        this.sequence = []
+        // return
+
+        // initialize all drawing layers
+        this.imageCanvas.width = this.imageWidth
+        this.imageCanvas.height = this.imageHeight
+        this.imageCtx.drawImage(img.source, 0, 0, this.imageCanvas.width, this.imageCanvas.height)
+        quantMedianCut(this.imageCtx, 64)
+
+        const imgData = this.imageCtx.getImageData(0, 0, this.imageWidth, this.imageHeight)
+        this.palette = extractPalette(imgData)
+        this.paletteOverlay = createPaletteOverlay(imgData, this.palette)
+        this.pixelOverlay = createPixelOverlay(this.imageWidth, this.imageHeight, this.palette, this.paletteOverlay)
+        this.palette = prunePallete(this.palette, this.pixelOverlay, maxBackgroundPixels, this.imageWidth, this.imageHeight, this.colorCtx)
+        this.paletteOverlay = createPaletteOverlay(imgData, this.palette)
+        this.pixelOverlay = createPixelOverlay(this.imageWidth, this.imageHeight, this.palette, this.paletteOverlay)
         this.createPaletteUi()
-        this.selectPaletteEntry(0)
+        drawCellImage(this.cellCtx, this.imageWidth, this.imageHeight, this.paletteOverlay)
+        this.paletteCanvas.width = this.cellCanvas.width
+        this.paletteCanvas.height = this.cellCanvas.height
+        this.centerX = this.canvas.width / 2
+        this.centerY = this.canvas.height / 2
         this.redraw()
+
+        if (this.palette) {
+            this.selectPaletteEntry(0)
+        }
+
+        this.sequence = []
+
+        // // debug - go straight to end state
+        // for (let y = 0; y < this.imageHeight; ++y) {
+        //     for (let x = 0; x < this.imageWidth; ++x) {
+        //         this.sequence.push(flat(x, y, this.imageWidth))
+        //     }
+        // }
+
+        // rand.shuffle(this.sequence)
+        // this.execDoneSequence()
     }
 
     public hide() {
@@ -296,105 +367,109 @@ class PlayUi {
     private createPaletteUi() {
         dom.removeAllChildren(this.paletteDiv)
         for (let i = 0; i < this.palette.length; ++i) {
-            const color = imaging2.toCanvasColor(this.palette[i])
-            const lum = imaging2.calcLuminance(color)
+            const [r, g, b] = unpackColor(this.palette[i])
+            const lum = calcLuminance(r, g, b)
             const fragment = this.paletteEntryTemplate.content.cloneNode(true) as DocumentFragment
             const entryDiv = dom.bySelector(fragment, ".palette-entry") as HTMLElement
             entryDiv.textContent = `${i + 1}`
-            entryDiv.style.backgroundColor = `rgb(${color.x}, ${color.y}, ${color.z})`
+            entryDiv.style.backgroundColor = color2RGBAStyle(r, g, b)
             entryDiv.style.color = lum < .5 ? "white" : "black"
             this.paletteDiv.appendChild(fragment)
         }
     }
 
     private onCanvasClick(evt: MouseEvent) {
+        if (this.complete) {
+            return
+        }
+
         // don't count drag as click
         if (this.dragged) {
             this.dragged = false
             return
         }
 
-        // transform click coordinates to scratch canvas coordinates, then determine region that was clicked on
-        const { x: clickX, y: clickY } = this.imageCtx.getTransform().inverse().transformPoint({ x: evt.offsetX, y: evt.offsetY })
-        const idx = clickY * this.imageCtx.canvas.width + clickX
-        const region = this.regionOverlay[idx]
+        // transform click coordinates to canvas coordinates
+        const invTransform = this.ctx.getTransform().inverse()
+        const domPt = invTransform.transformPoint({ x: evt.offsetX, y: evt.offsetY })
+        const [x, y] = cell2Image(domPt.x, domPt.y)
 
-        // if white region or null region, do nothing
-        if (!region || region.color === -1) {
+        // if not correct palette color, do nothing
+        const paletteIdx = this.paletteOverlay[flat(x, y, this.imageWidth)]
+        if (paletteIdx !== this.selectedPaletteIndex) {
             return
         }
 
-        // if not selected region, nothing
-        if (region.color != this.selectedPaletteIndex) {
+        // if already filled, do nothing
+        const flatXY = flat(x, y, this.imageWidth)
+        const pixels = this.pixelOverlay[paletteIdx]
+        if (!pixels.has(flatXY)) {
             return
         }
 
-        // fill the region
-        this.fillRegion(region)
-        this.sequence.push(region)
+        const [r, g, b] = unpackColor(this.palette[paletteIdx])
+        const [cx, cy] = image2Cell(x, y)
+        this.colorCtx.fillStyle = color2RGBAStyle(r, g, b)
+        this.colorCtx.fillRect(cx, cy, cellSize, cellSize)
 
-        // if all regions for this color are filled, show checkmark on palette entry, and move to next unfinished region
-        if (this.regions.filter(r => r.color == region.color).every(r => r.filled)) {
-            const entry = document.querySelectorAll(".palette-entry")[region.color]
-            entry.innerHTML = "&check;"
-            this.selectPaletteEntry(this.findNextUnfinishedRegion())
-        }
+        // remove the pixel from overlay
+        pixels.delete(flatXY)
+        this.sequence.push(flatXY)
 
-        // if all regions are filled, replace with original image data
-        if (this.regions.every(r => r.filled || r.color === -1)) {
-            this.scratchCtx.putImageData(this.initialImageData, 0, 0)
+        if (pixels.size > 0) {
             this.redraw()
-            this.showColorAnimation()
             return
         }
 
-        this.redraw()
-    }
+        // mark palette entry as done
+        const entry = document.querySelectorAll(".palette-entry")[paletteIdx]
+        entry.innerHTML = "&check;"
+        const nextPaletteIdx = this.findNextUnfinishedEntry(paletteIdx)
+        this.selectPaletteEntry(nextPaletteIdx)
 
-    private fillRegion(region: Region) {
-        // fill the region
-        const bounds = region.bounds
-        const imageData = this.scratchCtx.getImageData(bounds.min.x, bounds.min.y, bounds.width, bounds.height)
-        const data = imageData.data
-        const color = imaging2.toCanvasColor(this.palette[region.color])
+        if (nextPaletteIdx !== -1) {
+            return
+        }
 
-        imaging.scanImageData(imageData, (x, y, offset) => {
-            const imageX = x + bounds.min.x
-            const imageY = y + bounds.min.y
-            const imageOffset = imageY * this.scratchCtx.canvas.width + imageX
-            const imageRegion = this.regionOverlay[imageOffset]
-            if (imageRegion !== region) {
-                return
-            }
-
-            data[offset * 4] = color.x
-            data[offset * 4 + 1] = color.y
-            data[offset * 4 + 2] = color.z
-        })
-
-        this.scratchCtx.putImageData(imageData, bounds.min.x, bounds.min.y)
-        region.filled = true
+        // all colors complete! show animation of user coloring original image
+        this.execDoneSequence()
     }
 
     private onCanvasMouseDown(e: MouseEvent) {
+        if (this.complete) {
+            return
+        }
+
         this.drag = true
         this.dragLast = new geo.Vec2(e.offsetX, e.offsetY)
     }
 
     private onCanvasMouseUp(_: MouseEvent) {
+        if (this.complete) {
+            return
+        }
+
         this.drag = false
     }
 
     private onCanvasMouseMove(e: MouseEvent) {
+        if (this.complete) {
+            return
+        }
+
         if (!this.drag) {
             return
         }
 
+        const transform = this.ctx.getTransform().inverse()
+        const start = geo.Vec2.fromDOM(transform.transformPoint(this.dragLast))
         const position = new geo.Vec2(e.offsetX, e.offsetY)
-        const delta = position.sub(this.dragLast)
+        const end = geo.Vec2.fromDOM(transform.transformPoint(position))
+        const delta = end.sub(start)
 
         if (Math.abs(delta.x) > 3 || Math.abs(delta.y) > 3) {
-            this.imageCtx.translate(delta.x, delta.y)
+            this.centerX -= delta.x
+            this.centerY -= delta.y
             this.dragLast = position
             this.dragged = true
             this.redraw()
@@ -402,23 +477,33 @@ class PlayUi {
     }
 
     private onCanvasMouseWheel(e: WheelEvent) {
-        return
+        if (this.complete) {
+            return
+        }
+
         if (e.deltaY > 0) {
-            this.imageCtx.translate(-e.offsetX, -e.offsetY)
-            this.imageCtx.scale(.5, .5)
+            this.zoom *= .5
         }
 
         if (e.deltaY < 0) {
-            this.imageCtx.translate(-e.offsetX, -e.offsetY)
-            this.imageCtx.scale(2, 2)
+            this.zoom *= 2
         }
 
         this.redraw()
     }
 
     private onPaletteEntryClick(e: MouseEvent) {
+        if (this.complete) {
+            return
+        }
+
         const entry = e.target as Element
-        const idx = dom.getElementIndex(entry)
+        let idx = dom.getElementIndex(entry)
+
+        if (idx === this.selectedPaletteIndex) {
+            idx = -1
+        }
+
         this.selectPaletteEntry(idx)
     }
 
@@ -434,88 +519,107 @@ class PlayUi {
             entries[idx].classList.add("selected")
         }
 
-        // display a pattern on these entries (or clear checkerboard from prevous)
-        this.fillColorCheckerboard(idx)
+        // clear palette canvas
+        const ctx = this.paletteCtx
+        const canvas = this.paletteCanvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+        if (idx == -1) {
+            this.redraw()
+            return
+        }
+
+        // highlight remaining pixels for this color
+        const font = ctx.font
+        ctx.font = "bold 16px arial"
+        const textHeight = ctx.measureText("M").width
+        const cdxy = cellSize / 2
+
+        for (const pixel of this.pixelOverlay[idx]) {
+            const [x, y] = image2Cell(...unflat(pixel, this.imageWidth))
+            ctx.fillStyle = color2RGBAStyle(191, 191, 191, 255)
+            ctx.fillRect(x, y, cellSize, cellSize)
+
+            // draw label
+            const label = `${idx + 1}`
+            const metrics = ctx.measureText(label)
+            const cx = x + cdxy - metrics.width / 2
+            const cy = y + cdxy + textHeight / 2
+            ctx.fillStyle = "black"
+            ctx.fillText(label, cx, cy)
+        }
+
+        ctx.font = font
         this.redraw()
-    }
-
-    private fillColorCheckerboard(idx: number) {
-        const imageData = this.scratchCtx.getImageData(0, 0, this.scratchCtx.canvas.width, this.scratchCtx.canvas.height)
-        const data = imageData.data
-        let n = 0
-
-        for (let i = 0; i < this.regionOverlay.length; ++i) {
-            const region = this.regionOverlay[i]
-
-            if (!region) {
-                continue
-            }
-
-            if (region.filled) {
-                continue
-            }
-
-            if (region.color === -1) {
-                continue
-            }
-
-            const ii = i * 4
-            if (region.color === idx) {
-                data[ii] = n % 3 == 0 ? 127 : 255
-                data[ii + 1] = n % 3 == 0 ? 127 : 255
-                data[ii + 2] = n % 3 == 0 ? 127 : 255
-                data[ii + 3] = 255
-                ++n
-            } else {
-                data[ii] = 255
-                data[ii + 1] = 255
-                data[ii + 2] = 255
-                data[ii + 3] = 255
-            }
-        }
-
-        this.scratchCtx.putImageData(imageData, 0, 0)
-        drawRegionLabels(this.scratchCtx, this.regions)
-    }
-
-    private findNextUnfinishedRegion(): number {
-        const regions = this.regions.filter(r => !r.filled && r.color != -1)
-        if (regions.length == 0) {
-            return -1
-        }
-
-        const region = regions.reduce((r1, r2) => r1.color < r2.color ? r1 : r2)
-        return region.color
     }
 
     private redraw() {
-        // clear is subject to transform - that is probably why this is busted!
-        const transform = this.imageCtx.getTransform()
-        this.imageCtx.resetTransform()
-        this.imageCtx.clearRect(0, 0, this.imageCtx.canvas.width, this.imageCtx.canvas.height)
-        this.imageCtx.setTransform(transform)
-        this.imageCtx.drawImage(this.scratchCanvas, 0, 0)
+        // note - clear is subject to transform
+        const ctx = this.ctx
+        this.ctx.resetTransform()
+        const hw = this.canvas.width / 2 / this.zoom
+        const hh = this.canvas.height / 2 / this.zoom
+
+        this.centerX = math.clamp(this.centerX, 0, this.cellCanvas.width)
+        this.centerY = math.clamp(this.centerY, 0, this.cellCanvas.height)
+        this.ctx.scale(this.zoom, this.zoom)
+        this.ctx.translate(-this.centerX + hw, -this.centerY + hh)
+
+        var invTransform = ctx.getTransform().inverse()
+        const tl = invTransform.transformPoint({ x: 0, y: 0 })
+        const br = invTransform.transformPoint({ x: this.canvas.width, y: this.canvas.height })
+        ctx.clearRect(tl.x, tl.y, br.x - tl.x, br.y - tl.y)
+        ctx.drawImage(this.cellCanvas, 0, 0)
+        ctx.drawImage(this.paletteCanvas, 0, 0)
+        ctx.drawImage(this.colorCanvas, 0, 0)
     }
 
-    private async showColorAnimation() {
-        // first wait
-        await util.wait(500)
-
-        // reset image data
-        this.imageCtx.resetTransform()
-        this.scratchCtx.putImageData(this.processedImageData, 0, 0)
-        this.redraw()
-
-        // color as user did
-        await util.wait(500)
-        for (const r of this.sequence) {
-            this.fillRegion(r)
-            this.redraw()
-            await util.wait(200)
+    private findNextUnfinishedEntry(i: number): number {
+        for (i = 0; i < this.palette.length; ++i) {
+            const ii = i % this.palette.length
+            if (this.pixelOverlay[i].size > 0) {
+                return ii
+            }
         }
 
-        this.scratchCtx.putImageData(this.initialImageData, 0, 0)
-        this.redraw()
+        return -1
+    }
+
+    private async execDoneSequence() {
+        // set as done
+        this.complete = true
+
+        this.ctx.resetTransform()
+
+        // draw one pixel at a time to color canvas
+        // ovrlay onto canvas
+        const data = this.imageCtx.getImageData(0, 0, this.imageWidth, this.imageHeight).data
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height)
+        const zoom = Math.min(this.canvas.clientWidth / this.imageWidth, this.canvas.clientHeight / this.imageHeight)
+        this.ctx.scale(zoom, zoom)
+
+        // color as user did
+        const pixel = new ImageData(1, 1)
+        const pixelData = pixel.data
+        this.colorCtx.canvas.width = this.imageWidth
+        this.colorCtx.canvas.height = this.imageHeight
+        this.colorCtx.clearRect(0, 0, this.colorCanvas.width, this.colorCanvas.height)
+
+        for (let i = 0; i < this.sequence.length; ++i) {
+            const xy = this.sequence[i]
+            const [x, y] = unflat(xy, this.imageWidth)
+            const offset = xy * 4
+            pixelData[0] = data[offset]
+            pixelData[1] = data[offset + 1]
+            pixelData[2] = data[offset + 2]
+            pixelData[3] = 255
+
+            this.colorCtx.putImageData(pixel, x, y)
+            this.ctx.drawImage(this.colorCanvas, 0, 0)
+            if (i % 64 == 0) {
+                await util.wait(0)
+            }
+        }
     }
 }
 
@@ -540,393 +644,391 @@ class CBN {
     }
 }
 
-function processImage(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D): ProcessedImage {
-    // at this point, image should be drawn to scratch canvas
-    // get (flat) image data from scratch canvas
-    const img = imaging2.fromCanvasImageData(ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height))
-    imaging2.palettizeHistogram(img, 8, 128)
+function extractPalette(imgData: ImageData): number[] {
+    const { width, height, data } = imgData
+    const rowPitch = width * 4
 
-    // note - unique colors maps colors to integers and back again
-    // this results in slightly different colors than the histogram calculated colors
-    // pack / unpack to make these equal
-    let palette = imaging2.uniqueColors(img)
-    for (const color of img) {
-        color.set(imaging2.unpackColor(imaging2.packColor(color)))
+    // find unique colors, create entry for each
+    const palette = new Set<number>()
+    for (let y = 0; y < height; ++y) {
+        const yOffset = y * rowPitch
+        for (let x = 0; x < width; ++x) {
+            // pack color to a unique value
+            const offset = yOffset + x * 4
+            const r = data[offset]
+            const g = data[offset + 1]
+            const b = data[offset + 2]
+            const a = data[offset + 3]
+            const value = packColor(r, g, b, a)
+            palette.add(value)
+        }
     }
 
-    palette = palette.filter(c => c.x < .9 && c.y < .9 && c.z < .9)
-    const paletteOverlay = imaging2.indexByColor(img, palette)
-
-    let [regions, regionOverlay] = createRegionOverlay(img.width, img.height, paletteOverlay)
-    regions = pruneRegions(img.width, img.height, regions, regionOverlay)
-
-    // some pallette entries will now be unused by regions, remove these
-    palette = removeUnusedPaletteEntries(palette, regions)
-
-    drawBorders(regionOverlay, img)
-    fillInterior(regionOverlay, img)
-    ctx.fillStyle = "black"
-    ctx.putImageData(imaging2.toCanvasImageData(img), 0, 0)
-    drawRegionLabels(ctx, regions)
-
-    return {
-        palette: palette,
-        regions: regions,
-        regionOverlay: regionOverlay
-    }
+    return [...palette]
 }
 
-function createRegionOverlay(width: number, height: number, paletteOverlay: number[]): [Region[], RegionOverlay] {
-    const regionOverlay: RegionOverlay = array.uniform(null, width * height)
-    const regions: Region[] = []
+/**
+ * create an overlay that maps each pixel to the index of its palette entry
+ * @param imgData image data
+ * @param palette palette colors
+ */
+function createPaletteOverlay(imgData: ImageData, palette: number[]): number[] {
+    const { width, height, data } = imgData
+    const paletteMap = array.mapIndices(palette)
+    const rowPitch = width * 4
+    const overlay = array.uniform(-1, width * height)
 
-    imaging.scan(width, height, (x, y, offset) => {
-        if (regionOverlay[offset]) {
-            return
+    for (let y = 0; y < height; ++y) {
+        const yOffset = y * rowPitch
+        for (let x = 0; x < width; ++x) {
+            // pack color to a unique value
+            const offset = yOffset + x * 4
+            const r = data[offset]
+            const g = data[offset + 1]
+            const b = data[offset + 2]
+            const a = data[offset + 3]
+            const rgba = packColor(r, g, b, a)
+            const idx = paletteMap.get(rgba) ?? -1
+            overlay[y * width + x] = idx
         }
+    }
 
-        const region: Region = {
-            color: paletteOverlay[offset],
-            pixels: 0,
-            bounds: geo.Rect.empty(),
-            maxRect: geo.Rect.empty(),
-            filled: false
-        }
-
-        regionOverlay[offset] = region
-        regions.push(region)
-        exploreRegion(width, height, paletteOverlay, x, y, regionOverlay)
-    })
-
-    return [regions, regionOverlay]
+    return overlay
 }
 
-function pruneRegions(width: number, height: number, regions: Region[], regionOverlay: RegionOverlay): Region[] {
-    const regionSet = new Set(regions)
-    const minRegionWidth = 10
-    const minRegionHeight = 10
-    const minRegionPixels = minRegionWidth * minRegionHeight
-
-    for (const region of regions) {
-        if (region.pixels <= minRegionPixels) {
-            regionSet.delete(region)
-        }
-    }
-
-    calcRegionBounds(width, height, regions, regionOverlay)
-    for (const region of regionSet) {
-        if (region.bounds.width <= minRegionWidth) {
-            regionSet.delete(region)
-        }
-
-        if (region.bounds.height <= minRegionHeight) {
-            regionSet.delete(region)
-        }
-    }
-
-    // calculate maximal rec for each region
-    for (const region of regionSet) {
-        region.maxRect = calcMaxRegionRect(width, region, regionOverlay)
-    }
-
-    for (const region of regionSet) {
-        if (region.maxRect.width < minRegionWidth) {
-            regionSet.delete(region)
-            continue
-        }
-
-        if (region.maxRect.height < minRegionHeight) {
-            regionSet.delete(region)
-            continue
-        }
-    }
-
-    // update the overlay
-    for (let i = 0; i < regionOverlay.length; ++i) {
-        const region = regionOverlay[i]
-        if (!region) {
-            continue
-        }
-
-        if (!regionSet.has(region)) {
-            regionOverlay[i] = null
-        }
-    }
-
-    return [...regionSet]
-}
-
-function removeUnusedPaletteEntries(palette: imaging2.Color[], regions: Region[]): imaging2.Color[] {
-    // create a map from current color index to new color index
-    const usedSet = new Set(regions.map(r => r.color))
-    usedSet.delete(-1)
-    const used = [...usedSet]
-    const map = new Map<number, number>(used.map((u, i) => [u, i]))
-
-    for (const region of regions) {
-        if (region.color === -1) {
-            continue
-        }
-
-        const color = map.get(region.color)
-        if (typeof color === "undefined") {
-            throw new Error("Color not found in map")
-        }
-
-        region.color = color
-    }
-
-    return used.map(i => palette[i])
-}
-
-function calcRegionBounds(width: number, height: number, regions: Region[], overlay: RegionOverlay) {
-    imaging.scan(width, height, (x, y, offset) => {
-        const region = overlay[offset]
-        if (!region) {
-            return
-        }
-
-        region.bounds = region.bounds.extend(new geo.Vec2(x, y))
-    })
-
-    // expand each region by 1 to include right / bottom pixels in box
-    for (const region of regions) {
-        if (region.bounds.max.x > region.bounds.min.x) {
-            region.bounds.max.x += 1
-        }
-
-        if (region.bounds.max.y > region.bounds.min.y) {
-            region.bounds.max.y += 1
-        }
-    }
-}
-
-function calcMaxRegionRect(rowPitch: number, region: Region, regionOverlay: RegionOverlay): geo.Rect {
-    // derived from https://stackoverflow.com/questions/7245/puzzle-find-largest-rectangle-maximal-rectangle-problem
-    // algorithm needs to keep track of rectangle state for every column for every region
-    const { x: x0, y: y0 } = region.bounds.min
-    const { x: x1, y: y1 } = region.bounds.max
-    const width = x1 - x0 + 1
-    const height = y1 - y0 + 1
-    const ls = array.uniform(x0, width)
-    const rs = array.uniform(x0 + width, width)
-    const hs = array.uniform(0, width)
-
-    let maxArea = 0
-    const bounds = geo.Rect.empty()
-
-    imaging.scanRowsRegion(y0, height, rowPitch, (y, yOffset) => {
-        let l = x0
-        let r = x0 + width
-
-        // height scan
-        for (let x = x0; x < x1; ++x) {
-            const i = x - x0
+/**
+ * create an overlay that maps each palette entry to a list of pixels with its color
+ * @param imgData 
+ * @param palette 
+ */
+function createPixelOverlay(width: number, height: number, palette: number[], paletteOverlay: number[]): Set<number>[] {
+    const overlay = array.generate(palette.length, () => new Set<number>())
+    for (let y = 0; y < height; ++y) {
+        const yOffset = y * width
+        for (let x = 0; x < width; ++x) {
+            // pack color to a unique value
             const offset = yOffset + x
-            const isRegion = regionOverlay[offset] === region
-
-            if (isRegion) {
-                hs[i] += 1
-            } else {
-                hs[i] = 0
+            const paletteIdx = paletteOverlay[offset]
+            if (paletteIdx === -1) {
+                continue
             }
+
+            const flatCoord = flat(x, y, width)
+            overlay[paletteIdx].add(flatCoord)
         }
-
-        // l scan
-        for (let x = x0; x < x1; ++x) {
-            const i = x - x0
-            const offset = yOffset + x
-            const isRegion = regionOverlay[offset] === region
-
-            if (isRegion) {
-                ls[i] = Math.max(ls[i], l)
-            } else {
-                ls[i] = 0
-                l = x + 1
-            }
-        }
-
-        // r scan
-        for (let x = x1 - 1; x >= x0; --x) {
-            const i = x - x0
-            const offset = yOffset + x
-            const isRegion = regionOverlay[offset] === region
-
-            if (isRegion) {
-                rs[i] = Math.min(rs[i], r)
-            } else {
-                rs[i] = x1
-                r = x
-            }
-        }
-
-        // area scan
-        for (let i = 0; i < width; ++i) {
-            const area = hs[i] * (rs[i] - ls[i])
-            if (area > maxArea) {
-                maxArea = area
-                bounds.min.x = ls[i]
-                bounds.max.x = rs[i]
-                bounds.min.y = y - hs[i]
-                bounds.max.y = y
-            }
-        }
-    })
-
-    return bounds
-}
-
-function exploreRegion(width: number, height: number, paletteOverlay: number[], x0: number, y0: number, regionOverlay: RegionOverlay) {
-    const stack: number[] = []
-    const offset0 = y0 * width + x0
-    const region = regionOverlay[offset0]
-    if (!region) {
-        return
     }
 
-    const color = region.color
+    return overlay
+}
 
-    stack.push(x0)
-    stack.push(y0)
+function packColor(r: number, g: number, b: number, a: number): number {
+    const value = r << 24 | g << 16 | b << 8 | a
+    return value
+}
 
-    while (stack.length > 0) {
-        const y = stack.pop() as number
-        const x = stack.pop() as number
-        const offset = y * width + x
-        regionOverlay[offset] = region
-        region.pixels++
+function unpackColor(x: number): Color {
+    const r = (x & 0xFF000000) >>> 24
+    const g = (x & 0x00FF0000) >>> 16
+    const b = (x & 0x0000FF00) >>> 8
+    const a = x & 0x000000FF
 
-        // explore neighbors (if same color)
-        const l = x - 1
-        const r = x + 1
-        const t = y - 1
-        const b = y + 1
+    return [r, g, b, a]
+}
 
-        if (l >= 0) {
-            const offset1 = offset - 1
-            const region1 = regionOverlay[offset1]
-            const color1 = paletteOverlay[offset1]
-            if (!region1 && color === color1) {
-                stack.push(l)
-                stack.push(y)
-            }
-        }
+function calcLuminance(r: number, g: number, b: number) {
+    const l = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255)
+    return l
+}
 
-        if (r < width) {
-            const offset1 = offset + 1
-            const region1 = regionOverlay[offset1]
-            const color1 = paletteOverlay[offset1]
-            if (!region1 && color === color1) {
-                stack.push(r)
-                stack.push(y)
-            }
-        }
+function drawCellImage(ctx: OffscreenCanvasRenderingContext2D, width: number, height: number, paletteOverlay: number[]) {
+    const cellImageWidth = width * (cellSize + 1) + 1
+    const cellImageHeight = height * (cellSize + 1) + 1
 
-        if (t >= 0) {
-            const offset1 = offset - width
-            const region1 = regionOverlay[offset1]
-            const color1 = paletteOverlay[offset1]
-            if (!region1 && color === color1) {
-                stack.push(x)
-                stack.push(t)
-            }
-        }
+    // size canvas
+    ctx.canvas.width = cellImageWidth
+    ctx.canvas.height = cellImageHeight
 
-        if (b < height) {
-            const offset1 = offset + width
-            const region1 = regionOverlay[offset1]
-            const color1 = paletteOverlay[offset1]
-            if (!region1 && color === color1) {
-                stack.push(x)
-                stack.push(b)
-            }
-        }
+    // draw horizontal grid lines
+    for (let i = 0; i <= height; ++i) {
+        ctx.strokeRect(0, i * (cellSize + 1), cellImageWidth, 1)
     }
-}
 
-function drawBorders(regionOverlay: RegionOverlay, img: imaging2.Image) {
-    // color borders
-    const { width, height } = img
-    const black = new geo.Vec4(0, 0, 0, 1)
-
-    img.scan((x, y, offset) => {
-        const region = regionOverlay[offset]
-        if (!region) {
-            return
-        }
-
-        const l = x - 1
-        const r = x + 1
-        const t = y - 1
-        const b = y + 1
-
-        // edge cells are not border (for now)
-        if (l < 0 || r >= width || t < 0 || b >= height) {
-            return
-        }
-
-        const lRegion = regionOverlay[offset - 1]
-        if (lRegion && lRegion !== region) {
-            img.atf(offset).set(black)
-            regionOverlay[offset] = null
-        }
-
-        const rRegion = regionOverlay[offset + 1]
-        if (rRegion && rRegion !== region) {
-            img.atf(offset).set(black)
-            regionOverlay[offset] = null
-        }
-
-        const tRegion = regionOverlay[offset - width]
-        if (tRegion && tRegion !== region) {
-            img.atf(offset).set(black)
-            regionOverlay[offset] = null
-        }
-
-        const bRegion = regionOverlay[offset + width]
-        if (bRegion && bRegion !== region) {
-            img.atf(offset).set(black)
-            regionOverlay[offset] = null
-        }
-    })
-}
-
-function fillInterior(regionOverlay: RegionOverlay, img: imaging2.Image) {
-    const white = new geo.Vec4(1, 1, 1, 1)
-
-    for (let i = 0; i < regionOverlay.length; ++i) {
-        const region = regionOverlay[i]
-        if (!region) {
-            continue
-        }
-
-        img.atf(i).set(white)
+    // draw vertical grid lines
+    for (let i = 0; i <= width; ++i) {
+        ctx.strokeRect(i * (cellSize + 1), 0, 1, cellImageHeight)
     }
-}
 
-function drawRegionLabels(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, regions: Region[]) {
-    ctx.font = "16px arial bold"
-    const textHeight = ctx.measureText("M").width
+    // draw #s
     const font = ctx.font
+    ctx.font = "16px arial"
+    const textHeight = ctx.measureText("M").width
+    const cdxy = cellSize / 2
 
-    for (const region of regions) {
-        if (region.color === -1) {
-            continue
+    for (let y = 0; y < height; ++y) {
+        const yOffset = y * width
+        for (let x = 0; x < width; ++x) {
+            const offset = yOffset + x
+            const paletteIdx = paletteOverlay[offset]
+            if (paletteIdx === -1) {
+                // fill this part of the image in with solid color!
+
+                continue
+            }
+
+            const label = `${paletteIdx + 1}`
+            const metrics = ctx.measureText(label)
+            const cx = x * (cellSize + 1) + cdxy + 1 - metrics.width / 2
+            const cy = y * (cellSize + 1) + cdxy + 1 + textHeight / 2
+            ctx.fillText(label, cx, cy)
         }
-
-        if (region.filled) {
-            continue
-        }
-
-        const label = `${region.color + 1}`
-        const metrics = ctx.measureText(label)
-        const center = region.maxRect.center
-        const x = center.x - metrics.width / 2
-        const y = center.y + textHeight / 2
-        ctx.fillText(label, x, y)
     }
 
     ctx.font = font
+}
+
+function fit(width: number, height: number, maxSize: number): [number, number] {
+    if (width > height && width > maxSize) {
+        height = maxDim * height / width
+        return [Math.floor(maxSize), Math.floor(height)]
+    }
+
+    if (height > width && height > maxSize) {
+        width = maxDim * width / height
+        return [Math.floor(width), Math.floor(maxSize)]
+    }
+
+    return [Math.floor(width), Math.floor(height)]
+}
+
+function flat(x: number, y: number, rowPitch: number) {
+    return y * rowPitch + x
+}
+
+function unflat(i: number, rowPitch: number): [number, number] {
+    return [i % rowPitch, Math.floor(i / rowPitch)]
+}
+
+/**
+   * Convert an image x or y coordinate to top or left of cbn cell containing that pixel
+   * @param coord x or y coordinate
+   */
+function image2CellCoord(coord: number): number {
+    return coord * (cellSize + 1) + 1
+}
+
+/**
+ * Convert a cbn x or y coordinate to top or left of cbn cell containing that pixel
+ * @param coord x or y coordinate
+ */
+function cell2ImageCoord(coord: number): number {
+    return Math.floor((coord - 1) / (cellSize + 1))
+}
+
+/**
+   * Convert an image x or y coordinate to top or left of cbn cell containing that pixel
+   * @param coord x or y coordinate
+   */
+function image2Cell(x: number, y: number): [number, number] {
+    return [image2CellCoord(x), image2CellCoord(y)]
+}
+
+/**
+ * Convert a cbn x or y coordinate to top or left of cbn cell containing that pixel
+ * @param coord x or y coordinate
+ */
+function cell2Image(x: number, y: number): [number, number] {
+    return [cell2ImageCoord(x), cell2ImageCoord(y)]
+}
+
+/**
+ * convert rgba coordinates to a style string
+ * @param r red
+ * @param g green
+ * @param b blue
+ * @param a alpha
+ */
+function color2RGBAStyle(r: number, g: number, b: number, a: number = 255) {
+    return `rgba(${r}, ${g}, ${b}, ${a / 255})`
+}
+
+function quantMedianCut(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, maxColors: number) {
+    interface Pixel {
+        offset: number
+        r: number
+        g: number
+        b: number
+    }
+
+    // maxColors must be a power of 2 for this algorithm
+    maxColors = math.nextPow2(maxColors)
+    const imgData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
+    const { width, height, data } = imgData
+    const rowPitch = width * 4
+
+    const buckets = new Array<Pixel[]>()
+    buckets.push(createInitialBucket())
+
+    while (true) {
+        const bucket = chooseBucket(colorRangeTolerance, buckets)
+        if (!bucket) {
+            break
+        }
+
+        buckets.push(splitBucket(bucket))
+    }
+
+    // calculate the average color for each bucket
+    const colors = new Array<[number, number, number]>()
+    for (const bucket of buckets) {
+        let r = 0
+        let g = 0
+        let b = 0
+
+        for (const pixel of bucket) {
+            r += pixel.r
+            g += pixel.g
+            b += pixel.b
+        }
+
+        r /= bucket.length
+        g /= bucket.length
+        b /= bucket.length
+
+        colors.push([Math.round(r), Math.round(g), Math.round(b)])
+    }
+
+    // iterate through each bucket, replacing pixel color with bucket color for each pixel
+    for (let i = 0; i < buckets.length; ++i) {
+        const bucket = buckets[i]
+        const [r, g, b] = colors[i]
+
+        for (const pixel of bucket) {
+            const offset = pixel.offset * 4
+            data[offset] = r
+            data[offset + 1] = g
+            data[offset + 2] = b
+        }
+    }
+
+    ctx.putImageData(imgData, 0, 0)
+
+    function createInitialBucket(): Pixel[] {
+        // create initial bucket
+        const bucket = new Array<Pixel>()
+        for (let y = 0; y < height; ++y) {
+            const yOffset = y * rowPitch
+            for (let x = 0; x < width; ++x) {
+                const offset = yOffset + x * 4
+                const r = data[offset]
+                const g = data[offset + 1]
+                const b = data[offset + 2]
+
+                // pack into bucket
+                const pixel: Pixel = {
+                    offset: flat(x, y, width),
+                    r: r,
+                    g: g,
+                    b: b
+                }
+
+                bucket.push(pixel)
+            }
+        }
+
+        return bucket
+    }
+
+    function calcRange(pixels: Pixel[], selector: (x: Pixel) => number): number {
+        let min = Infinity
+        let max = -Infinity
+
+        for (const pixel of pixels) {
+            min = Math.min(selector(pixel), min)
+            max = Math.max(selector(pixel), max)
+        }
+
+        return max - min
+    }
+
+    function chooseBucket(tolerance: number, buckets: Pixel[][]): Pixel[] | null {
+        let maxRange = -Infinity
+        let maxBucket: Pixel[] | null = null
+
+        for (const bucket of buckets) {
+            const rangeR = calcRange(bucket, p => p.r)
+            const rangeG = calcRange(bucket, p => p.g)
+            const rangeB = calcRange(bucket, p => p.b)
+            let range = 0
+            if (rangeR > rangeG && rangeR > rangeB) {
+                range = rangeR
+            } else if (rangeG > rangeR) {
+                range = rangeG
+            } else {
+                range = rangeB
+            }
+
+            if (range > maxRange) {
+                maxRange = range
+                maxBucket = bucket
+            }
+        }
+
+        return maxRange > tolerance ? maxBucket : null
+    }
+
+    function splitBucket(bucket: Pixel[]): Pixel[] {
+        const rangeR = calcRange(bucket, p => p.r)
+        const rangeG = calcRange(bucket, p => p.g)
+        const rangeB = calcRange(bucket, p => p.b)
+
+        if (rangeR > rangeG && rangeR > rangeB) {
+            bucket.sort((a, b) => a.r - b.r)
+        } else if (rangeG > rangeR) {
+            bucket.sort((a, b) => a.g - b.g)
+        } else {
+            bucket.sort((a, b) => a.b - b.b)
+        }
+
+        const middle = Math.floor(bucket.length / 2)
+        const newBucket = bucket.splice(middle)
+        return newBucket
+    }
+}
+
+function prunePallete(palette: number[], pixelOverlay: Set<number>[], maxPixels: number, width: number, height: number, ctx: OffscreenCanvasRenderingContext2D): number[] {
+    const indicesToKeep = new Set<number>(array.sequence(0, palette.length))
+
+    ctx.canvas.width = width * (cellSize + 1) + 1
+    ctx.canvas.height = height * (cellSize + 1) + 1
+
+    for (let i = 0; i < pixelOverlay.length; ++i) {
+        const pixels = pixelOverlay[i]
+        if (pixels.size < maxPixels) {
+            continue
+        }
+
+        if (iter.all(pixels, x => !isBorderPixel(...unflat(x, width), width, height))) {
+            continue
+        }
+
+        // fill these pixels in image with appropriate color
+        const [r, g, b] = unpackColor(palette[i])
+        for (const xy of pixels) {
+            const [x, y] = unflat(xy, width)
+            const [cx, cy] = image2Cell(x, y)
+            ctx.fillStyle = color2RGBAStyle(r, g, b)
+            ctx.fillRect(cx, cy, cellSize, cellSize)
+        }
+
+        indicesToKeep.delete(i)
+    }
+
+    const newPalette = [...indicesToKeep].map(x => palette[x])
+    return newPalette
+}
+
+function isBorderPixel(x: number, y: number, width: number, height: number): boolean {
+    return x === 0 || y === 0 || x === width - 1 || y === height - 1
 }
 
 new CBN()

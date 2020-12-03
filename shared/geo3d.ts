@@ -14,6 +14,10 @@ export class Vec2 {
         return new Vec2(-Infinity, -Infinity)
     }
 
+    static fromDOM(pt: DOMPoint): Vec2 {
+        return new Vec2(pt.x, pt.y)
+    }
+
     equal(b: Vec2): boolean {
         return this.x === b.x && this.y === b.y
     }
@@ -112,6 +116,10 @@ export class Vec3 {
 
     static inf(): Vec3 {
         return new Vec3(Infinity, Infinity, Infinity)
+    }
+
+    static fromDOM(pt: DOMPoint): Vec3 {
+        return new Vec3(pt.x, pt.y, pt.z)
     }
 
     equal(b: Vec3): boolean {
@@ -235,6 +243,10 @@ export class Vec4 {
 
     static zero(): Vec4 {
         return new Vec4(0, 0, 0, 0)
+    }
+
+    static fromDOM(pt: DOMPoint): Vec4 {
+        return new Vec4(pt.x, pt.y, pt.z, pt.w)
     }
 
     equal(b: Vec4): boolean {

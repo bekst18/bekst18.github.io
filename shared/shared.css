@@ -95,6 +95,11 @@ button.button-append {
     border-color: darkgray;
 }
 
+.button-group .selected {
+    font-weight: bold;
+    background-color: blue;
+}
+
 .checkbox-group {
     display: flex;
     flex-flow: row wrap;

@@ -31,3 +31,12 @@ export function lerp(a: number, b: number, t: number) {
 export function unlerp(a: number, b: number, x: number) {
     return a == b ? 0 : (x - a) / (b - a)
 }
+
+/**
+ * return the next power of two on or after the specified number
+ * if the number is already a power of 2 it is returned
+ * @param x number 
+ */
+export function nextPow2(x: number): number {
+    return Math.pow(2, Math.ceil(Math.log2(x)))
+}

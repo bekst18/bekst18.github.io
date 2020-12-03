@@ -74,3 +74,13 @@ export function pop<T>(a: T[]): T {
 
     return elem
 }
+
+/**
+ * create a mapping of values to indices
+ * @param: a array to generate map from
+ */
+export function mapIndices<T>(a: T[]): Map<T, number> {
+    const map = new Map<T, number>()
+    a.forEach((x, i) => map.set(x, i))
+    return map
+}
