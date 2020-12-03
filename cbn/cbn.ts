@@ -4,13 +4,9 @@ import * as geo from "../shared/geo3d.js"
 import * as math from "../shared/math.js"
 import * as util from "../shared/util.js"
 import * as iter from "../shared/iter.js"
-import * as rand from "../shared/rand.js"
 
 // size that each image pixel is blown up to
 const cellSize = 32
-
-// max height / width of image
-const maxDim = 128
 
 // tolerance before splitting colors - higher = less colors
 const colorRangeTolerance = 64
@@ -56,6 +52,7 @@ class LoadUi {
     private readonly acquireImageDiv = dom.byId("acquireImage") as HTMLDivElement
     private readonly captureImageButton = dom.byId("captureImageButton") as HTMLButtonElement
     private readonly loadUiDiv = dom.byId("loadUi") as HTMLDivElement
+    private readonly maxDimInput = dom.byId("maxDim") as HTMLInputElement
     private readonly fileDropBox = dom.byId("fileDropBox") as HTMLDivElement
     private readonly fileInput = dom.byId("fileInput") as HTMLInputElement
     private readonly fileButton = dom.byId("fileButton") as HTMLButtonElement
@@ -96,6 +93,10 @@ class LoadUi {
 
     public hide() {
         this.loadUiDiv.hidden = true
+    }
+
+    public get maxDim(): number {
+        return parseInt(this.maxDimInput.value) || 128
     }
 
     private onDragEnterOver(ev: DragEvent) {
@@ -293,11 +294,12 @@ class PlayUi {
         this.canvas.addEventListener("pointermove", e => this.onPointerMove(e))
         this.canvas.addEventListener("pointerup", e => this.onPointerUp(e))
         this.canvas.addEventListener("wheel", e => this.onWheel(e))
+        window.addEventListener("resize", e => this.onResize(e))
         dom.delegate(this.playUiDiv, "click", ".palette-entry", (e) => this.onPaletteEntryClick(e as MouseEvent))
         this.returnButton.addEventListener("click", () => this.onReturn())
     }
 
-    public show(img: CBNImageSource) {
+    public show(img: CBNImageSource, maxDim: number) {
         this.playUiDiv.hidden = false
         this.complete = false
 
@@ -363,6 +365,12 @@ class PlayUi {
 
     private onReturn(): void {
         this.return.publish()
+    }
+
+    private onResize(_: UIEvent) {
+        this.canvas.width = this.canvas.clientWidth
+        this.canvas.height = this.canvas.clientHeight
+        this.redraw()
     }
 
     private createPaletteUi() {
@@ -689,7 +697,8 @@ class CBN {
 
     private onImageLoaded(img: CBNImageSource) {
         this.loadUi.hide()
-        this.playUi.show(img)
+        this.playUi.show(img, this.loadUi.maxDim)
+
     }
 
     private onReturn() {
@@ -842,12 +851,12 @@ function drawCellImage(ctx: OffscreenCanvasRenderingContext2D, width: number, he
 
 function fit(width: number, height: number, maxSize: number): [number, number] {
     if (width > height && width > maxSize) {
-        height = maxDim * height / width
+        height = maxSize * height / width
         return [Math.floor(maxSize), Math.floor(height)]
     }
 
     if (height > width && height > maxSize) {
-        width = maxDim * width / height
+        width = maxSize * width / height
         return [Math.floor(width), Math.floor(maxSize)]
     }
 

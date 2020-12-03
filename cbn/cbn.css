@@ -46,6 +46,10 @@ canvas {
     margin: 1em auto;
 }
 
+#maxDim {
+    text-align: center;
+}
+
 #canvas {
     touch-action: none;
 }
