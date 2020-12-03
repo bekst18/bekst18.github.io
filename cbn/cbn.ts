@@ -263,6 +263,7 @@ class PlayUi {
     private centerY = 0
     private zoom = 1
     private drag = false
+    private touchZoom: number = 0
     private touch1Start: geo.Vec2 | null = null
     private touch2Start: geo.Vec2 | null = null
     private touch1Cur: geo.Vec2 | null = null
@@ -402,6 +403,7 @@ class PlayUi {
         this.drag = true
         this.dragLast = new geo.Vec2(e.offsetX, e.offsetY)
         this.touch1Start = new geo.Vec2(e.offsetX, e.offsetY)
+        this.touchZoom = this.zoom
 
         // transform click coordinates to canvas coordinates
         const [x, y] = this.canvas2Cell(e.offsetX, e.offsetY)
@@ -450,7 +452,7 @@ class PlayUi {
             this.touch2Cur = this.touch2Cur ?? this.touch2Start
             const d0 = this.touch1Start.sub(this.touch2Start).length()
             const d1 = this.touch1Cur.sub(this.touch2Cur).length()
-            this.zoom = d1 / d0
+            this.zoom = this.touchZoom * d1 / d0
             this.redraw()
             return
         }
