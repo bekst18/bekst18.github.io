@@ -4,7 +4,6 @@ import * as geo from "../shared/geo3d.js"
 import * as math from "../shared/math.js"
 import * as util from "../shared/util.js"
 import * as iter from "../shared/iter.js"
-import { tileSize } from "../crawl/rl.js"
 
 // size that each image pixel is blown up to
 const cellSize = 32
@@ -247,7 +246,7 @@ class PlayUi {
     private readonly paletteDiv = dom.byId("palette") as HTMLDivElement
     private readonly paletteEntryTemplate = dom.byId("paletteEntry") as HTMLTemplateElement
     private readonly playUiDiv = dom.byId("playUi") as HTMLDivElement
-    private readonly returnButton = dom.byId("returnButton") as HTMLButtonElement
+    // private readonly returnButton = dom.byId("returnButton") as HTMLButtonElement
     private readonly imageCanvas = new OffscreenCanvas(0, 0)
     private readonly imageCtx = this.imageCanvas.getContext("2d")!
     private readonly cellCanvas = new OffscreenCanvas(0, 0)
@@ -299,7 +298,7 @@ class PlayUi {
         this.canvas.addEventListener("wheel", e => this.onWheel(e))
         window.addEventListener("resize", e => this.onResize(e))
         dom.delegate(this.playUiDiv, "click", ".palette-entry", (e) => this.onPaletteEntryClick(e as MouseEvent))
-        this.returnButton.addEventListener("click", () => this.onReturn())
+        // this.returnButton.addEventListener("click", () => this.onReturn())
     }
 
     public show(img: CBNImageSource, maxDim: number) {
