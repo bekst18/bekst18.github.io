@@ -344,15 +344,15 @@ class PlayUi {
 
         this.sequence = []
 
-        // debug - go straight to end state
-        for (let y = 0; y < this.imageHeight; ++y) {
-            for (let x = 0; x < this.imageWidth; ++x) {
-                this.sequence.push(flat(x, y, this.imageWidth))
-            }
-        }
+        // // debug - go straight to end state
+        // for (let y = 0; y < this.imageHeight; ++y) {
+        //     for (let x = 0; x < this.imageWidth; ++x) {
+        //         this.sequence.push(flat(x, y, this.imageWidth))
+        //     }
+        // }
 
-        rand.shuffle(this.sequence)
-        this.execDoneSequence()
+        // rand.shuffle(this.sequence)
+        // this.execDoneSequence()
     }
 
     public hide() {
