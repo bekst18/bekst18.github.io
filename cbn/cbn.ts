@@ -4,6 +4,7 @@ import * as geo from "../shared/geo3d.js"
 import * as math from "../shared/math.js"
 import * as util from "../shared/util.js"
 import * as iter from "../shared/iter.js"
+import { tileSize } from "../crawl/rl.js"
 
 // size that each image pixel is blown up to
 const cellSize = 32
@@ -263,6 +264,7 @@ class PlayUi {
     private centerY = 0
     private zoom = 1
     private drag = false
+    private colorDrag = false
     private touchZoom: number = 0
     private touch1Start: geo.Vec2 | null = null
     private touch2Start: geo.Vec2 | null = null
@@ -407,7 +409,9 @@ class PlayUi {
 
         // transform click coordinates to canvas coordinates
         const [x, y] = this.canvas2Cell(e.offsetX, e.offsetY)
-        this.tryFillCell(x, y)
+        if (this.tryFillCell(x, y)) {
+            this.colorDrag = true
+        }
     }
 
     /**
@@ -433,6 +437,7 @@ class PlayUi {
 
         this.touch1Start = null
         this.drag = false
+        this.colorDrag = false
     }
 
     private onPointerMove(e: PointerEvent) {
@@ -469,7 +474,7 @@ class PlayUi {
 
         // check for drag over palette color
         const [x, y] = this.canvas2Cell(e.offsetX, e.offsetY)
-        if (this.paletteOverlay[flat(x, y, this.imageWidth)] === this.selectedPaletteIndex) {
+        if (this.colorDrag && this.paletteOverlay[flat(x, y, this.imageWidth)] === this.selectedPaletteIndex) {
             if (this.tryFillCell(x, y)) {
                 this.redraw()
             }
@@ -588,7 +593,7 @@ class PlayUi {
         const canvas = this.paletteCanvas
         ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-        if (idx == -1) {
+        if (idx === -1) {
             this.redraw()
             return
         }
@@ -834,12 +839,6 @@ function drawCellImage(ctx: OffscreenCanvasRenderingContext2D, width: number, he
         for (let x = 0; x < width; ++x) {
             const offset = yOffset + x
             const paletteIdx = paletteOverlay[offset]
-            if (paletteIdx === -1) {
-                // fill this part of the image in with solid color!
-
-                continue
-            }
-
             const label = `${paletteIdx + 1}`
             const metrics = ctx.measureText(label)
             const cx = x * (cellSize + 1) + cdxy + 1 - metrics.width / 2
