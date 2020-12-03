@@ -397,6 +397,7 @@ class PlayUi {
 
         if (!e.isPrimary) {
             this.touch2Start = new geo.Vec2(e.offsetX, e.offsetY)
+            this.touchZoom = this.zoom
             return
         }
 
@@ -438,6 +439,7 @@ class PlayUi {
         this.touch1Start = null
         this.drag = false
         this.colorDrag = false
+        this.touchZoom = this.zoom
     }
 
     private onPointerMove(e: PointerEvent) {
