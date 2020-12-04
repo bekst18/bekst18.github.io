@@ -246,7 +246,7 @@ class PlayUi {
     private readonly paletteDiv = dom.byId("palette") as HTMLDivElement
     private readonly paletteEntryTemplate = dom.byId("paletteEntry") as HTMLTemplateElement
     private readonly playUiDiv = dom.byId("playUi") as HTMLDivElement
-    // private readonly returnButton = dom.byId("returnButton") as HTMLButtonElement
+    private readonly returnButton = dom.byId("returnButton") as HTMLButtonElement
     private readonly imageCanvas = new OffscreenCanvas(0, 0)
     private readonly imageCtx = this.imageCanvas.getContext("2d")!
     private readonly cellCanvas = new OffscreenCanvas(0, 0)
@@ -298,16 +298,18 @@ class PlayUi {
         this.canvas.addEventListener("wheel", e => this.onWheel(e))
         window.addEventListener("resize", e => this.onResize(e))
         dom.delegate(this.playUiDiv, "click", ".palette-entry", (e) => this.onPaletteEntryClick(e as MouseEvent))
-        // this.returnButton.addEventListener("click", () => this.onReturn())
+        this.returnButton.addEventListener("click", () => this.onReturn())
     }
 
     public show(img: CBNImageSource, maxDim: number) {
         this.playUiDiv.hidden = false
         this.complete = false
-
+        this.zoom = 1
+        this.drag = false
+        this.touchZoom = 0
         this.canvas.width = this.canvas.clientWidth
         this.canvas.height = this.canvas.clientHeight
-
+    
         // fit image
         {
             const [w, h] = fit(img.width, img.height, maxDim)
@@ -349,6 +351,30 @@ class PlayUi {
         }
 
         this.sequence = []
+
+        // debug - fill all pixels but first unfilled
+        // {
+        //     let skipped1 = false
+        //     for (let y = 0; y < this.imageHeight; ++y) {
+        //         let yOffset = y * this.imageWidth
+        //         for (let x = 0; x < this.imageWidth; ++x) {
+        //             const paletteIdx = this.paletteOverlay[flat(x, y, this.imageWidth)]
+        //             if (paletteIdx === -1) {
+        //                 continue
+        //             }
+
+        //             let xOffset = yOffset + x
+        //             if (!skipped1 && this.paletteOverlay[xOffset] !== -1) {
+        //                 skipped1 = true
+        //                 continue
+        //             }
+
+        //             this.selectPaletteEntry(paletteIdx)
+        //             this.tryFillCell(x, y)
+
+        //         }
+        //     }
+        // }
 
         // // debug - go straight to end state
         // for (let y = 0; y < this.imageHeight; ++y) {
