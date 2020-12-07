@@ -18,7 +18,7 @@ const maxBackgroundPixels = 1024
 const defaultMaxDim = 128
 
 // default max colors
-const defaultMaxColors = 256
+const defaultMaxColors = 64
 
 enum CameraMode {
     None,
@@ -156,7 +156,7 @@ class ImageAcquisitionUi {
         }
 
         const src = this.camera.srcObject as MediaStream
-        const tracks = src.getTracks() 
+        const tracks = src.getTracks()
         for (const track of tracks) {
             track.stop()
         }
@@ -277,12 +277,16 @@ class ImageSizeUi {
         this.return.publish()
     }
 
-    private onMaxDimChange() {
+    private async onMaxDimChange() {
+        await showLoadingIndicator()
         this.redraw()
+        hideLoadingIndicator()
     }
 
-    private onMaxColorsChange() {
+    private async onMaxColorsChange() {
+        await showLoadingIndicator()
         this.redraw()
+        hideLoadingIndicator()
     }
 
     private redraw() {
@@ -854,11 +858,13 @@ class CBN {
         this.sizeUi.createCBN.subcribe((img: HTMLCanvasElement) => this.onCreateCBN(img))
         this.sizeUi.return.subcribe(() => this.onReturnToAcquire())
         this.playUi.return.subcribe(() => this.onReturnToAcquire())
+    }
 
+    public async exec() {
         // try to restore state
         const state = loadCBNState()
         if (state.image) {
-            showLoadingIndicator()
+            await showLoadingIndicator()
             this.cbnCreated = true
             this.acquireUi.hide()
             this.playUi.restore(state)
@@ -869,15 +875,15 @@ class CBN {
         this.acquireUi.show({ showReturnToColorByNumber: false })
     }
 
-    private onImageAcquired(img: HTMLCanvasElement) {
-        showLoadingIndicator()
+    private async onImageAcquired(img: HTMLCanvasElement) {
+        await showLoadingIndicator()
         this.acquireUi.hide()
         this.sizeUi.show(img)
         hideLoadingIndicator()
     }
 
-    private onCreateCBN(img: HTMLCanvasElement) {
-        showLoadingIndicator()
+    private async onCreateCBN(img: HTMLCanvasElement) {
+        await showLoadingIndicator()
         this.sizeUi.hide()
         this.playUi.create(img, [])
         this.cbnCreated = true
@@ -1302,9 +1308,10 @@ function loadCBNState(): CBNState {
     return state
 }
 
-function showLoadingIndicator() {
+async function showLoadingIndicator() {
     const div = dom.byId("loadingModal")
     div.hidden = false
+    await util.wait(0)
 }
 
 function hideLoadingIndicator() {
@@ -1312,4 +1319,4 @@ function hideLoadingIndicator() {
     div.hidden = true
 }
 
-new CBN()
+new CBN().exec()
