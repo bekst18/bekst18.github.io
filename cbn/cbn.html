@@ -7,10 +7,8 @@
     <link rel="stylesheet" type="text/css" href="cbn.css">
 </head>
 <body>
-    <div id="loadUi" class="m-auto">
+    <div id="imageAcquisitionUi" class="m-auto">
         <h1>Color-By-Number Maker</h1>
-        <p>Max width / height of image - image will be scaled if larger than this.</p>
-        <input id="maxDim" type="number" min="1" max="1024" class="m-2" value="64" />
         <p class="text-info">Drag a file here to make into a color-by-number.</p>
         <div id="fileDropBox">
             <div>Drag an image file here</div>
@@ -18,8 +16,10 @@
         <input id="fileInput" type="file" accept="image/*" class="m-2" hidden />
         <p class="text-info">OR select a file by clicking the button.</p>
         <button id="fileButton" class="button-primary my-2">Select a File</button>
-        <p class="text-info">OR acquire an image using a camera.</p>
-        <button id="useCameraButton" class="button-primary my-2">Use Camera</button>
+        <div id="useCameraDiv">
+            <p class="text-info">OR acquire an image using a camera.</p>
+            <button id="useCameraButton" class="button-primary my-2">Use Camera</button>
+        </div>
         <div id="acquireImage" hidden>
             <video id="camera"></video>
             <div class="button-group">
@@ -29,8 +29,31 @@
             </div>
         </div>
         <p class="text-info">OR choose an image from the library.</p>
-        <button id="libraryButton" class="button-primary my-2">Choose From Library</button>
+        <!--<button id="libraryButton" class="button-primary my-2">Choose From Library</button>-->
+        <button id="returnToColorByNumber" class="button-primary my-2">Return to Color by Number</button>
         <div id="errors">
+        </div>
+    </div>
+    <div id="imageSizeUi" class="m-auto" hidden="true">
+        <h1>Color-By-Number Maker</h1>
+        <div id="imageSizeControls">
+            <div class="mx-3">
+                <label for="maxDim">Max width / height:</label>
+                <input id="maxDim" type="number" min="8" max="512" class="mb-2" value="128"
+                    placeholder="Max width / height" />
+            </div>
+            <div>
+                <label for="maxColors">Max colors:</label>
+                <input id="maxColors" type="number" min="8" max="512" class="mb-2" value="256"
+                    placeholder="Max # of colors" />
+            </div>
+        </div>
+        <canvas id="imageSizeCanvas"></canvas>
+        <div id="errors">
+        </div>
+        <div class="button-group">
+            <button id="createColorByNumber" class="button-primary my-2">Create Color-by-Number</button>
+            <button id="imageSizeReturn" class="button-primary my-2">Choose a Different Image</button>
         </div>
     </div>
     <div id="libraryUi" class="m-auto" hidden="true">
@@ -43,13 +66,14 @@
         <button id="returnFromLibraryButton" class="button-primary my-2">Return</button>
     </div>
     <div id="playUi" hidden>
-        <button id="returnButton" class="button-primary no-print mb-3">Choose a Different Image</button>
+        <button id="returnButton" class="button-primary no-print">Choose a Different Image</button>
         <canvas id="canvas"></canvas>
         <div id="palette">
-            <div class="palette-entry">0
-                <!-- required for sizing! -->
-            </div>
+            <div class="palette-entry">0</div>
         </div>
+    </div>
+    <div id="loadingModal" class="modal-background" hidden>
+        <img id="loadingImage" src="loading.gif" alt="loading indicator">
     </div>
     <script type="module" src="cbn.js"></script>
     <template id="paletteEntry">

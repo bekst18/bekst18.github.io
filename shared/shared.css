@@ -4,10 +4,6 @@ h1, html, body, div {
     padding: 0;
 }
 
-body {
-    box-sizing: border-box;
-}
-
 button, input, select, textarea {
     font-family: inherit;
     font-size: 100%;

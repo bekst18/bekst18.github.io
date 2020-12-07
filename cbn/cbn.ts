@@ -9,10 +9,16 @@ import * as iter from "../shared/iter.js"
 const cellSize = 32
 
 // tolerance before splitting colors - higher = less colors
-const colorRangeTolerance = 64
+const colorRangeTolerance = 32
 
 // max bg pixels before removal
 const maxBackgroundPixels = 1024
+
+// default max dimension
+const defaultMaxDim = 128
+
+// default max colors
+const defaultMaxColors = 256
 
 enum CameraMode {
     None,
@@ -22,47 +28,53 @@ enum CameraMode {
 
 type Color = [number, number, number, number]
 
-class Channel<T> {
-    private readonly subscribers = new Set<(x: T) => void>()
+interface CBNState {
+    image: string
+    sequence: number[]
+}
 
-    public subcribe(subscriber: (x: T) => void) {
+class Channel<T extends any[]> {
+    private readonly subscribers = new Set<(...args: T) => void>()
+
+    public subcribe(subscriber: (...args: T) => void) {
         this.subscribers.add(subscriber)
     }
 
-    public unsubscribe(subscriber: (x: T) => void) {
+    public unsubscribe(subscriber: (...args: T) => void) {
         this.subscribers.delete(subscriber)
     }
 
-    public publish(x: T): void {
+    public publish(...args: T): void {
         for (const subscriber of this.subscribers) {
-            subscriber(x)
+            subscriber(...args)
         }
     }
 }
 
-interface CBNImageSource {
-    width: number
-    height: number
-    source: HTMLVideoElement | HTMLImageElement
+interface ImageAcquisitionUiShowOptions {
+    showReturnToColorByNumber: boolean
 }
 
-class LoadUi {
+class ImageAcquisitionUi {
     private readonly camera = dom.byId("camera") as HTMLVideoElement
     private cameraMode = CameraMode.None
     private readonly acquireImageDiv = dom.byId("acquireImage") as HTMLDivElement
     private readonly captureImageButton = dom.byId("captureImageButton") as HTMLButtonElement
-    private readonly loadUiDiv = dom.byId("loadUi") as HTMLDivElement
-    private readonly maxDimInput = dom.byId("maxDim") as HTMLInputElement
+    private readonly imageAcquisitionDiv = dom.byId("imageAcquisitionUi") as HTMLDivElement
     private readonly fileDropBox = dom.byId("fileDropBox") as HTMLDivElement
     private readonly fileInput = dom.byId("fileInput") as HTMLInputElement
     private readonly fileButton = dom.byId("fileButton") as HTMLButtonElement
     private readonly useCameraButton = dom.byId("useCameraButton") as HTMLButtonElement
     private readonly flipCameraButton = dom.byId("flipCameraButton") as HTMLButtonElement
     private readonly stopCameraButton = dom.byId("stopCameraButton") as HTMLButtonElement
-    private readonly libraryButton = dom.byId("libraryButton") as HTMLButtonElement
+    // private readonly libraryButton = dom.byId("libraryButton") as HTMLButtonElement
+    private readonly returnToColorByNumberButton = dom.byId("returnToColorByNumber") as HTMLButtonElement
     private readonly errorsDiv = dom.byId("errors");
-    public readonly imageLoaded = new Channel<CBNImageSource>()
+    public readonly imageAcquired = new Channel<[HTMLCanvasElement]>()
+    public readonly returnToColorByNumber = new Channel<[]>()
     private readonly libraryUi = new LibraryUi()
+    private readonly canvas = document.createElement("canvas")
+    private readonly ctx = this.canvas.getContext("2d")!
 
     constructor() {
         this.fileButton.addEventListener("click", () => {
@@ -78,25 +90,25 @@ class LoadUi {
         this.stopCameraButton.addEventListener("click", () => this.stopCamera())
         this.captureImageButton.addEventListener("click", () => this.captureImage())
         this.camera.addEventListener("loadedmetadata", () => this.onCameraLoad())
-        this.libraryButton.addEventListener("click", () => this.showLibrary())
+        // this.libraryButton.addEventListener("click", () => this.showLibrary())
+        this.returnToColorByNumberButton.addEventListener("click", () => this.returnToColorByNumber.publish())
 
         this.libraryUi.cancel.subcribe(() => {
-            this.loadUiDiv.hidden = false
+            this.imageAcquisitionDiv.hidden = false
         })
     }
 
-    public show() {
-        this.loadUiDiv.hidden = false
+    public show(options: ImageAcquisitionUiShowOptions) {
+        this.imageAcquisitionDiv.hidden = false
+        this.returnToColorByNumberButton.hidden = !options.showReturnToColorByNumber
+        this.canvas.width = this.canvas.clientWidth
+        this.canvas.height = this.canvas.clientHeight
         // this.loadFromUrl("/cbn/assets/larryKoopa.jpg")
         // this.loadFromUrl("/cbn/assets/olts_flower.jpg")
     }
 
     public hide() {
-        this.loadUiDiv.hidden = true
-    }
-
-    public get maxDim(): number {
-        return parseInt(this.maxDimInput.value) || 128
+        this.imageAcquisitionDiv.hidden = true
     }
 
     private onDragEnterOver(ev: DragEvent) {
@@ -144,7 +156,7 @@ class LoadUi {
         }
 
         const src = this.camera.srcObject as MediaStream
-        const tracks = src.getTracks()
+        const tracks = src.getTracks() 
         for (const track of tracks) {
             track.stop()
         }
@@ -194,12 +206,15 @@ class LoadUi {
             return
         }
 
-        this.imageLoaded.publish({ width: this.camera.videoWidth, height: this.camera.videoHeight, source: this.camera })
+        this.ctx.canvas.width = this.camera.videoWidth
+        this.ctx.canvas.height = this.camera.videoHeight
+        this.ctx.drawImage(this.camera, 0, 0)
+        this.imageAcquired.publish(this.canvas)
         this.stopCamera()
     }
 
     private showLibrary() {
-        this.loadUiDiv.hidden = true
+        this.imageAcquisitionDiv.hidden = true
         this.libraryUi.show()
     }
 
@@ -212,7 +227,10 @@ class LoadUi {
     private async loadFromUrl(url: string) {
         this.clearErrorMessages()
         const img = await dom.loadImage(url)
-        this.imageLoaded.publish({ width: img.width, height: img.height, source: img })
+        this.canvas.width = img.width
+        this.canvas.height = img.height
+        this.ctx.drawImage(img, 0, 0)
+        this.imageAcquired.publish(this.canvas)
     }
 
     private clearErrorMessages() {
@@ -220,11 +238,99 @@ class LoadUi {
     }
 }
 
+class ImageSizeUi {
+    private readonly imageSizeDiv = dom.byId("imageSizeUi") as HTMLDivElement
+    private readonly maxDimInput = dom.byId("maxDim") as HTMLInputElement
+    private readonly maxColorsInput = dom.byId("maxColors") as HTMLInputElement
+    private readonly createColorByNumberButton = dom.byId("createColorByNumber") as HTMLButtonElement
+    private readonly returnButton = dom.byId("imageSizeReturn") as HTMLButtonElement
+    private readonly imageScaleCanvas = document.createElement("canvas")
+    private readonly imageScaleCtx = this.imageScaleCanvas.getContext("2d")!
+    private readonly imageSizeCanvas = dom.byId("imageSizeCanvas") as HTMLCanvasElement
+    private readonly imageSizeCtx = this.imageSizeCanvas.getContext("2d")!
+    private imageCanvas = document.createElement("canvas")
+    public readonly createCBN = new Channel<[HTMLCanvasElement]>()
+    public readonly return = new Channel<[]>()
+
+    constructor() {
+        this.createColorByNumberButton.addEventListener("click", () => this.onCreateColorByNumber())
+        this.returnButton.addEventListener("click", () => this.onReturnClick())
+    }
+
+    public show(imageCanvas: HTMLCanvasElement) {
+        this.imageSizeDiv.hidden = false
+        this.imageCanvas = imageCanvas
+        this.maxDimInput.addEventListener("change", () => this.onMaxDimChange())
+        this.maxColorsInput.addEventListener("change", () => this.onMaxColorsChange())
+        this.redraw()
+    }
+
+    public hide() {
+        this.imageSizeDiv.hidden = true
+    }
+
+    private onCreateColorByNumber() {
+        this.createCBN.publish(this.imageScaleCanvas)
+    }
+
+    private onReturnClick() {
+        this.return.publish()
+    }
+
+    private onMaxDimChange() {
+        this.redraw()
+    }
+
+    private onMaxColorsChange() {
+        this.redraw()
+    }
+
+    private redraw() {
+        this.imageSizeCanvas.width = this.imageSizeCanvas.clientWidth
+        this.imageSizeCanvas.height = this.imageSizeCanvas.clientHeight
+
+        const maxDim = this.getMaxDim()
+        const maxColors = this.getMaxColors()
+        const [w, h] = fit(this.imageCanvas.width, this.imageCanvas.height, maxDim)
+
+        this.imageScaleCanvas.width = w
+        this.imageScaleCanvas.height = h
+        this.imageScaleCtx.drawImage(this.imageCanvas, 0, 0, w, h)
+        quantMedianCut(this.imageScaleCtx, maxColors)
+        const minScale = Math.min(this.imageSizeCanvas.clientWidth / w, this.imageSizeCanvas.clientHeight / h)
+        const sw = w * minScale
+        const sh = h * minScale
+        const x = (this.imageSizeCanvas.width - sw) / 2
+        const y = (this.imageSizeCanvas.height - sh) / 2
+        this.imageSizeCtx.drawImage(this.imageScaleCanvas, x, y, sw, sh)
+    }
+
+    private getMaxDim(): number {
+        let maxDim = parseInt(this.maxDimInput.value)
+        if (!maxDim) {
+            maxDim = defaultMaxDim
+            this.maxDimInput.value = maxDim.toString()
+        }
+
+        return maxDim
+    }
+
+    private getMaxColors(): number {
+        let maxColors = parseInt(this.maxColorsInput.value)
+        if (!maxColors) {
+            maxColors = defaultMaxColors
+            this.maxColorsInput.value = maxColors.toString()
+        }
+
+        return maxColors
+    }
+}
+
 class LibraryUi {
     private readonly libraryDiv = dom.byId("libraryUi")
     private readonly returnButton = dom.byId("returnFromLibraryButton")
-    public readonly imageChosen = new Channel<string>()
-    public readonly cancel = new Channel<void>();
+    public readonly imageChosen = new Channel<[string]>()
+    public readonly cancel = new Channel<[]>();
 
     constructor() {
         this.returnButton.addEventListener("click", () => this.onReturnClick())
@@ -247,16 +353,16 @@ class PlayUi {
     private readonly paletteEntryTemplate = dom.byId("paletteEntry") as HTMLTemplateElement
     private readonly playUiDiv = dom.byId("playUi") as HTMLDivElement
     private readonly returnButton = dom.byId("returnButton") as HTMLButtonElement
-    private readonly imageCanvas = new OffscreenCanvas(0, 0)
+    private readonly imageCanvas = document.createElement("canvas")
     private readonly imageCtx = this.imageCanvas.getContext("2d")!
-    private readonly cellCanvas = new OffscreenCanvas(0, 0)
+    private readonly cellCanvas = document.createElement("canvas")
     private readonly cellCtx = this.cellCanvas.getContext("2d")!
-    private readonly paletteCanvas = new OffscreenCanvas(0, 0)
+    private readonly paletteCanvas = document.createElement("canvas")
     private readonly paletteCtx = this.paletteCanvas.getContext("2d")!
-    private readonly colorCanvas = new OffscreenCanvas(0, 0)
+    private readonly colorCanvas = document.createElement("canvas")
     private readonly colorCtx = this.colorCanvas.getContext("2d")!
     private complete = false
-    public readonly return = new Channel<void>()
+    public readonly return = new Channel<[void]>()
     private imageWidth = 0
     private imageHeight = 0
     private centerX = 0
@@ -288,10 +394,6 @@ class PlayUi {
             throw new Error("Canvas element not supported")
         }
 
-        if (!this.cellCtx) {
-            throw new Error("OffscreenCanvas not supported")
-        }
-
         this.canvas.addEventListener("pointerdown", e => this.onPointerDown(e))
         this.canvas.addEventListener("pointermove", e => this.onPointerMove(e))
         this.canvas.addEventListener("pointerup", e => this.onPointerUp(e))
@@ -301,35 +403,28 @@ class PlayUi {
         this.returnButton.addEventListener("click", () => this.onReturn())
     }
 
-    public show(img: CBNImageSource, maxDim: number) {
+    public create(img: HTMLCanvasElement, sequence: number[]) {
         this.playUiDiv.hidden = false
+        this.canvas.width = this.canvas.clientWidth
+        this.canvas.height = this.canvas.clientHeight
+
         this.complete = false
         this.zoom = 1
         this.drag = false
         this.touchZoom = 0
-        this.canvas.width = this.canvas.clientWidth
-        this.canvas.height = this.canvas.clientHeight
-    
-        // fit image
-        {
-            const [w, h] = fit(img.width, img.height, maxDim)
-            this.imageWidth = w
-            this.imageHeight = h
-        }
+        this.imageWidth = img.width
+        this.imageHeight = img.height
 
-        // // debug
-        // this.canvas.width = this.imageWidth
-        // this.canvas.height = this.imageHeight
-        // this.ctx.drawImage(img.source, 0, 0, this.canvas.width, this.canvas.height)
-        // quantMedianCut(this.ctx, 64)
-
-        // return
-
-        // initialize all drawing layers
+        // capture image
         this.imageCanvas.width = this.imageWidth
         this.imageCanvas.height = this.imageHeight
-        this.imageCtx.drawImage(img.source, 0, 0, this.imageCanvas.width, this.imageCanvas.height)
-        quantMedianCut(this.imageCtx, 64)
+        this.imageCtx.drawImage(img, 0, 0, this.imageCanvas.width, this.imageCanvas.height)
+
+        // debug - show passed image
+        // this.canvas.width = this.imageWidth
+        // this.canvas.height = this.imageHeight
+        // this.ctx.drawImage(this.imageCanvas, 0, 0, this.canvas.width, this.canvas.height)
+        // return
 
         const imgData = this.imageCtx.getImageData(0, 0, this.imageWidth, this.imageHeight)
         this.palette = extractPalette(imgData)
@@ -350,7 +445,15 @@ class PlayUi {
             this.selectPaletteEntry(0)
         }
 
-        this.sequence = []
+        this.sequence = sequence
+        for (const xy of sequence) {
+            const paletteIdx = this.paletteOverlay[xy]
+            const [x, y] = unflat(xy, this.imageWidth)
+            this.selectPaletteEntry(paletteIdx)
+            this.tryFillCell(x, y)
+        }
+
+        this.saveState()
 
         // debug - fill all pixels but first unfilled
         // {
@@ -385,6 +488,21 @@ class PlayUi {
 
         // rand.shuffle(this.sequence)
         // this.execDoneSequence()
+    }
+
+    public async restore(state: CBNState) {
+        const image = await dom.loadImage(state.image)
+        const canvas = document.createElement("canvas")
+        canvas.width = image.width
+        canvas.height = image.height
+
+        const ctx = canvas.getContext("2d")!
+        ctx.drawImage(image, 0, 0)
+        this.create(canvas, state.sequence)
+    }
+
+    public show() {
+        this.playUiDiv.hidden = false
     }
 
     public hide() {
@@ -465,6 +583,11 @@ class PlayUi {
         this.drag = false
         this.colorDrag = false
         this.touchZoom = this.zoom
+        this.saveState()
+    }
+
+    private saveState() {
+        saveCBNState({ image: this.imageCanvas.toDataURL(), sequence: this.sequence })
     }
 
     private onPointerMove(e: PointerEvent) {
@@ -720,24 +843,57 @@ class PlayUi {
 }
 
 class CBN {
-    private readonly loadUi = new LoadUi()
+    private readonly acquireUi = new ImageAcquisitionUi()
+    private readonly sizeUi = new ImageSizeUi()
     private readonly playUi = new PlayUi()
+    private cbnCreated = false
 
     constructor() {
-        this.loadUi.show()
-        this.loadUi.imageLoaded.subcribe(x => this.onImageLoaded(x))
-        this.playUi.return.subcribe(() => this.onReturn())
+        this.acquireUi.imageAcquired.subcribe(img => this.onImageAcquired(img))
+        this.acquireUi.returnToColorByNumber.subcribe(() => this.onReturnToCBN())
+        this.sizeUi.createCBN.subcribe((img: HTMLCanvasElement) => this.onCreateCBN(img))
+        this.sizeUi.return.subcribe(() => this.onReturnToAcquire())
+        this.playUi.return.subcribe(() => this.onReturnToAcquire())
+
+        // try to restore state
+        const state = loadCBNState()
+        if (state.image) {
+            showLoadingIndicator()
+            this.cbnCreated = true
+            this.acquireUi.hide()
+            this.playUi.restore(state)
+            hideLoadingIndicator()
+            return
+        }
+
+        this.acquireUi.show({ showReturnToColorByNumber: false })
     }
 
-    private onImageLoaded(img: CBNImageSource) {
-        this.loadUi.hide()
-        this.playUi.show(img, this.loadUi.maxDim)
-
+    private onImageAcquired(img: HTMLCanvasElement) {
+        showLoadingIndicator()
+        this.acquireUi.hide()
+        this.sizeUi.show(img)
+        hideLoadingIndicator()
     }
 
-    private onReturn() {
+    private onCreateCBN(img: HTMLCanvasElement) {
+        showLoadingIndicator()
+        this.sizeUi.hide()
+        this.playUi.create(img, [])
+        this.cbnCreated = true
+        hideLoadingIndicator()
+    }
+
+    private onReturnToAcquire() {
         this.playUi.hide()
-        this.loadUi.show();
+        this.sizeUi.hide()
+        this.acquireUi.show({ showReturnToColorByNumber: this.cbnCreated });
+    }
+
+    private onReturnToCBN() {
+        this.acquireUi.hide()
+        this.sizeUi.hide()
+        this.playUi.show()
     }
 }
 
@@ -837,7 +993,7 @@ function calcLuminance(r: number, g: number, b: number) {
     return l
 }
 
-function drawCellImage(ctx: OffscreenCanvasRenderingContext2D, width: number, height: number, paletteOverlay: number[]) {
+function drawCellImage(ctx: CanvasRenderingContext2D, width: number, height: number, paletteOverlay: number[]) {
     const cellImageWidth = width * (cellSize + 1) + 1
     const cellImageHeight = height * (cellSize + 1) + 1
 
@@ -942,7 +1098,7 @@ function color2RGBAStyle(r: number, g: number, b: number, a: number = 255) {
     return `rgba(${r}, ${g}, ${b}, ${a / 255})`
 }
 
-function quantMedianCut(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, maxColors: number) {
+function quantMedianCut(ctx: CanvasRenderingContext2D, maxColors: number) {
     interface Pixel {
         offset: number
         r: number
@@ -966,6 +1122,9 @@ function quantMedianCut(ctx: CanvasRenderingContext2D | OffscreenCanvasRendering
         }
 
         buckets.push(splitBucket(bucket))
+        if (buckets.length >= maxColors) {
+            break
+        }
     }
 
     // calculate the average color for each bucket
@@ -1086,7 +1245,7 @@ function quantMedianCut(ctx: CanvasRenderingContext2D | OffscreenCanvasRendering
     }
 }
 
-function prunePallete(palette: number[], pixelOverlay: Set<number>[], maxPixels: number, width: number, height: number, ctx: OffscreenCanvasRenderingContext2D): number[] {
+function prunePallete(palette: number[], pixelOverlay: Set<number>[], maxPixels: number, width: number, height: number, ctx: CanvasRenderingContext2D): number[] {
     const indicesToKeep = new Set<number>(array.sequence(0, palette.length))
 
     ctx.canvas.width = width * (cellSize + 1) + 1
@@ -1120,6 +1279,37 @@ function prunePallete(palette: number[], pixelOverlay: Set<number>[], maxPixels:
 
 function isBorderPixel(x: number, y: number, width: number, height: number): boolean {
     return x === 0 || y === 0 || x === width - 1 || y === height - 1
+}
+
+function clearCBNState() {
+    window.localStorage.clear()
+}
+
+function saveCBNState(state: CBNState) {
+    window.localStorage.setItem("state", JSON.stringify(state))
+}
+
+function loadCBNState(): CBNState {
+    const data = window.localStorage.getItem("state")
+    if (!data) {
+        return {
+            image: "",
+            sequence: []
+        }
+    }
+
+    const state = JSON.parse(data)
+    return state
+}
+
+function showLoadingIndicator() {
+    const div = dom.byId("loadingModal")
+    div.hidden = false
+}
+
+function hideLoadingIndicator() {
+    const div = dom.byId("loadingModal")
+    div.hidden = true
 }
 
 new CBN()
