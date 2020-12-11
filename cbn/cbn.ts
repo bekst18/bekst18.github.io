@@ -67,7 +67,7 @@ class ImageAcquisitionUi {
     private readonly useCameraButton = dom.byId("useCameraButton") as HTMLButtonElement
     private readonly flipCameraButton = dom.byId("flipCameraButton") as HTMLButtonElement
     private readonly stopCameraButton = dom.byId("stopCameraButton") as HTMLButtonElement
-    // private readonly libraryButton = dom.byId("libraryButton") as HTMLButtonElement
+    private readonly libraryButton = dom.byId("libraryButton") as HTMLButtonElement
     private readonly returnToColorByNumberButton = dom.byId("returnToColorByNumber") as HTMLButtonElement
     private readonly errorsDiv = dom.byId("errors");
     public readonly imageAcquired = new Channel<[HTMLCanvasElement]>()
@@ -90,7 +90,7 @@ class ImageAcquisitionUi {
         this.stopCameraButton.addEventListener("click", () => this.stopCamera())
         this.captureImageButton.addEventListener("click", () => this.captureImage())
         this.camera.addEventListener("loadedmetadata", () => this.onCameraLoad())
-        // this.libraryButton.addEventListener("click", () => this.showLibrary())
+        this.libraryButton.addEventListener("click", () => this.showLibrary())
         this.returnToColorByNumberButton.addEventListener("click", () => this.returnToColorByNumber.publish())
 
         this.libraryUi.cancel.subcribe(() => {

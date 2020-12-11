@@ -1,10 +1,12 @@
-#imageAcquisitionUi {
-    max-width: 512px;
-    padding: 1em;
-}
+@import "../shared/shared.css";
 
 html, body {
     height: 100%;
+}
+
+#imageAcquisitionUi {
+    max-width: 512px;
+    padding: 1em;
 }
 
 #fileDropBox {

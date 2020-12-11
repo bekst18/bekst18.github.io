@@ -3,7 +3,6 @@
 <head>
     <meta name="viewport" content="width=device-width">
     <title>Color-By-Number Maker</title>
-    <link rel="stylesheet" type="text/css" href="/shared/shared.css">
     <link rel="stylesheet" type="text/css" href="cbn.css">
 </head>
 <body>
@@ -21,15 +20,15 @@
             <button id="useCameraButton" class="button-primary my-2">Use Camera</button>
         </div>
         <div id="acquireImage" hidden>
-            <video id="camera"></video>
+            <video id="camera"></video> 
             <div class="button-group">
                 <button id="captureImageButton" class="button-primary my-2">Capture</button>
                 <button id="flipCameraButton" class="button-primary my-2">Flip</button>
                 <button id="stopCameraButton" class="button-primary my-2">Close</button>
             </div>
         </div>
-        <!--<p class="text-info">OR choose an image from the library.</p>-->
-        <!--<button id="libraryButton" class="button-primary my-2">Choose From Library</button>-->
+        <p class="text-info">OR choose an image that you've already worked on.</p>
+        <button id="libraryButton" class="button-primary my-2">My Works</button>
         <button id="returnToColorByNumber" class="button-primary my-2">Return to Color by Number</button>
         <div id="errors">
         </div>
@@ -75,9 +74,9 @@
     <div id="loadingModal" class="modal-background" hidden>
         <img id="loadingImage" src="loading.gif" alt="loading indicator">
     </div>
-    <script type="module" src="cbn.js"></script>
     <template id="paletteEntry">
         <div class="palette-entry"></div>
     </template>
+    <script type="module" src="cbn.js"></script>
 </body>
 </html>

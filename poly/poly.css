@@ -1,0 +1,28 @@
+html, body {
+    height: 100%;
+}
+
+#canvas {
+    width: 100%;
+    box-sizing: border-box;
+    border: 2px dashed gray;
+    flex: 1;
+}
+
+#ui {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-flow: column nowrap;
+    box-sizing: border-box;
+}
+
+#controls {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: center;
+}
+
+.coord {
+    white-space: nowrap;
+}

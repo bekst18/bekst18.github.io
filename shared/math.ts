@@ -40,3 +40,12 @@ export function unlerp(a: number, b: number, x: number) {
 export function nextPow2(x: number): number {
     return Math.pow(2, Math.ceil(Math.log2(x)))
 }
+
+/**
+ * return python style modulo of x and y (negative mod results in positive number)
+ * @param x number
+ * @param y number
+ */
+export function mod(x: number, y: number): number {
+    return ((x % y) + y) % y;
+}
