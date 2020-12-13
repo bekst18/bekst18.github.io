@@ -882,8 +882,12 @@ class GalleryUi {
     }
 
     private onEntryClick(evt: Event) {
-        const img = evt.target as HTMLImageElement
-        const key = parseInt(img.dataset["key"] || "")
+        const div = (evt.target as HTMLElement).closest(".gallery-entry") as HTMLDivElement
+        if (!div) {
+            return
+        }
+        
+        const key = parseInt(div.dataset["key"] || "")
         if (!key) {
             return
         }
