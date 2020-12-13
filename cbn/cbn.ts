@@ -869,8 +869,9 @@ class GalleryUi {
         const kvs = await getAllCBNs(this.db)
         for (const [key, cbn] of kvs) {
             const fragment = this.template.content.cloneNode(true) as DocumentFragment
-            const entryDiv = dom.bySelector(fragment, ".gallery-entry") as HTMLImageElement
-            entryDiv.src = URL.createObjectURL(cbn.image)
+            const entryDiv = dom.bySelector(fragment, ".gallery-entry") as HTMLDivElement
+            const imageDiv = dom.bySelector(entryDiv, ".gallery-image") as HTMLImageElement
+            imageDiv.src = URL.createObjectURL(cbn.image)
             entryDiv.dataset["key"] = key.toString()
             this.cbnsDiv.appendChild(fragment)
         }

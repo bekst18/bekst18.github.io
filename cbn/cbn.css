@@ -112,6 +112,10 @@ html, body {
     margin: 1em;
 }
 
+#cbns {
+    display: flex;
+}
+
 .gallery-entry:hover {
     cursor: pointer;
 }
