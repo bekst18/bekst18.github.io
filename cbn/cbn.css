@@ -1,5 +1,4 @@
 @import "../shared/shared.css";
-
 html, body {
     height: 100%;
 }
@@ -61,7 +60,7 @@ html, body {
     flex-flow: column nowrap;
     box-sizing: border-box;
     overflow: hidden;
-} 
+}
 
 #canvas {
     flex: 1;
@@ -85,7 +84,7 @@ html, body {
 }
 
 .palette-entry.selected {
-    border:  black solid .25em;
+    border: black solid .25em;
     font-weight: bold;
 }
 
@@ -107,4 +106,12 @@ html, body {
     left: 50%;
     transform: translate(-50%, -50%);
     margin: auto;
+}
+
+#galleryUi {
+    margin: 1em;
+}
+
+.gallery-entry:hover {
+    cursor: pointer;
 }

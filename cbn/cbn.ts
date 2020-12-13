@@ -4,6 +4,9 @@ import * as geo from "../shared/geo3d.js"
 import * as math from "../shared/math.js"
 import * as util from "../shared/util.js"
 import * as iter from "../shared/iter.js"
+import * as idb from "../shared/idb.js"
+import * as imaging from "../shared/imaging.js"
+import * as color from "../shared/color.js"
 
 // size that each image pixel is blown up to
 const cellSize = 32
@@ -20,16 +23,24 @@ const defaultMaxDim = 128
 // default max colors
 const defaultMaxColors = 64
 
+// object store name
+const picturesObjectStoreName = "pictures"
+
+const imageMimeType = "image/png"
+
 enum CameraMode {
     None,
     User,
     Environment,
 }
 
-type Color = [number, number, number, number]
+interface CBNPicture {
+    image: Blob
+    sequence: number[]
+}
 
-interface CBNState {
-    image: string
+interface CBNPictureDB {
+    image: ArrayBuffer
     sequence: number[]
 }
 
@@ -51,11 +62,7 @@ class Channel<T extends any[]> {
     }
 }
 
-interface ImageAcquisitionUiShowOptions {
-    showReturnToColorByNumber: boolean
-}
-
-class ImageAcquisitionUi {
+class AcquireUi {
     private readonly camera = dom.byId("camera") as HTMLVideoElement
     private cameraMode = CameraMode.None
     private readonly acquireImageDiv = dom.byId("acquireImage") as HTMLDivElement
@@ -67,14 +74,13 @@ class ImageAcquisitionUi {
     private readonly useCameraButton = dom.byId("useCameraButton") as HTMLButtonElement
     private readonly flipCameraButton = dom.byId("flipCameraButton") as HTMLButtonElement
     private readonly stopCameraButton = dom.byId("stopCameraButton") as HTMLButtonElement
-    private readonly libraryButton = dom.byId("libraryButton") as HTMLButtonElement
-    private readonly returnToColorByNumberButton = dom.byId("returnToColorByNumber") as HTMLButtonElement
-    private readonly errorsDiv = dom.byId("errors");
+    private readonly galleryButton = dom.byId("galleryButton") as HTMLButtonElement
+    private readonly errorsDiv = dom.byId("errors")
     public readonly imageAcquired = new Channel<[HTMLCanvasElement]>()
-    public readonly returnToColorByNumber = new Channel<[]>()
     private readonly libraryUi = new LibraryUi()
     private readonly canvas = document.createElement("canvas")
     private readonly ctx = this.canvas.getContext("2d")!
+    public readonly showGallery = new Channel<[void]>()
 
     constructor() {
         this.fileButton.addEventListener("click", () => {
@@ -90,17 +96,15 @@ class ImageAcquisitionUi {
         this.stopCameraButton.addEventListener("click", () => this.stopCamera())
         this.captureImageButton.addEventListener("click", () => this.captureImage())
         this.camera.addEventListener("loadedmetadata", () => this.onCameraLoad())
-        this.libraryButton.addEventListener("click", () => this.showLibrary())
-        this.returnToColorByNumberButton.addEventListener("click", () => this.returnToColorByNumber.publish())
+        this.galleryButton.addEventListener("click", _ => this.showGallery.publish())
 
         this.libraryUi.cancel.subcribe(() => {
             this.imageAcquisitionDiv.hidden = false
         })
     }
 
-    public show(options: ImageAcquisitionUiShowOptions) {
+    public show() {
         this.imageAcquisitionDiv.hidden = false
-        this.returnToColorByNumberButton.hidden = !options.showReturnToColorByNumber
         this.canvas.width = this.canvas.clientWidth
         this.canvas.height = this.canvas.clientHeight
         // this.loadFromUrl("/cbn/assets/larryKoopa.jpg")
@@ -213,11 +217,6 @@ class ImageAcquisitionUi {
         this.stopCamera()
     }
 
-    private showLibrary() {
-        this.imageAcquisitionDiv.hidden = true
-        this.libraryUi.show()
-    }
-
     private processFile(file: File) {
         this.clearErrorMessages()
         const url = URL.createObjectURL(file)
@@ -239,6 +238,7 @@ class ImageAcquisitionUi {
 }
 
 class ImageSizeUi {
+    private readonly db: IDBDatabase
     private readonly imageSizeDiv = dom.byId("imageSizeUi") as HTMLDivElement
     private readonly maxDimInput = dom.byId("maxDim") as HTMLInputElement
     private readonly maxColorsInput = dom.byId("maxColors") as HTMLInputElement
@@ -249,10 +249,11 @@ class ImageSizeUi {
     private readonly imageSizeCanvas = dom.byId("imageSizeCanvas") as HTMLCanvasElement
     private readonly imageSizeCtx = this.imageSizeCanvas.getContext("2d")!
     private imageCanvas = document.createElement("canvas")
-    public readonly createCBN = new Channel<[HTMLCanvasElement]>()
+    public readonly createCBN = new Channel<[number]>()
     public readonly return = new Channel<[]>()
 
-    constructor() {
+    constructor(db: IDBDatabase) {
+        this.db = db
         this.createColorByNumberButton.addEventListener("click", () => this.onCreateColorByNumber())
         this.returnButton.addEventListener("click", () => this.onReturnClick())
     }
@@ -269,8 +270,15 @@ class ImageSizeUi {
         this.imageSizeDiv.hidden = true
     }
 
-    private onCreateColorByNumber() {
-        this.createCBN.publish(this.imageScaleCanvas)
+    private async onCreateColorByNumber() {
+        const blob = await imaging.canvas2Blob(this.imageScaleCanvas, imageMimeType)
+        const cbn: CBNPicture = {
+            image: blob,
+            sequence: []
+        }
+
+        const key = await putCBN(this.db, cbn)
+        this.createCBN.publish(key)
     }
 
     private onReturnClick() {
@@ -300,7 +308,7 @@ class ImageSizeUi {
         this.imageScaleCanvas.width = w
         this.imageScaleCanvas.height = h
         this.imageScaleCtx.drawImage(this.imageCanvas, 0, 0, w, h)
-        quantMedianCut(this.imageScaleCtx, maxColors)
+        imaging.quantMedianCut(this.imageScaleCtx, maxColors, colorRangeTolerance)
         const minScale = Math.min(this.imageSizeCanvas.clientWidth / w, this.imageSizeCanvas.clientHeight / h)
         const sw = w * minScale
         const sh = h * minScale
@@ -334,7 +342,7 @@ class LibraryUi {
     private readonly libraryDiv = dom.byId("libraryUi")
     private readonly returnButton = dom.byId("returnFromLibraryButton")
     public readonly imageChosen = new Channel<[string]>()
-    public readonly cancel = new Channel<[]>();
+    public readonly cancel = new Channel<[]>()
 
     constructor() {
         this.returnButton.addEventListener("click", () => this.onReturnClick())
@@ -351,6 +359,7 @@ class LibraryUi {
 }
 
 class PlayUi {
+    private readonly db: IDBDatabase
     private readonly canvas = dom.byId("canvas") as HTMLCanvasElement
     private readonly ctx = this.canvas.getContext("2d")!
     private readonly paletteDiv = dom.byId("palette") as HTMLDivElement
@@ -365,6 +374,7 @@ class PlayUi {
     private readonly paletteCtx = this.paletteCanvas.getContext("2d")!
     private readonly colorCanvas = document.createElement("canvas")
     private readonly colorCtx = this.colorCanvas.getContext("2d")!
+    private key: number = 0
     private complete = false
     public readonly return = new Channel<[void]>()
     private imageWidth = 0
@@ -393,7 +403,9 @@ class PlayUi {
     private selectedPaletteIndex: number = -1
     private sequence: number[] = []
 
-    constructor() {
+    constructor(db: IDBDatabase) {
+        this.db = db
+
         if (!this.ctx) {
             throw new Error("Canvas element not supported")
         }
@@ -407,15 +419,18 @@ class PlayUi {
         this.returnButton.addEventListener("click", () => this.onReturn())
     }
 
-    public create(img: HTMLCanvasElement, sequence: number[]) {
+    public async show(key: number) {
+        this.key = key
         this.playUiDiv.hidden = false
         this.canvas.width = this.canvas.clientWidth
         this.canvas.height = this.canvas.clientHeight
-
         this.complete = false
         this.zoom = 1
         this.drag = false
         this.touchZoom = 0
+
+        const pic = await getCBN(this.db, key)
+        const img = await dom.loadImage(URL.createObjectURL(pic.image))
         this.imageWidth = img.width
         this.imageHeight = img.height
 
@@ -449,15 +464,13 @@ class PlayUi {
             this.selectPaletteEntry(0)
         }
 
-        this.sequence = sequence
-        for (const xy of sequence) {
+        this.sequence = pic.sequence
+        for (const xy of this.sequence) {
             const paletteIdx = this.paletteOverlay[xy]
-            const [x, y] = unflat(xy, this.imageWidth)
+            const [x, y] = imaging.unflat(xy, this.imageWidth)
             this.selectPaletteEntry(paletteIdx)
             this.tryFillCell(x, y)
         }
-
-        this.saveState()
 
         // debug - fill all pixels but first unfilled
         // {
@@ -494,21 +507,6 @@ class PlayUi {
         // this.execDoneSequence()
     }
 
-    public async restore(state: CBNState) {
-        const image = await dom.loadImage(state.image)
-        const canvas = document.createElement("canvas")
-        canvas.width = image.width
-        canvas.height = image.height
-
-        const ctx = canvas.getContext("2d")!
-        ctx.drawImage(image, 0, 0)
-        this.create(canvas, state.sequence)
-    }
-
-    public show() {
-        this.playUiDiv.hidden = false
-    }
-
     public hide() {
         this.playUiDiv.hidden = true
     }
@@ -526,7 +524,7 @@ class PlayUi {
     private createPaletteUi() {
         dom.removeAllChildren(this.paletteDiv)
         for (let i = 0; i < this.palette.length; ++i) {
-            const [r, g, b] = unpackColor(this.palette[i])
+            const [r, g, b] = color.unpack(this.palette[i])
             const lum = calcLuminance(r, g, b)
             const fragment = this.paletteEntryTemplate.content.cloneNode(true) as DocumentFragment
             const entryDiv = dom.bySelector(fragment, ".palette-entry") as HTMLElement
@@ -590,8 +588,9 @@ class PlayUi {
         this.saveState()
     }
 
-    private saveState() {
-        saveCBNState({ image: this.imageCanvas.toDataURL(), sequence: this.sequence })
+    private async saveState() {
+        const blob = await imaging.canvas2Blob(this.imageCanvas, imageMimeType)
+        await putCBN(this.db, { image: blob, sequence: this.sequence }, this.key)
     }
 
     private onPointerMove(e: PointerEvent) {
@@ -628,7 +627,7 @@ class PlayUi {
 
         // check for drag over palette color
         const [x, y] = this.canvas2Cell(e.offsetX, e.offsetY)
-        if (this.colorDrag && this.paletteOverlay[flat(x, y, this.imageWidth)] === this.selectedPaletteIndex) {
+        if (this.colorDrag && this.paletteOverlay[imaging.flat(x, y, this.imageWidth)] === this.selectedPaletteIndex) {
             if (this.tryFillCell(x, y)) {
                 this.redraw()
             }
@@ -682,7 +681,7 @@ class PlayUi {
      */
     private checkCell(x: number, y: number): boolean {
         // if already filled, do nothing
-        const flatXY = flat(x, y, this.imageWidth)
+        const flatXY = imaging.flat(x, y, this.imageWidth)
         const pixels = this.pixelOverlay[this.selectedPaletteIndex]
         return pixels.has(flatXY)
     }
@@ -699,14 +698,14 @@ class PlayUi {
             return false
         }
 
-        const [r, g, b] = unpackColor(this.palette[this.selectedPaletteIndex])
+        const [r, g, b] = color.unpack(this.palette[this.selectedPaletteIndex])
         const [cx, cy] = image2Cell(x, y)
         this.colorCtx.fillStyle = color2RGBAStyle(r, g, b)
         this.colorCtx.fillRect(cx, cy, cellSize, cellSize)
 
         // remove the pixel from overlay
         const pixels = this.pixelOverlay[this.selectedPaletteIndex]
-        const flatXY = flat(x, y, this.imageWidth)
+        const flatXY = imaging.flat(x, y, this.imageWidth)
         pixels.delete(flatXY)
         this.sequence.push(flatXY)
 
@@ -759,7 +758,7 @@ class PlayUi {
         const cdxy = cellSize / 2
 
         for (const pixel of this.pixelOverlay[idx]) {
-            const [x, y] = image2Cell(...unflat(pixel, this.imageWidth))
+            const [x, y] = image2Cell(...imaging.unflat(pixel, this.imageWidth))
             ctx.fillStyle = color2RGBAStyle(191, 191, 191, 255)
             ctx.fillRect(x, y, cellSize, cellSize)
 
@@ -830,7 +829,7 @@ class PlayUi {
 
         for (let i = 0; i < this.sequence.length; ++i) {
             const xy = this.sequence[i]
-            const [x, y] = unflat(xy, this.imageWidth)
+            const [x, y] = imaging.unflat(xy, this.imageWidth)
             const offset = xy * 4
             pixelData[0] = data[offset]
             pixelData[1] = data[offset + 1]
@@ -846,60 +845,109 @@ class PlayUi {
     }
 }
 
-class CBN {
-    private readonly acquireUi = new ImageAcquisitionUi()
-    private readonly sizeUi = new ImageSizeUi()
-    private readonly playUi = new PlayUi()
-    private cbnCreated = false
+class GalleryUi {
+    private readonly db: IDBDatabase
+    private readonly ui = dom.byId("galleryUi") as HTMLDivElement
+    private readonly cbnsDiv = dom.byId("cbns") as HTMLDivElement
+    private readonly galleryAcquireImageButton = dom.byId("galleryAcquireImageButton") as HTMLButtonElement
+    private readonly template = dom.byId("galleryEntry") as HTMLTemplateElement
+    public readonly showAcquireImage = new Channel<[void]>()
+    public readonly cbnSelected = new Channel<[number]>()
 
-    constructor() {
-        this.acquireUi.imageAcquired.subcribe(img => this.onImageAcquired(img))
-        this.acquireUi.returnToColorByNumber.subcribe(() => this.onReturnToCBN())
-        this.sizeUi.createCBN.subcribe((img: HTMLCanvasElement) => this.onCreateCBN(img))
-        this.sizeUi.return.subcribe(() => this.onReturnToAcquire())
-        this.playUi.return.subcribe(() => this.onReturnToAcquire())
+    constructor(db: IDBDatabase) {
+        this.db = db
     }
 
-    public async exec() {
-        // try to restore state
-        const state = loadCBNState()
-        if (state.image) {
-            await showLoadingIndicator()
-            this.cbnCreated = true
-            this.acquireUi.hide()
-            this.playUi.restore(state)
-            hideLoadingIndicator()
+    public async show() {
+        this.ui.hidden = false
+        dom.delegate(this.ui, "click", ".gallery-entry", (evt) => this.onEntryClick(evt))
+        this.galleryAcquireImageButton.addEventListener("click", () => this.showAcquireImage.publish())
+
+        // clear current ui
+        dom.removeAllChildren(this.cbnsDiv)
+
+        const kvs = await getAllCBNs(this.db)
+        for (const [key, cbn] of kvs) {
+            const fragment = this.template.content.cloneNode(true) as DocumentFragment
+            const entryDiv = dom.bySelector(fragment, ".gallery-entry") as HTMLImageElement
+            entryDiv.src = URL.createObjectURL(cbn.image)
+            entryDiv.dataset["key"] = key.toString()
+            this.cbnsDiv.appendChild(fragment)
+        }
+    }
+
+    public hide() {
+        this.ui.hidden = true
+    }
+
+    private onEntryClick(evt: Event) {
+        const img = evt.target as HTMLImageElement
+        const key = parseInt(img.dataset["key"] || "")
+        if (!key) {
             return
         }
 
-        this.acquireUi.show({ showReturnToColorByNumber: false })
+        this.cbnSelected.publish(key)
+    }
+}
+
+async function main() {
+    const db = await openDB()
+    const acquireUi = new AcquireUi()
+    const sizeUi = new ImageSizeUi(db)
+    const playUi = new PlayUi(db)
+    const galleryUi = new GalleryUi(db)
+
+    acquireUi.imageAcquired.subcribe(onImageAcquired)
+    acquireUi.showGallery.subcribe(showGallery)
+    sizeUi.createCBN.subcribe(showPlay)
+    sizeUi.return.subcribe(showAcquire)
+    playUi.return.subcribe(showAcquire)
+    galleryUi.showAcquireImage.subcribe(showAcquire)
+    galleryUi.cbnSelected.subcribe(showPlay)
+
+    // initially show acquire ui
+    acquireUi.show()
+
+    async function openDB(): Promise<IDBDatabase> {
+        // open / setup db
+        // await indexedDB.deleteDatabase("cbn")
+        const req = indexedDB.open("cbn", 1)
+        req.addEventListener("blocked", _ => dbBlocked())
+        req.addEventListener("upgradeneeded", ev => upgradeDB(ev))
+        const db = await idb.waitRequest(req)
+        return db
     }
 
-    private async onImageAcquired(img: HTMLCanvasElement) {
+    async function onImageAcquired(img: HTMLCanvasElement) {
         await showLoadingIndicator()
-        this.acquireUi.hide()
-        this.sizeUi.show(img)
+        acquireUi.hide()
+        sizeUi.show(img)
         hideLoadingIndicator()
     }
 
-    private async onCreateCBN(img: HTMLCanvasElement) {
+    function showAcquire() {
+        hideAll()
+        acquireUi.show()
+    }
+
+    function showGallery() {
+        hideAll()
+        galleryUi.show()
+    }
+
+    async function showPlay(key: number) {
         await showLoadingIndicator()
-        this.sizeUi.hide()
-        this.playUi.create(img, [])
-        this.cbnCreated = true
+        hideAll()
+        playUi.show(key)
         hideLoadingIndicator()
     }
 
-    private onReturnToAcquire() {
-        this.playUi.hide()
-        this.sizeUi.hide()
-        this.acquireUi.show({ showReturnToColorByNumber: this.cbnCreated });
-    }
-
-    private onReturnToCBN() {
-        this.acquireUi.hide()
-        this.sizeUi.hide()
-        this.playUi.show()
+    function hideAll() {
+        playUi.hide()
+        sizeUi.hide()
+        acquireUi.hide()
+        galleryUi.hide()
     }
 }
 
@@ -918,7 +966,7 @@ function extractPalette(imgData: ImageData): number[] {
             const g = data[offset + 1]
             const b = data[offset + 2]
             const a = data[offset + 3]
-            const value = packColor(r, g, b, a)
+            const value = color.pack(r, g, b, a)
             palette.add(value)
         }
     }
@@ -946,7 +994,7 @@ function createPaletteOverlay(imgData: ImageData, palette: number[]): number[] {
             const g = data[offset + 1]
             const b = data[offset + 2]
             const a = data[offset + 3]
-            const rgba = packColor(r, g, b, a)
+            const rgba = color.pack(r, g, b, a)
             const idx = paletteMap.get(rgba) ?? -1
             overlay[y * width + x] = idx
         }
@@ -972,7 +1020,7 @@ function createPixelOverlay(width: number, height: number, palette: number[], pa
                 continue
             }
 
-            const flatCoord = flat(x, y, width)
+            const flatCoord = imaging.flat(x, y, width)
             overlay[paletteIdx].add(flatCoord)
         }
     }
@@ -980,19 +1028,6 @@ function createPixelOverlay(width: number, height: number, palette: number[], pa
     return overlay
 }
 
-function packColor(r: number, g: number, b: number, a: number): number {
-    const value = r << 24 | g << 16 | b << 8 | a
-    return value
-}
-
-function unpackColor(x: number): Color {
-    const r = (x & 0xFF000000) >>> 24
-    const g = (x & 0x00FF0000) >>> 16
-    const b = (x & 0x0000FF00) >>> 8
-    const a = x & 0x000000FF
-
-    return [r, g, b, a]
-}
 
 function calcLuminance(r: number, g: number, b: number) {
     const l = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255)
@@ -1053,14 +1088,6 @@ function fit(width: number, height: number, maxSize: number): [number, number] {
     return [Math.floor(width), Math.floor(height)]
 }
 
-function flat(x: number, y: number, rowPitch: number) {
-    return y * rowPitch + x
-}
-
-function unflat(i: number, rowPitch: number): [number, number] {
-    return [i % rowPitch, Math.floor(i / rowPitch)]
-}
-
 /**
    * Convert an image x or y coordinate to top or left of cbn cell containing that pixel
    * @param coord x or y coordinate
@@ -1104,153 +1131,6 @@ function color2RGBAStyle(r: number, g: number, b: number, a: number = 255) {
     return `rgba(${r}, ${g}, ${b}, ${a / 255})`
 }
 
-function quantMedianCut(ctx: CanvasRenderingContext2D, maxColors: number) {
-    interface Pixel {
-        offset: number
-        r: number
-        g: number
-        b: number
-    }
-
-    // maxColors must be a power of 2 for this algorithm
-    maxColors = math.nextPow2(maxColors)
-    const imgData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
-    const { width, height, data } = imgData
-    const rowPitch = width * 4
-
-    const buckets = new Array<Pixel[]>()
-    buckets.push(createInitialBucket())
-
-    while (true) {
-        const bucket = chooseBucket(colorRangeTolerance, buckets)
-        if (!bucket) {
-            break
-        }
-
-        buckets.push(splitBucket(bucket))
-        if (buckets.length >= maxColors) {
-            break
-        }
-    }
-
-    // calculate the average color for each bucket
-    const colors = new Array<[number, number, number]>()
-    for (const bucket of buckets) {
-        let r = 0
-        let g = 0
-        let b = 0
-
-        for (const pixel of bucket) {
-            r += pixel.r
-            g += pixel.g
-            b += pixel.b
-        }
-
-        r /= bucket.length
-        g /= bucket.length
-        b /= bucket.length
-
-        colors.push([Math.round(r), Math.round(g), Math.round(b)])
-    }
-
-    // iterate through each bucket, replacing pixel color with bucket color for each pixel
-    for (let i = 0; i < buckets.length; ++i) {
-        const bucket = buckets[i]
-        const [r, g, b] = colors[i]
-
-        for (const pixel of bucket) {
-            const offset = pixel.offset * 4
-            data[offset] = r
-            data[offset + 1] = g
-            data[offset + 2] = b
-        }
-    }
-
-    ctx.putImageData(imgData, 0, 0)
-
-    function createInitialBucket(): Pixel[] {
-        // create initial bucket
-        const bucket = new Array<Pixel>()
-        for (let y = 0; y < height; ++y) {
-            const yOffset = y * rowPitch
-            for (let x = 0; x < width; ++x) {
-                const offset = yOffset + x * 4
-                const r = data[offset]
-                const g = data[offset + 1]
-                const b = data[offset + 2]
-
-                // pack into bucket
-                const pixel: Pixel = {
-                    offset: flat(x, y, width),
-                    r: r,
-                    g: g,
-                    b: b
-                }
-
-                bucket.push(pixel)
-            }
-        }
-
-        return bucket
-    }
-
-    function calcRange(pixels: Pixel[], selector: (x: Pixel) => number): number {
-        let min = Infinity
-        let max = -Infinity
-
-        for (const pixel of pixels) {
-            min = Math.min(selector(pixel), min)
-            max = Math.max(selector(pixel), max)
-        }
-
-        return max - min
-    }
-
-    function chooseBucket(tolerance: number, buckets: Pixel[][]): Pixel[] | null {
-        let maxRange = -Infinity
-        let maxBucket: Pixel[] | null = null
-
-        for (const bucket of buckets) {
-            const rangeR = calcRange(bucket, p => p.r)
-            const rangeG = calcRange(bucket, p => p.g)
-            const rangeB = calcRange(bucket, p => p.b)
-            let range = 0
-            if (rangeR > rangeG && rangeR > rangeB) {
-                range = rangeR
-            } else if (rangeG > rangeR) {
-                range = rangeG
-            } else {
-                range = rangeB
-            }
-
-            if (range > maxRange) {
-                maxRange = range
-                maxBucket = bucket
-            }
-        }
-
-        return maxRange > tolerance ? maxBucket : null
-    }
-
-    function splitBucket(bucket: Pixel[]): Pixel[] {
-        const rangeR = calcRange(bucket, p => p.r)
-        const rangeG = calcRange(bucket, p => p.g)
-        const rangeB = calcRange(bucket, p => p.b)
-
-        if (rangeR > rangeG && rangeR > rangeB) {
-            bucket.sort((a, b) => a.r - b.r)
-        } else if (rangeG > rangeR) {
-            bucket.sort((a, b) => a.g - b.g)
-        } else {
-            bucket.sort((a, b) => a.b - b.b)
-        }
-
-        const middle = Math.floor(bucket.length / 2)
-        const newBucket = bucket.splice(middle)
-        return newBucket
-    }
-}
-
 function prunePallete(palette: number[], pixelOverlay: Set<number>[], maxPixels: number, width: number, height: number, ctx: CanvasRenderingContext2D): number[] {
     const indicesToKeep = new Set<number>(array.sequence(0, palette.length))
 
@@ -1263,14 +1143,14 @@ function prunePallete(palette: number[], pixelOverlay: Set<number>[], maxPixels:
             continue
         }
 
-        if (iter.all(pixels, x => !isBorderPixel(...unflat(x, width), width, height))) {
+        if (iter.all(pixels, x => !isBorderPixel(...imaging.unflat(x, width), width, height))) {
             continue
         }
 
         // fill these pixels in image with appropriate color
-        const [r, g, b] = unpackColor(palette[i])
+        const [r, g, b] = color.unpack(palette[i])
         for (const xy of pixels) {
-            const [x, y] = unflat(xy, width)
+            const [x, y] = imaging.unflat(xy, width)
             const [cx, cy] = image2Cell(x, y)
             ctx.fillStyle = color2RGBAStyle(r, g, b)
             ctx.fillRect(cx, cy, cellSize, cellSize)
@@ -1287,27 +1167,6 @@ function isBorderPixel(x: number, y: number, width: number, height: number): boo
     return x === 0 || y === 0 || x === width - 1 || y === height - 1
 }
 
-function clearCBNState() {
-    window.localStorage.clear()
-}
-
-function saveCBNState(state: CBNState) {
-    window.localStorage.setItem("state", JSON.stringify(state))
-}
-
-function loadCBNState(): CBNState {
-    const data = window.localStorage.getItem("state")
-    if (!data) {
-        return {
-            image: "",
-            sequence: []
-        }
-    }
-
-    const state = JSON.parse(data)
-    return state
-}
-
 async function showLoadingIndicator() {
     const div = dom.byId("loadingModal")
     div.hidden = false
@@ -1319,4 +1178,80 @@ function hideLoadingIndicator() {
     div.hidden = true
 }
 
-new CBN().exec()
+async function upgradeDB(evt: IDBVersionChangeEvent) {
+    const db = (evt.target as IDBOpenDBRequest).result
+
+    // note - event contains old / new versions if required
+    // update to the new version    
+    if (!db.objectStoreNames.contains(picturesObjectStoreName)) {
+        db.createObjectStore(picturesObjectStoreName, { autoIncrement: true })
+    }
+}
+
+function dbBlocked() {
+    showError("Picture database needs updated, but other tabs are open that are using it. Please close all tabs for this web site and try again.")
+}
+
+function showError(message: string) {
+    const modalDiv = dom.byId("errorModal") as HTMLDivElement
+    const messageDiv = dom.byId("errorMessage") as HTMLDivElement
+    modalDiv.hidden = false
+    messageDiv.textContent = message
+}
+
+async function putCBN(db: IDBDatabase, data: CBNPicture, key?: number): Promise<number> {
+    // note safari can't store blobs so must convert to arrayBuffer
+    const dbData = await cbn2db(data)
+    const tx = db.transaction(picturesObjectStoreName, "readwrite")
+    const store = tx.objectStore(picturesObjectStoreName)
+    const k = await idb.waitRequest(store.put(dbData, key)) as number
+    return k
+}
+
+async function getCBN(db: IDBDatabase, key: number): Promise<CBNPicture> {
+    const tx = db.transaction(picturesObjectStoreName, "readwrite")
+    const store = tx.objectStore(picturesObjectStoreName)
+    const dbData = await idb.waitRequest(store.get(key)) as CBNPictureDB
+    const data = db2cbn(dbData)
+    await idb.waitTx(tx)
+    return data
+}
+
+async function getAllCBNs(db: IDBDatabase): Promise<[number, CBNPicture][]> {
+    const tx = db.transaction(picturesObjectStoreName, "readwrite")
+    const store = tx.objectStore(picturesObjectStoreName)
+    const datas = new Array<[number, CBNPicture]>()
+
+    const req = store.openCursor()
+    while (true) {
+        const cursor = await idb.waitRequest(req)
+        if (!cursor) {
+            break
+        }
+
+        const key = cursor.key as number
+        const dbData = cursor.value as CBNPictureDB
+        const data = db2cbn(dbData)
+        datas.push([key, data])
+        cursor.continue()
+    }
+
+    return datas
+}
+
+async function cbn2db(data: CBNPicture): Promise<CBNPictureDB> {
+    const buffer = await idb.blob2ArrayBuffer(data.image)
+    return {
+        image: buffer,
+        sequence: data.sequence
+    }
+}
+
+function db2cbn(data: CBNPictureDB): CBNPicture {
+    return {
+        image: idb.arrayBuffer2Blob(data.image, imageMimeType),
+        sequence: data.sequence
+    }
+}
+
+main()

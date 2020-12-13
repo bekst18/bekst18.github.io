@@ -1,308 +1,146 @@
-import * as array from "../shared/array.js"
-
-enum Axis { None, X, Y, Z }
-
-interface Bucket {
-    indices: number[]
-    range: number
-    splitAxis: Axis
-}
-
-export type Color = [number, number, number]
-
-export function palettizeMedianCut(imageData: ImageData, maxColors: number): [Color[], number[]] {
-    const buckets: Bucket[] = []
-    const data = imageData.data
-
-    // place all colors in initial bucket
-    const bucket = createBucket(data, array.sequence(imageData.width * imageData.height))
-    buckets.push(bucket)
-
-    while (buckets.length < maxColors) {
-        const bucket = buckets.reduce((x, y) => x.range > y.range ? x : y)
-        const newBucket = splitBucket(data, bucket)
-        buckets.push(newBucket)
+export function quantMedianCut(ctx: CanvasRenderingContext2D, maxColors: number, tolerance: number) {
+    interface Pixel {
+        offset: number
+        r: number
+        g: number
+        b: number
     }
 
-    // choose color for each bucket
-    const palette = buckets.map(b => divXYZ(b.indices.reduce((xyz, i) => addXYZ(xyz, [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]]), [0, 0, 0]), b.indices.length))
-    const paletteOverlay = array.uniform(0, imageData.width * imageData.height)
+    const imgData = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height)
+    const { width, height, data } = imgData
+    const rowPitch = width * 4
 
+    const buckets = new Array<Pixel[]>()
+    buckets.push(createInitialBucket())
+
+    while (true) {
+        const bucket = chooseBucket(tolerance, buckets)
+        if (!bucket) {
+            break
+        }
+
+        buckets.push(splitBucket(bucket))
+        if (buckets.length >= maxColors) {
+            break
+        }
+    }
+
+    // calculate the average color for each bucket
+    const colors = new Array<[number, number, number]>()
+    for (const bucket of buckets) {
+        let r = 0
+        let g = 0
+        let b = 0
+
+        for (const pixel of bucket) {
+            r += pixel.r
+            g += pixel.g
+            b += pixel.b
+        }
+
+        r /= bucket.length
+        g /= bucket.length
+        b /= bucket.length
+
+        colors.push([Math.round(r), Math.round(g), Math.round(b)])
+    }
+
+    // iterate through each bucket, replacing pixel color with bucket color for each pixel
     for (let i = 0; i < buckets.length; ++i) {
         const bucket = buckets[i]
-        for (let j = 0; j < bucket.indices.length; ++j) {
-            paletteOverlay[bucket.indices[j]] = i
+        const [r, g, b] = colors[i]
+
+        for (const pixel of bucket) {
+            const offset = pixel.offset * 4
+            data[offset] = r
+            data[offset + 1] = g
+            data[offset + 2] = b
         }
     }
 
-    return [palette, paletteOverlay]
-}
+    ctx.putImageData(imgData, 0, 0)
 
-export function palettizeHistogram(imageData: ImageData, bucketsPerComponent: number, maxColors: number): [Color[], number[]] {
-    const { width, height, data } = imageData
-    const pixels = width * height
-    const bucketPitch = bucketsPerComponent * bucketsPerComponent
-    const numBuckets = bucketPitch * bucketsPerComponent
+    function createInitialBucket(): Pixel[] {
+        // create initial bucket
+        const bucket = new Array<Pixel>()
+        for (let y = 0; y < height; ++y) {
+            const yOffset = y * rowPitch
+            for (let x = 0; x < width; ++x) {
+                const offset = yOffset + x * 4
+                const r = data[offset]
+                const g = data[offset + 1]
+                const b = data[offset + 2]
 
-    // create intial buckets
-    const buckets = array.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
+                // pack into bucket
+                const pixel: Pixel = {
+                    offset: flat(x, y, width),
+                    r: r,
+                    g: g,
+                    b: b
+                }
 
-    // assign and update bucket for each pixel
-    const bucketOverlay = array.generate(pixels, i => {
-        const r = data[i * 4] / 255
-        const g = data[i * 4 + 1] / 255
-        const b = data[i * 4 + 2] / 255
-        const rb = Math.min(Math.floor(r * bucketsPerComponent), bucketsPerComponent - 1)
-        const gb = Math.min(Math.floor(g * bucketsPerComponent), bucketsPerComponent - 1)
-        const bb = Math.min(Math.floor(b * bucketsPerComponent), bucketsPerComponent - 1)
-        const bucketIdx = rb * bucketPitch + gb * bucketsPerComponent + bb
-        const bucket = buckets[bucketIdx]
-        bucket.color = addXYZ([r, g, b], bucket.color)
-        bucket.pixels++
+                bucket.push(pixel)
+            }
+        }
+
         return bucket
-    })
-
-    // calculate bucket colors
-    for (const bucket of buckets) {
-        bucket.color = divXYZ(bucket.color, bucket.pixels)
     }
 
-    const topBuckets = buckets
-        .sort((b1, b2) => b2.pixels - b1.pixels)
-        .slice(0, maxColors)
+    function calcRange(pixels: Pixel[], selector: (x: Pixel) => number): number {
+        let min = Infinity
+        let max = -Infinity
 
-    const bucketSet = new Set(topBuckets)
-
-    // map all colors to top N buckets
-    for (let i = 0; i < bucketOverlay.length; ++i) {
-        if (bucketSet.has(bucketOverlay[i])) {
-            continue
+        for (const pixel of pixels) {
+            min = Math.min(selector(pixel), min)
+            max = Math.max(selector(pixel), max)
         }
 
-        // otherwise, map to new bucket
-        const r = data[i * 4] / 255
-        const g = data[i * 4 + 1] / 255
-        const b = data[i * 4 + 2] / 255
-        const color: [number, number, number] = [r, g, b]
-        const bucket = topBuckets.reduce((b1, b2) => calcDistSq(b1.color, color) < calcDistSq(b2.color, color) ? b1 : b2)
-        bucketOverlay[i] = bucket
+        return max - min
     }
 
-    // determine palette colors
-    const palette = topBuckets.map(b => mulXYZ(b.color, 255))
-    const paletteOverlay = bucketOverlay.map(b => buckets.indexOf(b))
+    function chooseBucket(tolerance: number, buckets: Pixel[][]): Pixel[] | null {
+        let maxRange = -Infinity
+        let maxBucket: Pixel[] | null = null
 
-    return [palette, paletteOverlay]
-}
+        for (const bucket of buckets) {
+            const rangeR = calcRange(bucket, p => p.r)
+            const rangeG = calcRange(bucket, p => p.g)
+            const rangeB = calcRange(bucket, p => p.b)
+            let range = 0
+            if (rangeR > rangeG && rangeR > rangeB) {
+                range = rangeR
+            } else if (rangeG > rangeR) {
+                range = rangeG
+            } else {
+                range = rangeB
+            }
 
-export function palettizeHistogram2(imageData: ImageData, bucketsPerComponent: number, maxColors: number) {
-    const { width, height, data } = imageData
-    const pixels = width * height
-    const bucketPitch = bucketsPerComponent * bucketsPerComponent
-    const numBuckets = bucketPitch * bucketsPerComponent
-
-    // create intial buckets
-    const buckets = array.generate(numBuckets, () => ({ color: [0, 0, 0] as [number, number, number], pixels: 0 }))
-
-    // assign and update bucket for each pixel
-    const bucketOverlay = array.generate(pixels, i => {
-        const r = data[i * 4] / 255
-        const g = data[i * 4 + 1] / 255
-        const b = data[i * 4 + 2] / 255
-        const rb = Math.min(Math.floor(r * bucketsPerComponent), bucketsPerComponent - 1)
-        const gb = Math.min(Math.floor(g * bucketsPerComponent), bucketsPerComponent - 1)
-        const bb = Math.min(Math.floor(b * bucketsPerComponent), bucketsPerComponent - 1)
-        const bucketIdx = rb * bucketPitch + gb * bucketsPerComponent + bb
-        const bucket = buckets[bucketIdx]
-        bucket.color = addXYZ([r, g, b], bucket.color)
-        bucket.pixels++
-        return bucket
-    })
-
-    // calculate bucket colors
-    for (const bucket of buckets) {
-        bucket.color = divXYZ(bucket.color, bucket.pixels)
-    }
-
-    const topBuckets = buckets
-        .sort((b1, b2) => b2.pixels - b1.pixels)
-        .slice(0, maxColors)
-
-    const bucketSet = new Set(topBuckets)
-
-    // map all colors to top N buckets
-    for (let i = 0; i < bucketOverlay.length; ++i) {
-        if (bucketSet.has(bucketOverlay[i])) {
-            continue
+            if (range > maxRange) {
+                maxRange = range
+                maxBucket = bucket
+            }
         }
 
-        // otherwise, map to new bucket
-        const r = data[i * 4] / 255
-        const g = data[i * 4 + 1] / 255
-        const b = data[i * 4 + 2] / 255
-        const color: [number, number, number] = [r, g, b]
-        const bucket = topBuckets.reduce((b1, b2) => calcDistSq(b1.color, color) < calcDistSq(b2.color, color) ? b1 : b2)
-        bucketOverlay[i] = bucket
+        return maxRange > tolerance ? maxBucket : null
     }
 
-    // determine palette colors
-    for (let i = 0; i < bucketOverlay.length; ++i) {
-        const bucket = bucketOverlay[i]
-        const [r, g, b] = bucket.color
-        data[i * 4] = r * 255
-        data[i * 4 + 1] = g * 255
-        data[i * 4 + 2] = b * 255
-    }
-}
+    function splitBucket(bucket: Pixel[]): Pixel[] {
+        const rangeR = calcRange(bucket, p => p.r)
+        const rangeG = calcRange(bucket, p => p.g)
+        const rangeB = calcRange(bucket, p => p.b)
 
-/**
- * return a list of unique colors in an image
- * @param imageData imageData
- */
-export function uniqueColors(imageData: ImageData): Color[] {
-    const data = imageData.data
-    const numPixels = imageData.width * imageData.height
-    const colors: Color[] = []
-
-    for (let i = 0; i < numPixels; ++i) {
-        const color = [data[i * 4], data[i * 4 + 1], data[i * 4 + 2]] as Color
-        if (!colors.some(c => equalXYZ(c, color))) {
-            colors.push(color)
-        }
-    }
-
-    console.log(colors)
-    return colors
-}
-
-export function applyPalette(palette: Color[], palleteOverlay: number[], imageData: ImageData) {
-    const data = imageData.data
-    for (let i = 0; i < palleteOverlay.length; ++i) {
-        // ignore index of -1
-        const idx = palleteOverlay[i]
-        if (idx == -1) {
-            continue
+        if (rangeR > rangeG && rangeR > rangeB) {
+            bucket.sort((a, b) => a.r - b.r)
+        } else if (rangeG > rangeR) {
+            bucket.sort((a, b) => a.g - b.g)
+        } else {
+            bucket.sort((a, b) => a.b - b.b)
         }
 
-        const color = palette[idx]
-        data[i * 4] = color[0]
-        data[i * 4 + 1] = color[1]
-        data[i * 4 + 2] = color[2]
+        const middle = Math.floor(bucket.length / 2)
+        const newBucket = bucket.splice(middle)
+        return newBucket
     }
-}
-
-function createBucket(data: Uint8ClampedArray, indices: number[]): Bucket {
-    if (indices.length == 0) {
-        throw new Error("bucket must contain at least 1 value")
-    }
-
-    const bucket: Bucket = {
-        indices: indices,
-        splitAxis: Axis.None,
-        range: 0
-    }
-
-    updateBucket(data, bucket)
-    return bucket
-}
-
-function updateBucket(data: Uint8ClampedArray, bucket: Bucket) {
-    bucket.range = 0
-    bucket.splitAxis = Axis.None
-
-    let minX = Infinity
-    let maxX = -1
-    let minY = Infinity
-    let maxY = -1
-    let minZ = Infinity
-    let maxZ = -1
-
-    for (const i of bucket.indices) {
-        const x = data[i * 4]
-        const y = data[i * 4 + 1]
-        const z = data[i * 4 + 2]
-        minX = Math.min(x, minX)
-        maxX = Math.max(x, maxX)
-        minY = Math.min(y, minY)
-        maxY = Math.max(y, maxY)
-        minZ = Math.min(z, minZ)
-        maxZ = Math.max(z, maxZ)
-    }
-
-    const dx = maxX - minX
-    const dy = maxY - minY
-    const dz = maxZ - minZ
-    bucket.range = Math.max(dx, dy, dz)
-
-    if (bucket.range === dx) {
-        bucket.splitAxis = Axis.X
-    } else if (bucket.range === dy) {
-        bucket.splitAxis = Axis.Y
-    } else {
-        bucket.splitAxis = Axis.Z
-    }
-}
-
-function splitBucket(data: Uint8ClampedArray, bucket: Bucket): Bucket {
-    if (bucket.indices.length <= 1) {
-        throw Error("Bucket must > 1 element to split")
-    }
-
-    // determine component with max range in bucket
-    switch (bucket.splitAxis) {
-        case Axis.X:
-            bucket.indices.sort((a, b) => data[a * 4] - data[b * 4])
-            break
-        case Axis.Y:
-            bucket.indices.sort((a, b) => data[a * 4 + 1] - data[b * 4 + 1])
-            break
-        case Axis.Z:
-            bucket.indices.sort((a, b) => data[a * 4 + 2] - data[b * 4 + 2])
-            break
-
-        default:
-            throw new Error("Invalid split axis")
-    }
-
-    // left half of array stays in bucket
-    // right half moves to new bucket
-    const medianIdx = Math.floor(bucket.indices.length / 2)
-    const newIndices = bucket.indices.splice(medianIdx, bucket.indices.length - medianIdx)
-    const newBucket = createBucket(data, newIndices)
-    updateBucket(data, bucket)
-    return newBucket
-}
-
-export function mulXYZ(xyz: Color, s: number): Color {
-    const [x, y, z] = xyz
-    return [x * s, y * s, z * s]
-}
-
-export function divXYZ(xyz: Color, s: number): Color {
-    const [x, y, z] = xyz
-    return [x / s, y / s, z / s]
-}
-
-export function addXYZ(xyz1: Color, xyz2: Color): Color {
-    return [xyz1[0] + xyz2[0], xyz1[1] + xyz2[1], xyz1[2] + xyz2[2]]
-}
-
-export function equalXYZ(xyz1: Color, xyz2: Color): boolean {
-    return xyz1[0] === xyz2[0] && xyz1[1] === xyz2[1] && xyz1[2] === xyz2[2]
-}
-
-export function calcDistSq(xyz1: Color, xyz2: Color): number {
-    const [x1, y1, z1] = xyz1
-    const [x2, y2, z2] = xyz2
-    const dx = x2 - x1
-    const dy = y2 - y1
-    const dz = z2 - z1
-    const distSq = dx * dx + dy * dy + dz * dz
-    return distSq
-}
-
-export function calcDist(xyz1: Color, xyz2: Color): number {
-    return Math.sqrt(calcDistSq(xyz1, xyz2))
 }
 
 export function scanImageData(imageData: ImageData, f: (x: number, y: number, offset: number) => void): void {
@@ -356,44 +194,7 @@ export function scanRowsRegion(y0: number, height: number, rowPitch: number, f: 
     }
 }
 
-export function rgb2xyz(rgb: Color): Color {
-    let [r, b, g] = rgb
-    r /= 255.0
-    g /= 255.0
-    b /= 255.0
-
-    const x = r * 0.4124564 + g * 0.3575761 + b * 0.1804375
-    const y = r * 0.2126729 + g * 0.7151522 + b * 0.0721750
-    const z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041
-    return [x, y, z]
-}
-
-export function xyz2rgb(xyz: Color): Color {
-    const [x, y, z] = xyz
-    const r = (x * 3.2404542 + y * -1.5371385 + z * -0.4985314) * 255
-    const g = (x * -0.9692660 + y * 1.8760108 + z * 0.0415560) * 255
-    const b = (x * 0.0556434 + y * -0.2040259 + z * 1.0572252) * 255
-    return [r, g, b]
-}
-
-export function linear(x: number) {
-    if (x <= .04045) {
-        return x / 12.92
-    }
-
-    return Math.pow(((x + .055) / 1.055), 2.4)
-}
-
-export function imageData2RGBArray(data: Uint8ClampedArray): Color[] {
-    const result: Color[] = []
-    for (let i = 0; i < data.length; i += 4) {
-        result.push([data[i], data[i + 1], data[i + 2]])
-    }
-
-    return result
-}
-
-export function calcLuminance(color: Color) {
+export function calcLuminance(color: [number, number, number]) {
     const [r, g, b] = color
     const l = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255)
     return l
@@ -401,4 +202,27 @@ export function calcLuminance(color: Color) {
 
 export function copyImageData(imageData: ImageData): ImageData {
     return new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height)
+}
+
+export function canvas2Blob(canvas: HTMLCanvasElement, type?: string, quality?: number): Promise<Blob> {
+    return new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+            if (blob) {
+                resolve(blob)
+            }
+            else {
+                reject(new Error("toBlob returned null"))
+            }
+        },
+            type,
+            quality)
+    })
+}
+
+export function flat(x: number, y: number, rowPitch: number) {
+    return y * rowPitch + x
+}
+
+export function unflat(i: number, rowPitch: number): [number, number] {
+    return [i % rowPitch, Math.floor(i / rowPitch)]
 }

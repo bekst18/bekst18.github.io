@@ -473,6 +473,12 @@ h1 {
     margin: .5em;
 }
 
+.info-message {
+    color: rgb(57, 106, 212);
+    font-size: 1.5em;
+    margin: .5em;
+}
+
 a {
     color: darkslateblue;
     font-weight: bold;

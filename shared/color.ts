@@ -1,3 +1,5 @@
+export type Color3 = [number, number, number]
+export type Color4 = [number, number, number, number]
 
 export function lab2rgb(x0: number, y0: number, z0: number): [number, number, number] {
     let y = (x0 + 16) / 116
@@ -60,4 +62,23 @@ export function deltaE(labA: [number, number, number], labB: [number, number, nu
     const deltaHkhsh = deltaH / (sh);
     const i = deltaLKlsl * deltaLKlsl + deltaCkcsc * deltaCkcsc + deltaHkhsh * deltaHkhsh;
     return i < 0 ? 0 : Math.sqrt(i);
+}
+
+export function calcLuminance(r: number, g: number, b: number): number {
+    const l = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255)
+    return l
+}
+
+export function pack(r: number, g: number, b: number, a: number): number {
+    const value = r << 24 | g << 16 | b << 8 | a
+    return value
+}
+
+export function unpack(x: number): Color4 {
+    const r = (x & 0xFF000000) >>> 24
+    const g = (x & 0x00FF0000) >>> 16
+    const b = (x & 0x0000FF00) >>> 8
+    const a = x & 0x000000FF
+
+    return [r, g, b, a]
 }
