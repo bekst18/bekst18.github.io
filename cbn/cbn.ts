@@ -304,7 +304,6 @@ class ImageSizeUi {
         const maxDim = this.getMaxDim()
         const maxColors = this.getMaxColors()
         const [w, h] = fit(this.imageCanvas.width, this.imageCanvas.height, maxDim)
-
         this.imageScaleCanvas.width = w
         this.imageScaleCanvas.height = h
         this.imageScaleCtx.drawImage(this.imageCanvas, 0, 0, w, h)
@@ -1080,7 +1079,7 @@ function drawCellImage(ctx: CanvasRenderingContext2D, width: number, height: num
 }
 
 function fit(width: number, height: number, maxSize: number): [number, number] {
-    if (width > height && width > maxSize) {
+    if (width >= height && width > maxSize) {
         height = maxSize * height / width
         return [Math.floor(maxSize), Math.floor(height)]
     }
@@ -1229,7 +1228,7 @@ async function getAllCBNs(db: IDBDatabase): Promise<[number, CBNPicture][]> {
 
     const req = store.openCursor()
     while (true) {
-        const cursor = await idb.waitRequest(req)
+        const cursor = await idb.waitRequest(req )
         if (!cursor) {
             break
         }
@@ -1258,5 +1257,14 @@ function db2cbn(data: CBNPictureDB): CBNPicture {
         sequence: data.sequence
     }
 }
+
+/**
+ * created preview of CBN completed thus far
+ * @param image image
+ * @param sequence sequence of pixel indices completed thus far
+ */
+// async function createPreview(image: Blob, sequence: number[]): Blob {
+
+// }
 
 main()
