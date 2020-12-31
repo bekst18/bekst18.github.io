@@ -119,3 +119,8 @@ html, body {
 .gallery-entry:hover {
     cursor: pointer;
 }
+
+.gallery-image {
+    width: 256px;
+    object-fit: contain;
+}
