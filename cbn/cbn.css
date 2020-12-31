@@ -127,4 +127,14 @@ html, body {
 .gallery-image {
     width: 256px;
     object-fit: contain;
+    border: solid 2px darkgray;;
+}
+
+.gallery-delete-button {
+    position: absolute;
+    width: auto;
+    height: auto;
+    background-color: red;
+    margin-left: -1.4em;
+    margin-top: .05em;
 }

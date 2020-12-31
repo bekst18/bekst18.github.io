@@ -855,13 +855,61 @@ class GalleryUi {
 
     constructor(db: IDBDatabase) {
         this.db = db
+        dom.delegate(this.ui, "click", ".gallery-entry", (evt) => this.onEntryClick(evt))
+        this.galleryAcquireImageButton.addEventListener("click", () => this.showAcquireImage.publish())
+        dom.delegate(this.ui, "click", ".gallery-delete-button", (evt) => {
+            this.onEntryDelete(evt)
+        })
     }
 
     public async show() {
         this.ui.hidden = false
-        dom.delegate(this.ui, "click", ".gallery-entry", (evt) => this.onEntryClick(evt))
-        this.galleryAcquireImageButton.addEventListener("click", () => this.showAcquireImage.publish())
+        await this.redraw()
+    }
 
+    public hide() {
+        this.ui.hidden = true
+    }
+
+    private onEntryClick(evt: Event) {
+        const target  = evt.target as HTMLElement
+        if (!target) {
+            return
+        }
+
+        if (!target.matches(".gallery-image")) {
+            return
+        }
+
+        const div = (evt.target as HTMLElement).closest(".gallery-entry") as HTMLDivElement
+        if (!div) {
+            return
+        }
+
+        const key = parseInt(div.dataset["key"] || "")
+        if (!key) {
+            return
+        }
+
+        this.cbnSelected.publish(key)
+    }
+
+    private async onEntryDelete(evt: Event) {
+        const div = (evt.target as HTMLElement).closest(".gallery-entry") as HTMLDivElement
+        if (!div) {
+            return
+        }
+
+        const key = parseInt(div.dataset["key"] || "")
+        if (!key) {
+            return
+        }
+
+        await deleteCBN(this.db, key)
+        await this.redraw()
+    }
+
+    private async redraw() {
         // clear current ui
         dom.removeAllChildren(this.cbnsDiv)
 
@@ -874,24 +922,6 @@ class GalleryUi {
             entryDiv.dataset["key"] = key.toString()
             this.cbnsDiv.appendChild(fragment)
         }
-    }
-
-    public hide() {
-        this.ui.hidden = true
-    }
-
-    private onEntryClick(evt: Event) {
-        const div = (evt.target as HTMLElement).closest(".gallery-entry") as HTMLDivElement
-        if (!div) {
-            return
-        }
-        
-        const key = parseInt(div.dataset["key"] || "")
-        if (!key) {
-            return
-        }
-
-        this.cbnSelected.publish(key)
     }
 }
 
@@ -1212,6 +1242,13 @@ async function putCBN(db: IDBDatabase, data: CBNPicture, key?: number): Promise<
     return k
 }
 
+async function deleteCBN(db: IDBDatabase, key: number): Promise<void> {
+    // note safari can't store blobs so must convert to arrayBuffer
+    const tx = db.transaction(picturesObjectStoreName, "readwrite")
+    const store = tx.objectStore(picturesObjectStoreName)
+    await idb.waitRequest(store.delete(key))
+}
+
 async function getCBN(db: IDBDatabase, key: number): Promise<CBNPicture> {
     const tx = db.transaction(picturesObjectStoreName, "readwrite")
     const store = tx.objectStore(picturesObjectStoreName)
@@ -1228,7 +1265,7 @@ async function getAllCBNs(db: IDBDatabase): Promise<[number, CBNPicture][]> {
 
     const req = store.openCursor()
     while (true) {
-        const cursor = await idb.waitRequest(req )
+        const cursor = await idb.waitRequest(req)
         if (!cursor) {
             break
         }
