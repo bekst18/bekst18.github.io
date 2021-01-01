@@ -46,3 +46,25 @@ export function blob2ArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
 export function arrayBuffer2Blob(buffer: ArrayBuffer, type: string): Blob {
     return new Blob([buffer], { type: type })
 }
+
+/**
+ * retrieve all key / value pairs from an object store
+ * @param store object store
+ */
+export async function getAllKeyValues(db: IDBDatabase, storeName: string) : Promise<Array<[IDBValidKey, any]>> {
+    const tx = db.transaction(storeName, "readonly")
+    const store = tx.objectStore(storeName)
+    const datas = new Array<[IDBValidKey, any]>()
+    const req = store.openCursor()
+    while (true) {
+        const cursor = await waitRequest(req)
+        if (!cursor) {
+            break
+        }
+
+        datas.push([cursor.key, cursor.value])
+        cursor.continue()
+    }
+
+    return datas
+}

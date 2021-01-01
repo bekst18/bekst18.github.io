@@ -36,11 +36,13 @@ enum CameraMode {
 
 interface CBNPicture {
     image: Blob
+    preview: Blob
     sequence: number[]
 }
 
 interface CBNPictureDB {
     image: ArrayBuffer
+    preview: ArrayBuffer
     sequence: number[]
 }
 
@@ -272,9 +274,12 @@ class ImageSizeUi {
 
     private async onCreateColorByNumber() {
         const blob = await imaging.canvas2Blob(this.imageScaleCanvas, imageMimeType)
+        const preview = await createPreview(blob, [])
+
         const cbn: CBNPicture = {
             image: blob,
-            sequence: []
+            sequence: [],
+            preview: preview
         }
 
         const key = await putCBN(this.db, cbn)
@@ -589,7 +594,8 @@ class PlayUi {
 
     private async saveState() {
         const blob = await imaging.canvas2Blob(this.imageCanvas, imageMimeType)
-        await putCBN(this.db, { image: blob, sequence: this.sequence }, this.key)
+        const preview = await createPreview(blob, this.sequence)
+        await putCBN(this.db, { image: blob, sequence: this.sequence, preview: preview }, this.key)
     }
 
     private onPointerMove(e: PointerEvent) {
@@ -872,7 +878,7 @@ class GalleryUi {
     }
 
     private onEntryClick(evt: Event) {
-        const target  = evt.target as HTMLElement
+        const target = evt.target as HTMLElement
         if (!target) {
             return
         }
@@ -918,7 +924,7 @@ class GalleryUi {
             const fragment = this.template.content.cloneNode(true) as DocumentFragment
             const entryDiv = dom.bySelector(fragment, ".gallery-entry") as HTMLDivElement
             const imageDiv = dom.bySelector(entryDiv, ".gallery-image") as HTMLImageElement
-            imageDiv.src = URL.createObjectURL(cbn.image)
+            imageDiv.src = URL.createObjectURL(cbn.preview)
             entryDiv.dataset["key"] = key.toString()
             this.cbnsDiv.appendChild(fragment)
         }
@@ -927,6 +933,8 @@ class GalleryUi {
 
 async function main() {
     const db = await openDB()
+    await validateData(db)
+
     const acquireUi = new AcquireUi()
     const sizeUi = new ImageSizeUi(db)
     const playUi = new PlayUi(db)
@@ -1216,10 +1224,16 @@ async function upgradeDB(evt: IDBVersionChangeEvent) {
     const db = (evt.target as IDBOpenDBRequest).result
 
     // note - event contains old / new versions if required
-    // update to the new version    
-    if (!db.objectStoreNames.contains(picturesObjectStoreName)) {
-        db.createObjectStore(picturesObjectStoreName, { autoIncrement: true })
+    // update to the new version
+    if (evt.oldVersion < 1) {
+        upgradeDB1(db)
     }
+
+    evt.preventDefault()
+}
+
+async function upgradeDB1(db: IDBDatabase) {
+    db.createObjectStore(picturesObjectStoreName, { autoIncrement: true })
 }
 
 function dbBlocked() {
@@ -1281,16 +1295,20 @@ async function getAllCBNs(db: IDBDatabase): Promise<[number, CBNPicture][]> {
 }
 
 async function cbn2db(data: CBNPicture): Promise<CBNPictureDB> {
-    const buffer = await idb.blob2ArrayBuffer(data.image)
+    const imageBuffer = await idb.blob2ArrayBuffer(data.image)
+    const previewBuffer = await idb.blob2ArrayBuffer(data.preview)
+
     return {
-        image: buffer,
-        sequence: data.sequence
+        image: imageBuffer,
+        preview: previewBuffer,
+        sequence: data.sequence,
     }
 }
 
 function db2cbn(data: CBNPictureDB): CBNPicture {
     return {
         image: idb.arrayBuffer2Blob(data.image, imageMimeType),
+        preview: idb.arrayBuffer2Blob(data.preview, imageMimeType),
         sequence: data.sequence
     }
 }
@@ -1300,8 +1318,56 @@ function db2cbn(data: CBNPictureDB): CBNPicture {
  * @param image image
  * @param sequence sequence of pixel indices completed thus far
  */
-// async function createPreview(image: Blob, sequence: number[]): Blob {
+async function createPreview(image: Blob, sequence: number[]): Promise<Blob> {
+    const url = URL.createObjectURL(image)
+    const img = await dom.loadImage(url)
+    const imageCanvas = document.createElement("canvas")
+    imageCanvas.width = img.width
+    imageCanvas.height = img.height
+    const imageCtx = imageCanvas.getContext("2d")!
+    imageCtx.drawImage(img, 0, 0)
 
-// }
+    const previewCanvas = document.createElement("canvas")
+    previewCanvas.width = img.width
+    previewCanvas.height = img.height
+    const previewCtx = previewCanvas.getContext("2d")!
+
+    const imageData = imageCtx.getImageData(0, 0, img.width, img.height)
+    const previewData = previewCtx.getImageData(0, 0, img.width, img.height)
+
+    for (const i of sequence) {
+        previewData.data[i * 4] = imageData.data[i * 4]
+        previewData.data[i * 4 + 1] = imageData.data[i * 4 + 1]
+        previewData.data[i * 4 + 2] = imageData.data[i * 4 + 2]
+        previewData.data[i * 4 + 3] = imageData.data[i * 4 + 3]
+    }
+
+    previewCtx.putImageData(previewData, 0, 0)
+    const previewBlob = await imaging.canvas2Blob(previewCanvas)
+    return previewBlob
+}
+
+async function validateData(db: IDBDatabase) {
+    // iterate over all cbn images, updgrade object structure if needed
+    const kvs = await idb.getAllKeyValues(db, picturesObjectStoreName)
+    const updatedKvs = new Array<[number, any]>()
+
+    for (const [key, cbn] of kvs) {
+        if (cbn.preview) {
+            continue
+        }
+
+        const imageBlob = idb.arrayBuffer2Blob(cbn.image, imageMimeType)
+        const previewBlob = await createPreview(imageBlob, cbn.sequence)
+        cbn.preview = await idb.blob2ArrayBuffer(previewBlob) 
+        updatedKvs.push([key as number, cbn])
+    }
+
+    const tx = db.transaction(picturesObjectStoreName, "readwrite")
+    const store = tx.objectStore(picturesObjectStoreName)
+    for (const [key, cbn] of updatedKvs) {
+        await idb.waitRequest(store.put(cbn, key)) as number
+    }
+}
 
 main()

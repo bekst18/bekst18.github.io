@@ -126,6 +126,7 @@ html, body {
 
 .gallery-image {
     width: 256px;
+    height: 256px;
     object-fit: contain;
     border: solid 2px darkgray;;
 }
