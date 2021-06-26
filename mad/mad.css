@@ -39,12 +39,12 @@ html, body {
 
 .placeholder-text {
     text-transform: uppercase;
-    font-weight: lighter;
+    white-space: pre;
+    color: gray;
     display: inline-block;
     font-size: small;
     position: relative;
     top: 1em;
     margin-bottom: .25em;
     text-decoration: overline;
-    color: royalblue;
 }

@@ -1,6 +1,8 @@
 import * as dom from "../shared/dom.js"
 import * as channel from "../shared/channel.js"
 
+const minPlaceholderLength = 16;
+
 interface State {
     title: string
     template: string
@@ -161,7 +163,14 @@ class PrintUi {
     }
 
     private appendPlaceholder(placeholder: string) {
+        placeholder = this.formatPlaceholder(placeholder)
         const frag = this.placeholderTemplate.content.cloneNode(true) as DocumentFragment
+        const textDiv = dom.bySelector(frag, ".placeholder-text");
+        textDiv.textContent = placeholder
+        this.printContent.append(frag)
+    }
+
+    private formatPlaceholder(placeholder: string) {
         if (placeholder.startsWith("[")) {
             placeholder = placeholder.substr(1)
         }
@@ -170,9 +179,12 @@ class PrintUi {
             placeholder = placeholder.substr(0, placeholder.length - 1);
         }
 
-        const textDiv = dom.bySelector(frag, ".placeholder-text");
-        textDiv.textContent = placeholder
-        this.printContent.append(frag)
+        placeholder = placeholder.trim()
+        while (placeholder.length < minPlaceholderLength) {
+            placeholder = ` ${placeholder} `;
+        }
+
+        return placeholder
     }
 }
 
