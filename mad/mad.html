@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width">
+    <title>Mad Lib Maker</title>
+    <link rel="stylesheet" type="text/css" href="mad.css">
+</head>
+<body>
+    <div id="createUi" class="m-auto">
+        <h1>Mad Lib Maker</h1>
+        <p class="text-info">Create your Mad Lib by entering a template in the text field below. Add placeholder text by
+            placing it between braces (i.e. [noun]).</p>
+        <form id="createForm">
+            <input type="text" id="title" required="true" placeholder="Title" class="my-1" />
+            <textarea id="template" required="true" placeholder="Template"></textarea>
+            <button id="createButton" type="submit" class="button-primary my-2">Create Mad Lib!</button>
+            <button id="clearButton" type="button">Clear</button>
+        </form>
+    </div>
+    <div id="printUi" class="m-auto" hidden="true">
+        <h1 id="printTitle"></h1>
+        <div id="printContent"></div>
+        <button id="returnToTemplate" type="button" class="no-print">Return To Template</button>
+    </div>
+    <template id="placeholderTemplate">
+        <div class="placeholder-text"></div>
+    </template>
+    <script type="module" src="mad.js"></script>
+</body>
+</html>
