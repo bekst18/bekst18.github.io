@@ -137,7 +137,7 @@ export class Map {
     containers: Layer<rl.Container>
     lighting: Lighting = Lighting.None
 
-    constructor(readonly width: number, readonly height: number, readonly player: rl.Player) {
+    constructor(readonly width: number, readonly height: number, readonly depth: number, readonly player: rl.Player) {
         this.tiles = new GridLayer(width, height)
         this.fixtures = new SetLayer()
         this.monsters = new SetLayer()

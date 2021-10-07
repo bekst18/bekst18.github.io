@@ -53,8 +53,8 @@ export class Thing {
 export class Dice {
     constructor(readonly min: number = 0, readonly max: number = 0) { }
 
-    roll(): number {
-        return rand.int(this.min, this.max + 1)
+    roll(rng: rand.RNG): number {
+        return rand.int(rng, this.min, this.max + 1)
     }
 
     add(x: number): Dice {

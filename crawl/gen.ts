@@ -36,7 +36,8 @@ const monsters = [
     things.greenSlime.clone(),
     things.redSlime.clone(),
     things.spider.clone(),
-    things.rat.clone()
+    things.rat.clone(),
+    things.redy.clone()
 ]
 
 const loot = [
@@ -71,20 +72,20 @@ interface Room {
     depth: number,
 }
 
-export async function generateDungeonLevel(renderer: gfx.Renderer, player: rl.Player, width: number, height: number): Promise<maps.Map> {
-    const map = generateMapRooms(width, height, player)
+export async function generateDungeonLevel(rng: rand.RNG, renderer: gfx.Renderer, player: rl.Player, width: number, height: number): Promise<maps.Map> {
+    const map = generateMapRooms(rng, width, height, player)
     map.lighting = maps.Lighting.None
     await loadSpriteTextures(renderer, map)
     return map
 }
 
-function generateMapRooms(width: number, height: number, player: rl.Player): maps.Map {
-    const map = new maps.Map(width, height, player)
+function generateMapRooms(rng: rand.RNG, width: number, height: number, player: rl.Player): maps.Map {
+    const map = new maps.Map(width, height, 1, player)
     const minRooms = 4
 
     const [cells, rooms] = (() => {
         while (true) {
-            const [cells, rooms] = generateCellGrid(width, height)
+            const [cells, rooms] = generateCellGrid(rng, width, height)
             if (rooms.length > minRooms) {
                 return [cells, rooms]
             }
@@ -99,6 +100,7 @@ function generateMapRooms(width: number, height: number, player: rl.Player): map
     if (!stairsUpPosition) {
         throw new Error("Failed to place stairs up")
     }
+
     stairsUp.position = stairsUpPosition.clone()
     map.fixtures.add(stairsUp)
 
@@ -108,6 +110,7 @@ function generateMapRooms(width: number, height: number, player: rl.Player): map
     if (!stairsDownPosition) {
         throw new Error("Failed to place stairs down")
     }
+
     stairsDown.position = stairsDownPosition.clone()
     map.fixtures.add(stairsDown)
 
@@ -148,40 +151,44 @@ function generateMapRooms(width: number, height: number, player: rl.Player): map
         }
     }
 
-    placeMonsters(cells, rooms, map)
-    placeTreasures(cells, rooms, map)
+    placeMonsters(rng, cells, rooms, map)
+    placeTreasures(rng, cells, rooms, map)
 
     return map
 }
 
-function placeMonsters(cells: CellGrid, rooms: Room[], map: maps.Map) {
+function placeMonsters(rng: rand.RNG, cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
-    const encounterChance = .25
+    const encounterChance = .35
     const secondEncounterChance = .2
     const thirdEncounterChance = .1
 
     for (const room of rooms) {
-        if (!rand.chance(encounterChance)) {
+        if (room.depth <= 0) {
             continue
         }
 
-        tryPlaceMonster(cells, room, map)
-
-        if (!rand.chance(secondEncounterChance)) {
+        if (!rand.chance(rng, encounterChance)) {
             continue
         }
 
-        tryPlaceMonster(cells, room, map)
+        tryPlaceMonster(rng, cells, room, map)
 
-        if (!rand.chance(thirdEncounterChance)) {
+        if (!rand.chance(rng, secondEncounterChance)) {
             continue
         }
 
-        tryPlaceMonster(cells, room, map)
+        tryPlaceMonster(rng, cells, room, map)
+
+        if (!rand.chance(rng, thirdEncounterChance)) {
+            continue
+        }
+
+        tryPlaceMonster(rng, cells, room, map)
     }
 }
 
-function tryPlaceMonster(cells: CellGrid, room: Room, map: maps.Map): boolean {
+function tryPlaceMonster(rng: rand.RNG, cells: CellGrid, room: Room, map: maps.Map): boolean {
     // attempt to place monster
     for (const [t, pt] of visitInterior(cells, room.interiorPt)) {
         if (t !== CellType.Interior) {
@@ -192,7 +199,7 @@ function tryPlaceMonster(cells: CellGrid, room: Room, map: maps.Map): boolean {
             continue
         }
 
-        const monster = (rand.choose(monsters)).clone()
+        const monster = rand.choose(rng, monsters).clone()
         monster.position = pt.clone()
         map.monsters.add(monster)
 
@@ -202,21 +209,25 @@ function tryPlaceMonster(cells: CellGrid, room: Room, map: maps.Map): boolean {
     return false
 }
 
-function placeTreasures(cells: CellGrid, rooms: Room[], map: maps.Map) {
+function placeTreasures(rng: rand.RNG, cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
     const treasureChance = .2
 
     for (const room of rooms) {
-        if (!rand.chance(treasureChance)) {
+        if (room.depth <= 0) {
             continue
         }
 
-        tryPlaceTreasure(cells, room, map)
+        if (!rand.chance(rng, treasureChance)) {
+            continue
+        }
+
+        tryPlaceTreasure(rng, cells, room, map)
     }
 }
 
 
-function tryPlaceTreasure(cells: CellGrid, room: Room, map: maps.Map): boolean {
+function tryPlaceTreasure(rng: rand.RNG, cells: CellGrid, room: Room, map: maps.Map): boolean {
     // attempt to place treasure
     for (const [t, pt] of visitInterior(cells, room.interiorPt)) {
         if (t !== CellType.Interior) {
@@ -231,14 +242,14 @@ function tryPlaceTreasure(cells: CellGrid, room: Room, map: maps.Map): boolean {
         chest.position = pt.clone()
 
         // choose loot
-        const item = rand.choose(loot)
+        const item = rand.choose(rng, loot)
         chest.items.add(item)
 
         // extra loot
         let extraLootChance = .5
-        while (rand.chance(extraLootChance)) {
+        while (rand.chance(rng, extraLootChance)) {
             extraLootChance *= .5
-            const item = rand.choose(loot)
+            const item = rand.choose(rng, loot)
             chest.items.add(item)
         }
 
@@ -249,7 +260,7 @@ function tryPlaceTreasure(cells: CellGrid, room: Room, map: maps.Map): boolean {
     return false
 }
 
-function generateCellGrid(width: number, height: number): [CellGrid, Room[]] {
+function generateCellGrid(rng: rand.RNG, width: number, height: number): [CellGrid, Room[]] {
     const cells = grid.generate(width, height, () => CellType.Exterior)
 
     // generate room templates
@@ -259,21 +270,21 @@ function generateCellGrid(width: number, height: number): [CellGrid, Room[]] {
 
     // place initial room
     {
-        rand.shuffle(templates)
+        rand.shuffle(rng, templates)
         const template = templates[0]
 
         const pt = new geo.Point(
-            rand.int(0, width - template.cells.width + 1),
-            rand.int(0, height - template.cells.height + 1))
+            rand.int(rng, 0, width - template.cells.width + 1),
+            rand.int(rng, 0, height - template.cells.height + 1))
 
-        const room = placeTemplate(cells, template, pt)
+        const room = placeTemplate(rng, cells, template, pt)
         stack.push(room)
         rooms.push(room)
     }
 
     while (stack.length > 0) {
         const room = array.pop(stack)
-        const nextRoom = tryTunnelFrom(cells, templates, room)
+        const nextRoom = tryTunnelFrom(rng, cells, templates, room)
 
         if (nextRoom) {
             stack.push(room)
@@ -285,13 +296,13 @@ function generateCellGrid(width: number, height: number): [CellGrid, Room[]] {
     return [cells, rooms]
 }
 
-function tryTunnelFrom(cells: CellGrid, templates: RoomTemplate[], room: Room): Room | null {
-    rand.shuffle(templates)
+function tryTunnelFrom(rng: rand.RNG, cells: CellGrid, templates: RoomTemplate[], room: Room): Room | null {
+    rand.shuffle(rng, templates)
 
     while (room.tunnelPts.length > 0) {
         const tpt = array.pop(room.tunnelPts)
         for (const template of templates) {
-            const nextRoom = tryTunnelTo(cells, tpt, template)
+            const nextRoom = tryTunnelTo(rng, cells, tpt, template)
             if (nextRoom) {
                 // place door at tunnel point
                 room.tunnelPts = room.tunnelPts.filter(pt => !pt.equal(tpt))
@@ -306,25 +317,25 @@ function tryTunnelFrom(cells: CellGrid, templates: RoomTemplate[], room: Room): 
     return null
 }
 
-function tryTunnelTo(cells: CellGrid, tpt1: geo.Point, template: RoomTemplate): Room | null {
+function tryTunnelTo(rng: rand.RNG, cells: CellGrid, tpt1: geo.Point, template: RoomTemplate): Room | null {
     // find tunnel points of template
     for (const tpt2 of template.tunnelPts) {
         const offset = tpt1.subPoint(tpt2)
         if (isValidPlacement(template.cells, cells, offset)) {
-            return placeTemplate(cells, template, offset)
+            return placeTemplate(rng, cells, template, offset)
         }
     }
 
     return null
 }
 
-function placeTemplate(cells: CellGrid, template: RoomTemplate, offset: geo.Point): Room {
+function placeTemplate(rng: rand.RNG, cells: CellGrid, template: RoomTemplate, offset: geo.Point): Room {
     grid.copy(template.cells, cells, offset.x, offset.y)
 
     // find tunnelable points
     const interiorPt = template.interiorPt.addPoint(offset)
     const tunnelPts = template.tunnelPts.map(pt => pt.addPoint(offset)).filter(pt => findExteriorNeighbor(cells, pt) !== null)
-    rand.shuffle(tunnelPts)
+    rand.shuffle(rng, tunnelPts)
 
     return {
         interiorPt,
@@ -429,7 +440,7 @@ function isValidPlacement(src: CellGrid, dst: CellGrid, offset: geo.Point): bool
 }
 
 export async function generateOutdoorMap(renderer: gfx.Renderer, player: rl.Player, width: number, height: number): Promise<maps.Map> {
-    const map = new maps.Map(width, height, player)
+    const map = new maps.Map(width, height, 0, player)
     map.lighting = maps.Lighting.Ambient
 
     player.position = new geo.Point(0, 0)
@@ -537,9 +548,9 @@ function generateOutdoorTerrain(map: maps.Map) {
     }
 }
 
-function placeLandmasses(tiles: grid.Grid<OutdoorTileType>) {
-    const maxTiles = Math.ceil(tiles.size * rand.float(.3, .5))
-    growLand(tiles, maxTiles)
+function placeLandmasses(rng: rand.RNG, tiles: grid.Grid<OutdoorTileType>) {
+    const maxTiles = Math.ceil(tiles.size * rand.float(rng, .3, .5))
+    growLand(rng, tiles, maxTiles)
 
     // find maximal water rect - if large enough, plant island
     while (true) {
@@ -549,15 +560,15 @@ function placeLandmasses(tiles: grid.Grid<OutdoorTileType>) {
         }
 
         const view = tiles.viewAABB(aabb)
-        const islandTiles = aabb.area * rand.float(.25, 1)
-        growLand(view, islandTiles)
+        const islandTiles = aabb.area * rand.float(rng, .25, 1)
+        growLand(rng, view, islandTiles)
     }
 
     // place some islands
     placeBeaches(tiles)
 }
 
-function growLand(tiles: grid.Grid<OutdoorTileType>, maxTiles: number) {
+function growLand(rng: rand.RNG, tiles: grid.Grid<OutdoorTileType>, maxTiles: number) {
     // "plant" a continent
     const stack = new Array<geo.Point>()
     const seed = new geo.Point(tiles.width / 2, tiles.height / 2).floor()
@@ -575,7 +586,7 @@ function growLand(tiles: grid.Grid<OutdoorTileType>, maxTiles: number) {
             }
         }
 
-        rand.shuffle(stack)
+        rand.shuffle(rng, stack)
     }
 }
 
@@ -616,9 +627,9 @@ function placeSnow(tiles: grid.Grid<OutdoorTileType>, fixtures: grid.Grid<Outdoo
     }
 }
 
-function placeMountains(tiles: grid.Grid<OutdoorTileType>, fixtures: grid.Grid<OutdoorFixtureType>, maxTiles: number) {
+function placeMountains(rng: rand.RNG, tiles: grid.Grid<OutdoorTileType>, fixtures: grid.Grid<OutdoorFixtureType>, maxTiles: number) {
     // find a suitable start point for mountain range
-    const seed = rand.choose([...tiles.findPoints(x => x !== OutdoorTileType.water && x !== OutdoorTileType.sand)])
+    const seed = rand.choose(rng, [...tiles.findPoints(x => x !== OutdoorTileType.water && x !== OutdoorTileType.sand)])
     const stack = new Array<geo.Point>()
     stack.push(seed)
     let placed = 0
@@ -634,7 +645,7 @@ function placeMountains(tiles: grid.Grid<OutdoorTileType>, fixtures: grid.Grid<O
             }
         }
 
-        rand.shuffle(stack)
+        rand.shuffle(rng, stack)
     }
 }
 

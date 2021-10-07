@@ -16,15 +16,34 @@
             <button id="createButton" type="submit" class="button-primary my-2">Create Mad Lib!</button>
             <button id="clearButton" type="button">Clear</button>
         </form>
+        <template id="placeholderTemplate">
+            <div class="placeholder-text"></div>
+        </template>
+        <select id="placeholders" hidden>
+            <option>NOUN</option>
+            <option>VERB</option>
+            <option>ADJECTIVE</option>A
+            <option>ADVERB</option>
+            <option>PLACE</option>
+            <option>PERSON</option>
+            <option>PERSON IN ROOM</option>
+            <option>FAMILY MEMBER</option>
+            <option>PART OF THE BODY</option>
+            <option>COLOR</option>
+            <option>ANIMAL</option>
+            <option>VERB-ING</option>
+            <option>FOOD</option>
+            <option>PLURAL NOUN</option>
+            <option>VERB - PAST TENSE</option>
+            <option>EXCLAMATION</option>
+            <option></option>
+        </select>
     </div>
     <div id="printUi" class="m-auto" hidden="true">
         <h1 id="printTitle"></h1>
         <div id="printContent"></div>
         <button id="returnToTemplate" type="button" class="no-print">Return To Template</button>
     </div>
-    <template id="placeholderTemplate">
-        <div class="placeholder-text"></div>
-    </template>
     <script type="module" src="mad.js"></script>
 </body>
 </html>

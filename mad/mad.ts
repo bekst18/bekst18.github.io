@@ -25,11 +25,13 @@ class CreateUi {
     private readonly titleInput = dom.byId("title") as HTMLInputElement
     private readonly templateInput = dom.byId("template") as HTMLTextAreaElement
     private readonly clearButton = dom.byId("clearButton")
+    private readonly placeholderSelect = dom.byId("placeholders")
     public readonly create = new channel.Channel<[string, string]>()
 
     constructor() {
         this.form.addEventListener("submit", evt => this.submit(evt))
         this.clearButton.addEventListener("click", _ => this.clear())
+        this.templateInput.addEventListener("input", e => this.input(e))
     }
 
     public show() {

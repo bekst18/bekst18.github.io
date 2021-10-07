@@ -449,7 +449,7 @@ class DefeatDialog {
     }
 
     private tryAgain() {
-        window.location.reload(false)
+        window.location.reload()
     }
 }
 
@@ -545,6 +545,7 @@ enum TargetCommand {
 }
 
 class App {
+    private readonly rng: rand.RNG
     private readonly canvas = dom.byId("canvas") as HTMLCanvasElement
     private readonly attackButton = dom.byId("attackButton") as HTMLButtonElement
     private readonly shootButton = dom.byId("shootButton") as HTMLButtonElement
@@ -557,10 +558,13 @@ class App {
     private readonly containerDialog = new ContainerDialog(this.player, this.canvas)
     private readonly defeatDialog = new DefeatDialog(this.canvas)
     private zoom = 1
-    private map: maps.Map = new maps.Map(0, 0, this.player)
+    private map: maps.Map = new maps.Map(0, 0, 1, this.player)
     private targetCommand: TargetCommand = TargetCommand.None
 
     constructor() {
+        const seed = rand.xmur3("this is a test");
+        this.rng = rand.sfc32(seed(), seed(), seed(), seed())
+
         const player = this.player
         player.inventory.add(things.healthPotion.clone())
         player.inventory.add(things.slingShot)
@@ -568,7 +572,7 @@ class App {
 
     async exec() {
         this.canvas.focus()
-        this.map = await gen.generateDungeonLevel(this.renderer, this.player, 32, 32)
+        this.map = await gen.generateDungeonLevel(this.rng, this.renderer, this.player, 32, 32)
         if (!this.player.position) {
             throw new Error("Player is not positioned")
         }
@@ -682,7 +686,7 @@ class App {
         const attacker = this.player
         const bonus = (attacker.meleeAttack - defender.defense) * .1
         const hitChance = Math.min(Math.max(.6 + bonus, .05), .95)
-        const hit = rand.chance(hitChance)
+        const hit = rand.chance(this.rng, hitChance)
         const weapon = attacker.meleeWeapon ?? things.fists
         const attackVerb = weapon.verb ? weapon.verb : "attacks"
         attacker.action -= weapon.action
@@ -693,7 +697,7 @@ class App {
         }
 
         // hit - calculate damage
-        const damage = attacker.meleeDamage.roll()
+        const damage = attacker.meleeDamage.roll(this.rng)
         output.warning(`${attacker.name} ${attackVerb} ${defender.name} and hits for ${damage} damage!`)
         defender.health -= damage
 
@@ -715,7 +719,7 @@ class App {
 
         const bonus = (attacker.rangedAttack - defender.defense) * .1
         const hitChance = Math.min(Math.max(.6 + bonus, .05), .95)
-        const hit = rand.chance(hitChance)
+        const hit = rand.chance(this.rng, hitChance)
         const weapon = attacker.rangedWeapon
         const attackVerb = weapon.verb ? weapon.verb : "attacks"
         attacker.action -= weapon.action
@@ -726,7 +730,7 @@ class App {
         }
 
         // hit - calculate damage
-        const damage = attacker.rangedDamage?.roll() ?? 0
+        const damage = attacker.rangedDamage?.roll(this.rng) ?? 0
         output.warning(`${attacker.name} ${attackVerb} ${defender.name} and hits for ${damage} damage!`)
         defender.health -= damage
 
@@ -745,7 +749,7 @@ class App {
         const defender = this.player
         const bonus = (attack.attack - defender.defense) * .1
         const hitChance = Math.max(.6 + bonus, .05)
-        const hit = rand.chance(hitChance)
+        const hit = rand.chance(this.rng, hitChance)
         const attackVerb = attack.verb ? attack.verb : "attacks"
         attacker.action -= attack.action
 
@@ -755,7 +759,7 @@ class App {
         }
 
         // hit - calculate damage
-        const damage = attack.damage.roll()
+        const damage = attack.damage.roll(this.rng)
         output.warning(`${attacker.name} ${attackVerb} ${defender.name} and hits for ${damage} damage!`)
         defender.health -= damage
 
@@ -792,7 +796,7 @@ class App {
             const distanceToPlayer = geo.calcManhattenDist(this.player.position, monster.position)
             const attacks = monster.attacks.filter(a => a.range >= distanceToPlayer)
             if (attacks.length > 0) {
-                const attack = rand.choose(attacks)
+                const attack = rand.choose(this.rng, attacks)
                 this.processMonsterAttack(monster, attack)
                 return
             }

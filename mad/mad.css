@@ -48,3 +48,8 @@ html, body {
     margin-bottom: .25em;
     text-decoration: overline;
 }
+
+#placeholderHelper {
+    position: absolute;
+    z-index: 1;
+}

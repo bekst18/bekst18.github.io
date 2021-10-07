@@ -203,6 +203,23 @@ export const skeleton = new rl.Monster({
     ]
 })
 
+export const redy = new rl.Monster({
+    name: "Redy",
+    maxHealth: 9,
+    image: "./assets/redy.png",
+    experience: 4,
+    agility: 2,
+    defense: 2,
+    attacks: [
+        new rl.Attack({
+            attack: 0,
+            damage: new rl.Dice(5, 6),
+            action: 1,
+            verb: "punches"
+        })
+    ]
+})
+
 export const fists = new rl.MeleeWeapon({
     name: "Fists",
     attack: 0,
