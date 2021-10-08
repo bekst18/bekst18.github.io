@@ -205,17 +205,34 @@ export const skeleton = new rl.Monster({
 
 export const redy = new rl.Monster({
     name: "Redy",
-    maxHealth: 9,
+    maxHealth: 3,
     image: "./assets/redy.png",
-    experience: 4,
-    agility: 2,
+    experience: 2,
+    agility: 1,
     defense: 2,
     attacks: [
         new rl.Attack({
             attack: 0,
-            damage: new rl.Dice(5, 6),
+            damage: new rl.Dice(1, 2),
             action: 1,
             verb: "punches"
+        })
+    ]
+})
+
+export const fider = new rl.Monster({
+    name: "Fider",
+    maxHealth: 4,
+    image: "./assets/fider.png",
+    experience: 2,
+    agility: 1,
+    defense: 2,
+    attacks: [
+        new rl.Attack({
+            attack: 0,
+            damage: new rl.Dice(2, 3),
+            action: 1,
+            verb: "burns"
         })
     ]
 })

@@ -562,7 +562,7 @@ class App {
     private targetCommand: TargetCommand = TargetCommand.None
 
     constructor() {
-        const seed = rand.xmur3("this is a test");
+        const seed = rand.xmur3(new Date().toString());
         this.rng = rand.sfc32(seed(), seed(), seed(), seed())
 
         const player = this.player
