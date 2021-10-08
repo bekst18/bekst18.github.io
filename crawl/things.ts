@@ -209,13 +209,13 @@ export const redy = new rl.Monster({
     image: "./assets/redy.png",
     experience: 2,
     agility: 1,
-    defense: 2,
+    defense: 0,
     attacks: [
         new rl.Attack({
             attack: 0,
-            damage: new rl.Dice(1, 2),
+            damage: new rl.Dice(1, 1),
             action: 1,
-            verb: "punches"
+            verb: "touches"
         })
     ]
 })
@@ -230,9 +230,15 @@ export const fider = new rl.Monster({
     attacks: [
         new rl.Attack({
             attack: 0,
-            damage: new rl.Dice(2, 3),
+            damage: new rl.Dice(1, 2),
             action: 1,
             verb: "burns"
+        }),
+        new rl.Attack({
+            attack: 0,
+            damage: new rl.Dice(2, 3),
+            action: 1,
+            verb: "spins and shoots fire"
         })
     ]
 })

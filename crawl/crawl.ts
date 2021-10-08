@@ -67,7 +67,6 @@ class StatsDialog extends Dialog {
         const defenseSpan = dom.byId("statsDefense") as HTMLSpanElement
         const levelSpan = dom.byId("statsLevel") as HTMLSpanElement
         const experienceSpan = dom.byId("statsExperience") as HTMLSpanElement
-
         const experienceRequirement = rl.getExperienceRequirement(player.level + 1)
 
         healthSpan.textContent = `${player.health} / ${player.maxHealth}`
