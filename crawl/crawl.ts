@@ -544,38 +544,44 @@ enum TargetCommand {
 }
 
 class App {
-    private readonly rng: rand.RNG
     private readonly canvas = dom.byId("canvas") as HTMLCanvasElement
     private readonly attackButton = dom.byId("attackButton") as HTMLButtonElement
     private readonly shootButton = dom.byId("shootButton") as HTMLButtonElement
     private readonly lookButton = dom.byId("lookButton") as HTMLButtonElement
-    private readonly renderer = new gfx.Renderer(this.canvas)
-    private readonly player: rl.Player = things.player.clone()
     private readonly inp: input.Input = new input.Input(this.canvas)
     private readonly statsDialog = new StatsDialog(this.player, this.canvas)
     private readonly inventoryDialog = new InventoryDialog(this.player, this.canvas)
     private readonly containerDialog = new ContainerDialog(this.player, this.canvas)
     private readonly defeatDialog = new DefeatDialog(this.canvas)
     private zoom = 1
-    private map: maps.Map = new maps.Map(0, 0, 1, this.player)
     private targetCommand: TargetCommand = TargetCommand.None
     private cursorPosition?: geo.Point
 
-    constructor() {
-        const seed = rand.xmur3(new Date().toString());
-        this.rng = rand.sfc32(seed(), seed(), seed(), seed())
-
-        const player = this.player
+    private constructor(
+        private readonly rng: rand.RNG,
+        private readonly renderer: gfx.Renderer,
+        private readonly player: rl.Player,
+        private map: maps.Map,
+        private readonly texture: gfx.Texture,
+        private readonly imageMap: Map<string, number>) {
         player.inventory.add(things.healthPotion.clone())
-        player.inventory.add(things.slingShot)
+        player.inventory.add(things.slingShot) 
     }
 
-    async exec() {
+    public static async create(): Promise<App> {
+        const canvas = dom.byId("canvas") as HTMLCanvasElement
+        const renderer = new gfx.Renderer(canvas)
+        const seed = rand.xmur3(new Date().toString())
+        const rng = rand.sfc32(seed(), seed(), seed(), seed())
+        const player = things.player.clone()
+        const map = await gen.generateDungeonLevel(rng, player, 32, 32)
+        const [texture, imageMap] = await loadImages(renderer, map)
+        const app = new App(rng, renderer, player, map, texture, imageMap)
+        return app
+    }
+
+    public exec() {
         this.canvas.focus()
-        this.map = await gen.generateDungeonLevel(this.rng, this.renderer, this.player, 32, 32)
-        if (!this.player.position) {
-            throw new Error("Player is not positioned")
-        }
 
         output.write("Your adventure begins")
         this.handleResize()
@@ -1072,7 +1078,7 @@ class App {
 
         this.drawThing(offset, this.player)
         this.drawHealthBar(offset, this.player)
-        this.drawCursor();
+        this.drawCursor(offset);
 
         this.renderer.flush()
     }
@@ -1087,14 +1093,31 @@ class App {
             color.a = .5
         }
 
-        const spritePosition = th.position.mulScalar(this.tileSize).addPoint(offset)
+        this.drawImage(offset, th.position, th.image, color)
+    }
+
+    private drawCursor(offset: geo.Point) {
+        if (!this.cursorPosition) {
+            return
+        }
+
+        this.drawImage(offset, this.cursorPosition, "../assets/cursor.png")
+    }
+
+    private drawImage(offset: geo.Point, position: geo.Point, image: string, color: gfx.Color = gfx.Color.white) {
+        const spritePosition = position.mulScalar(this.tileSize).addPoint(offset)
+        const layer = this.imageMap.get(image)
+        if (!layer) {
+            throw new Error(`Missing image mapping: ${image}`)
+        }
+
         const sprite = new gfx.Sprite({
             position: spritePosition,
-            color: color,
+            color,
             width: this.tileSize,
             height: this.tileSize,
-            texture: th.texture,
-            layer: th.textureLayer,
+            texture: this.texture,
+            layer: layer,
             flags: gfx.SpriteFlags.ArrayTexture
         })
 
@@ -1185,9 +1208,22 @@ class App {
     }
 }
 
+async function loadImages(renderer: gfx.Renderer, map: maps.Map): Promise<[gfx.Texture, Map<string, number>]> {
+    // bake all 24x24 tile images to a single array texture
+    // store mapping from image url to index
+    const imageUrls = iter.wrap(map).map(th => th.image).filter().distinct().toArray()
+    imageUrls.push("./assets/cursor.png")
+    
+    const imageMap = new Map<string, number>(imageUrls.map((url, i) => [url, i]))
+    const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
+    const texture = renderer.bakeTextureArray(rl.tileSize, rl.tileSize, images)
+
+    return [texture, imageMap]
+}
+
 async function init() {
-    const app = new App()
-    await app.exec()
+    const app = await App.create()
+    app.exec()
 }
 
 init()

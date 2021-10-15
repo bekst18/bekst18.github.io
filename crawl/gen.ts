@@ -9,8 +9,6 @@ import * as iter from "../shared/iter.js"
 import * as rand from "../shared/rand.js"
 import * as things from "./things.js"
 import * as maps from "./maps.js"
-import * as gfx from "./gfx.js"
-import * as dom from "../shared/dom.js"
 import * as noise from "../shared/noise.js"
 import * as imaging from "../shared/imaging.js"
 
@@ -75,10 +73,9 @@ interface Room {
     depth: number,
 }
 
-export async function generateDungeonLevel(rng: rand.RNG, renderer: gfx.Renderer, player: rl.Player, width: number, height: number): Promise<maps.Map> {
+export async function generateDungeonLevel(rng: rand.RNG, player: rl.Player, width: number, height: number): Promise<maps.Map> {
     const map = generateMapRooms(rng, width, height, player)
     map.lighting = maps.Lighting.None
-    await loadSpriteTextures(renderer, map)
     return map
 }
 
@@ -442,13 +439,11 @@ function isValidPlacement(src: CellGrid, dst: CellGrid, offset: geo.Point): bool
     return true
 }
 
-export async function generateOutdoorMap(renderer: gfx.Renderer, player: rl.Player, width: number, height: number): Promise<maps.Map> {
+export async function generateOutdoorMap(player: rl.Player, width: number, height: number): Promise<maps.Map> {
     const map = new maps.Map(width, height, 0, player)
     map.lighting = maps.Lighting.Ambient
-
     player.position = new geo.Point(0, 0)
     generateOutdoorTerrain(map)
-    await loadSpriteTextures(renderer, map)
     return map
 }
 
@@ -649,31 +644,6 @@ function placeMountains(rng: rand.RNG, tiles: grid.Grid<OutdoorTileType>, fixtur
         }
 
         rand.shuffle(rng, stack)
-    }
-}
-
-export async function loadSpriteTextures(renderer: gfx.Renderer, map: maps.Map): Promise<void> {
-    // bake all 24x24 tile images to a single array texture
-    // store mapping from image url to index
-    const imageUrls = iter.wrap(map).map(th => th.image).filter().distinct().toArray()
-    const layerMap = new Map<string, number>(imageUrls.map((url, i) => [url, i]))
-    const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
-    const texture = renderer.bakeTextureArray(rl.tileSize, rl.tileSize, images)
-
-    for (const th of map) {
-        if (!th.image) {
-            th.textureLayer = -1
-            th.texture = null
-            continue
-        }
-
-        const layer = layerMap.get(th.image)
-        if (layer === undefined) {
-            throw new Error(`texture index not found for ${th.image}`)
-        }
-
-        th.texture = texture
-        th.textureLayer = layer
     }
 }
 

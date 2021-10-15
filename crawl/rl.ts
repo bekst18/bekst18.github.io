@@ -29,8 +29,6 @@ export class Thing {
     name: string
     image: string
     color = new gfx.Color(1, 1, 1, 1)
-    texture: gfx.Texture | null = null
-    textureLayer: number = -1
     visible: Visibility = Visibility.None
 
     constructor(options: ThingOptions) {
