@@ -559,6 +559,7 @@ class App {
     private zoom = 1
     private map: maps.Map = new maps.Map(0, 0, 1, this.player)
     private targetCommand: TargetCommand = TargetCommand.None
+    private cursorPosition?: geo.Point
 
     constructor() {
         const seed = rand.xmur3(new Date().toString());
@@ -598,6 +599,7 @@ class App {
 
     private tick() {
         this.handleResize()
+
         const nextCreature = this.getNextCreature()
         if (nextCreature instanceof rl.Player) {
             if (this.handleInput()) {
@@ -842,6 +844,27 @@ class App {
             return false
         }
 
+        // ctrl-key cursor movement
+        if (inp.held(input.Key.Control)) {
+            if (!this.cursorPosition) {
+                this.cursorPosition = position.clone();
+            }
+
+            if (inp.pressed("w") || inp.pressed("W") || inp.pressed("ArrowUp")) {
+                this.cursorPosition.y -= 1
+            }
+            else if (inp.pressed("s") || inp.pressed("S") || inp.pressed("ArrowDown")) {
+                this.cursorPosition.y += 1
+            }
+            else if (inp.pressed("a") || inp.pressed("A") || inp.pressed("ArrowLeft")) {
+                this.cursorPosition.x -= 1
+            }
+            else if (inp.pressed("d") || inp.pressed("D") || inp.pressed("ArrowRight")) {
+                this.cursorPosition.x += 1
+            }
+        }
+
+        // click on object
         if (inp.mouseLeftReleased) {
             // determine the map coordinates the user clicked on
             const mxy = this.canvasToMapPoint(new geo.Point(inp.mouseX, inp.mouseY))
@@ -873,16 +896,16 @@ class App {
             }
 
         }
-        else if (inp.pressed("w") || inp.pressed("ArrowUp")) {
+        else if (inp.pressed("w") || inp.pressed("W") || inp.pressed("ArrowUp")) {
             position.y -= 1
         }
-        else if (inp.pressed("s") || inp.pressed("ArrowDown")) {
+        else if (inp.pressed("s") || inp.pressed("S") || inp.pressed("ArrowDown")) {
             position.y += 1
         }
-        else if (inp.pressed("a") || inp.pressed("ArrowLeft")) {
+        else if (inp.pressed("a") || inp.pressed("A") || inp.pressed("ArrowLeft")) {
             position.x -= 1
         }
-        else if (inp.pressed("d") || inp.pressed("ArrowRight")) {
+        else if (inp.pressed("d") || inp.pressed("D") || inp.pressed("ArrowRight")) {
             position.x += 1
         } else if (inp.pressed(" ")) {
             this.player.actionReserve += this.player.action
@@ -1049,6 +1072,7 @@ class App {
 
         this.drawThing(offset, this.player)
         this.drawHealthBar(offset, this.player)
+        this.drawCursor();
 
         this.renderer.flush()
     }
