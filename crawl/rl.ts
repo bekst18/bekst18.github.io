@@ -140,8 +140,17 @@ export class Weapon extends Item {
     }
 }
 
-export class RangedWeapon extends Weapon { }
-export class MeleeWeapon extends Weapon { }
+export class RangedWeapon extends Weapon {
+    clone(): RangedWeapon {
+        return new RangedWeapon(this)
+    }
+}
+
+export class MeleeWeapon extends Weapon {
+    clone(): Weapon {
+        return new MeleeWeapon(this)
+    }
+}
 
 export interface ArmorOptions extends ItemOptions {
     defense: number
@@ -387,9 +396,11 @@ export class Player extends Thing implements Creature {
     }
 
     equip(item: Item) {
+        console.log(item)
         if (item instanceof MeleeWeapon) {
             this.meleeWeapon = item
         } else if (item instanceof RangedWeapon) {
+            console.log("ranged weapon")
             this.rangedWeapon = item
         } else if (item instanceof Armor) {
             this.armor = item

@@ -29,14 +29,12 @@ const tileset: DungeonTileset = {
 }
 
 const monsters = [
-    /*
     things.bat.clone(),
     things.skeleton.clone(),
     things.greenSlime.clone(),
     things.redSlime.clone(),
     things.spider.clone(),
     things.rat.clone(),
-    */
     things.redy.clone(),
     things.fider.clone(),
 ]

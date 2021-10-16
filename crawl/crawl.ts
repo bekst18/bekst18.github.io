@@ -10,6 +10,26 @@ import * as things from "./things.js"
 import * as maps from "./maps.js"
 import * as rand from "../shared/rand.js"
 
+const enum Direction {
+    North,
+    South,
+    East,
+    West
+}
+
+function directionVector(dir: Direction): geo.Point {
+    switch (dir) {
+        case Direction.North:
+            return new geo.Point(0, -1)
+        case Direction.South:
+            return new geo.Point(0, 1)
+        case Direction.East:
+            return new geo.Point(1, 0)
+        case Direction.West:
+            return new geo.Point(-1, 0)
+    }
+}
+
 class Dialog {
     private readonly modalBackground = dom.byId("modalBackground") as HTMLDivElement
     constructor(public readonly elem: HTMLElement, private readonly canvas: HTMLCanvasElement) { }
@@ -565,7 +585,7 @@ class App {
         private readonly texture: gfx.Texture,
         private readonly imageMap: Map<string, number>) {
         player.inventory.add(things.healthPotion.clone())
-        player.inventory.add(things.slingShot) 
+        player.inventory.add(things.slingShot.clone())
     }
 
     public static async create(): Promise<App> {
@@ -608,9 +628,7 @@ class App {
 
         const nextCreature = this.getNextCreature()
         if (nextCreature instanceof rl.Player) {
-            if (this.handleInput()) {
-                this.updateVisibility()
-            }
+            this.handleInput()
         } else if (nextCreature instanceof rl.Monster) {
             this.tickMonster(nextCreature)
         } else {
@@ -839,121 +857,176 @@ class App {
         this.updateVisibility()
     }
 
-    private handleInput(): boolean {
-        const map = this.map
-        const player = this.player
+    private handleInput() {
         const inp = this.inp
-        const position = player.position.clone()
 
-        if (this.targetCommand !== TargetCommand.None) {
-            this.handleTargetingInput()
-            return false
+        // target
+        if (this.cursorPosition && (inp.pressed(input.Key.Enter) || inp.pressed(" "))) {
+            this.handleCursorTarget()
+            inp.flush()
+            return
         }
 
         // ctrl-key cursor movement
-        if (inp.held(input.Key.Control)) {
-            if (!this.cursorPosition) {
-                this.cursorPosition = position.clone();
-            }
+        if (this.handleCursorKeyboardMovement()) {
+            inp.flush()
+            return
+        }
 
-            if (inp.pressed("w") || inp.pressed("W") || inp.pressed("ArrowUp")) {
-                this.cursorPosition.y -= 1
-            }
-            else if (inp.pressed("s") || inp.pressed("S") || inp.pressed("ArrowDown")) {
-                this.cursorPosition.y += 1
-            }
-            else if (inp.pressed("a") || inp.pressed("A") || inp.pressed("ArrowLeft")) {
-                this.cursorPosition.x -= 1
-            }
-            else if (inp.pressed("d") || inp.pressed("D") || inp.pressed("ArrowRight")) {
-                this.cursorPosition.x += 1
-            }
+        if (this.handlePlayerKeyboardMovement()) {
+            inp.flush()
+            return
         }
 
         // click on object
-        if (inp.mouseLeftReleased) {
-            // determine the map coordinates the user clicked on
-            const mxy = this.canvasToMapPoint(new geo.Point(inp.mouseX, inp.mouseY))
-
-            const clickFixture = map.fixtureAt(mxy)
-            if (clickFixture) {
-                output.info(`You see ${clickFixture.name}`)
-                inp.flush()
-                return false
-            }
-
-            const clickCreature = map.monsterAt(mxy)
-            if (clickCreature) {
-                output.info(`You see ${clickCreature.name}`)
-                inp.flush()
-                return false
-            }
-
-            const dxy = mxy.subPoint(player.position)
-            const sgn = dxy.sign()
-            const abs = dxy.abs()
-
-            if (abs.x > 0 && abs.x >= abs.y) {
-                position.x += sgn.x
-            }
-
-            if (abs.y > 0 && abs.y > abs.x) {
-                position.y += sgn.y
-            }
-
-        }
-        else if (inp.pressed("w") || inp.pressed("W") || inp.pressed("ArrowUp")) {
-            position.y -= 1
-        }
-        else if (inp.pressed("s") || inp.pressed("S") || inp.pressed("ArrowDown")) {
-            position.y += 1
-        }
-        else if (inp.pressed("a") || inp.pressed("A") || inp.pressed("ArrowLeft")) {
-            position.x -= 1
-        }
-        else if (inp.pressed("d") || inp.pressed("D") || inp.pressed("ArrowRight")) {
-            position.x += 1
-        } else if (inp.pressed(" ")) {
-            this.player.actionReserve += this.player.action
-            this.player.action = 0
+        if (this.handleClick()) {
             inp.flush()
-            return true
+            return
         }
 
         inp.flush()
+    }
 
-        if (position.equal(player.position)) {
+    private handleCursorKeyboardMovement(): boolean {
+        const inp = this.inp
+        if (!inp.held(input.Key.Control)) {
             return false
         }
 
-        if (!this.map.inBounds(position)) {
-            return false
+        if (!this.cursorPosition) {
+            this.cursorPosition = this.player.position.clone();
         }
 
-        const tile = map.tileAt(position)
-        if (tile && !tile.passable) {
-            output.info(`Blocked by ${tile.name}`)
-            return false
-        }
-
-        const monster = map.monsterAt(position)
-        if (monster) {
-            this.processPlayerMeleeAttack(monster)
+        if (inp.pressed("w") || inp.pressed("W") || inp.pressed("ArrowUp")) {
+            this.cursorPosition.y -= 1
             return true
         }
 
-        const container = map.containerAt(position)
-        if (container) {
-            this.containerDialog.show(map, container)
+        if (inp.pressed("s") || inp.pressed("S") || inp.pressed("ArrowDown")) {
+            this.cursorPosition.y += 1
+            return true
+        }
+
+        if (inp.pressed("a") || inp.pressed("A") || inp.pressed("ArrowLeft")) {
+            this.cursorPosition.x -= 1
+            return true
+        }
+
+        if (inp.pressed("d") || inp.pressed("D") || inp.pressed("ArrowRight")) {
+            this.cursorPosition.x += 1
+            return true
+        }
+
+        if (inp.pressed(" ")) {
+            this.player.actionReserve += this.player.action
+            this.player.action = 0
+            return true
+        }
+
+        return false
+    }
+
+    private handleClick(): boolean {
+        // determine the map coordinates the user clicked on
+        const inp = this.inp
+
+        if (!inp.mouseLeftReleased) {
             return false
         }
 
-        const fixture = map.fixtureAt(position)
+        const mxy = this.canvasToMapPoint(new geo.Point(inp.mouseX, inp.mouseY))
+        const map = this.map
+        const player = this.player
+
+        const clickFixture = map.fixtureAt(mxy)
+        if (clickFixture) {
+            output.info(`You see ${clickFixture.name}`)
+            return true
+        }
+
+        const clickCreature = map.monsterAt(mxy)
+        if (clickCreature) {
+            output.info(`You see ${clickCreature.name}`)
+            return true
+        }
+
+        const dxy = mxy.subPoint(player.position)
+        const sgn = dxy.sign()
+        const abs = dxy.abs()
+
+        if (abs.x > 0 && abs.x >= abs.y) {
+            this.handleMove(sgn.x > 0 ? Direction.East : Direction.West)
+            return true
+        }
+
+        if (abs.y > 0 && abs.y > abs.x) {
+            this.handleMove(sgn.y > 0 ? Direction.South : Direction.North)
+            return true
+        }
+
+        return false
+    }
+
+    private handlePlayerKeyboardMovement(): boolean {
+        let inp = this.inp
+
+        if (inp.pressed("w") || inp.pressed("W") || inp.pressed("ArrowUp")) {
+            this.handleMove(Direction.North)
+            return true
+        }
+
+        if (inp.pressed("s") || inp.pressed("S") || inp.pressed("ArrowDown")) {
+            this.handleMove(Direction.South)
+            return true
+        }
+
+        if (inp.pressed("a") || inp.pressed("A") || inp.pressed("ArrowLeft")) {
+            this.handleMove(Direction.West)
+            return true
+        }
+
+        if (inp.pressed("d") || inp.pressed("D") || inp.pressed("ArrowRight")) {
+            this.handleMove(Direction.East)
+            return true
+        }
+
+        return false
+    }
+
+    private handleMove(dir: Direction) {
+        // clear cursor on movement
+        this.cursorPosition = undefined
+
+        let newPosition = this.player.position.addPoint(directionVector(dir))
+        if (!this.map.inBounds(newPosition)) {
+            return
+        }
+
+        const map = this.map
+        const tile = map.tileAt(newPosition)
+        if (tile && !tile.passable) {
+            output.info(`Blocked by ${tile.name}`)
+            return
+        }
+
+        const monster = map.monsterAt(newPosition)
+        if (monster) {
+            this.processPlayerMeleeAttack(monster)
+            return
+        }
+
+        const container = map.containerAt(newPosition)
+        if (container) {
+            this.containerDialog.show(map, container)
+            return
+        }
+
+        const fixture = map.fixtureAt(newPosition)
         if (fixture instanceof rl.Door) {
             output.info(`${fixture.name} opened`)
             this.map.fixtures.delete(fixture)
-            player.action -= 1
-            return true
+            this.player.action -= 1
+            return
         } else if (fixture instanceof rl.StairsUp) {
             output.error("Stairs not implemented")
         } else if (fixture instanceof rl.StairsDown) {
@@ -963,9 +1036,65 @@ class App {
             return false
         }
 
-        player.position = position
-        player.action -= 1
-        return true
+        this.player.position = newPosition
+        this.player.action -= 1
+        this.updateVisibility()
+
+        return
+    }
+
+    private handleCursorTarget() {
+        const cursorPosition = this.cursorPosition
+        if (!cursorPosition) {
+            return
+        }
+
+        const map = this.map
+        const tile = map.tileAt(cursorPosition)
+
+        if (!tile) {
+            output.info('Nothing here')
+            return
+        }
+
+        if (tile.visible !== rl.Visibility.Visible) {
+            output.info(`Target not visible`)
+            return
+        }
+
+        const player = this.player
+        const playerPosition = player.position
+        const distToTarget = geo.calcManhattenDist(playerPosition, cursorPosition)
+        const monster = map.monsterAt(cursorPosition)
+
+        if (monster && distToTarget <= 1) {
+            this.processPlayerMeleeAttack(monster)
+            return
+        }
+
+        if (monster && distToTarget > 1 && player.rangedWeapon) {
+            this.processPlayerRangedAttack(monster)
+            return
+        }
+
+        const container = map.containerAt(cursorPosition)
+        if (container && distToTarget <= 1) {
+            this.containerDialog.show(map, container)
+            return
+        }
+
+        const fixture = map.fixtureAt(cursorPosition)
+        if (fixture instanceof rl.Door && distToTarget <= 1) {
+            output.info(`${fixture.name} opened`)
+            this.map.fixtures.delete(fixture)
+            this.player.action -= 1
+            return
+        }
+
+        // lastly - perform a look
+        for (const th of this.map.at(cursorPosition)) {
+            output.info(`You see ${th.name}`)
+        }
     }
 
     private handleTargetingInput() {
@@ -1101,13 +1230,14 @@ class App {
             return
         }
 
-        this.drawImage(offset, this.cursorPosition, "../assets/cursor.png")
+        this.drawImage(offset, this.cursorPosition, "./assets/cursor.png", gfx.Color.red)
     }
 
     private drawImage(offset: geo.Point, position: geo.Point, image: string, color: gfx.Color = gfx.Color.white) {
         const spritePosition = position.mulScalar(this.tileSize).addPoint(offset)
         const layer = this.imageMap.get(image)
-        if (!layer) {
+
+        if (layer === undefined) {
             throw new Error(`Missing image mapping: ${image}`)
         }
 
@@ -1183,6 +1313,7 @@ class App {
                 this.targetCommand = TargetCommand.Look
                 break;
 
+            /*
             case "ENTER":
                 if (ev.ctrlKey && this.player.rangedWeapon) {
                     this.targetCommand = TargetCommand.Shoot
@@ -1194,6 +1325,7 @@ class App {
             case "L":
                 this.targetCommand = TargetCommand.Shoot
                 break;
+                */
 
             case "=":
                 this.zoom = Math.min(this.zoom * 2, 16)
@@ -1206,6 +1338,10 @@ class App {
                 break
         }
     }
+
+    private saveState() {
+
+    }
 }
 
 async function loadImages(renderer: gfx.Renderer, map: maps.Map): Promise<[gfx.Texture, Map<string, number>]> {
@@ -1213,7 +1349,7 @@ async function loadImages(renderer: gfx.Renderer, map: maps.Map): Promise<[gfx.T
     // store mapping from image url to index
     const imageUrls = iter.wrap(map).map(th => th.image).filter().distinct().toArray()
     imageUrls.push("./assets/cursor.png")
-    
+
     const imageMap = new Map<string, number>(imageUrls.map((url, i) => [url, i]))
     const images = await Promise.all(imageUrls.map(url => dom.loadImage(url)))
     const texture = renderer.bakeTextureArray(rl.tileSize, rl.tileSize, images)
