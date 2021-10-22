@@ -3,8 +3,17 @@
  */
 import * as array from "../shared/array.js"
 
+export interface PointOptions {
+    x: number,
+    y: number
+}
+
 export class Point {
     constructor(public x: number, public y: number) { }
+
+    static fromJSON(options: PointOptions): Point {
+        return new Point(options.x, options.y)
+    }
 
     equal(pt: Point): boolean {
         return this.x === pt.x && this.y === pt.y
@@ -76,6 +85,13 @@ export class Point {
 
     clone(): Point {
         return new Point(this.x, this.y)
+    }
+
+    toJSON(): PointOptions {
+        return {
+            x: this.x,
+            y: this.y,
+        }
     }
 
     static inf() {

@@ -569,9 +569,9 @@ class App {
     private readonly shootButton = dom.byId("shootButton") as HTMLButtonElement
     private readonly lookButton = dom.byId("lookButton") as HTMLButtonElement
     private readonly inp: input.Input = new input.Input(this.canvas)
-    private readonly statsDialog = new StatsDialog(this.player, this.canvas)
-    private readonly inventoryDialog = new InventoryDialog(this.player, this.canvas)
-    private readonly containerDialog = new ContainerDialog(this.player, this.canvas)
+    private readonly statsDialog: StatsDialog
+    private readonly inventoryDialog: InventoryDialog
+    private readonly containerDialog: ContainerDialog
     private readonly defeatDialog = new DefeatDialog(this.canvas)
     private zoom = 1
     private targetCommand: TargetCommand = TargetCommand.None
@@ -580,10 +580,14 @@ class App {
     private constructor(
         private readonly rng: rand.RNG,
         private readonly renderer: gfx.Renderer,
-        private readonly player: rl.Player,
         private map: maps.Map,
         private readonly texture: gfx.Texture,
         private readonly imageMap: Map<string, number>) {
+        const player = map.player.thing
+        this.statsDialog = new StatsDialog(player, this.canvas)
+        this.inventoryDialog = new InventoryDialog(player, this.canvas)
+        this.containerDialog = new ContainerDialog(player, this.canvas)
+
         player.inventory.add(things.healthPotion.clone())
         player.inventory.add(things.slingShot.clone())
     }
@@ -596,7 +600,7 @@ class App {
         const player = things.player.clone()
         const map = await gen.generateDungeonLevel(rng, player, 32, 32)
         const [texture, imageMap] = await loadImages(renderer, map)
-        const app = new App(rng, renderer, player, map, texture, imageMap)
+        const app = new App(rng, renderer, map, texture, imageMap)
         return app
     }
 
@@ -627,10 +631,10 @@ class App {
         this.handleResize()
 
         const nextCreature = this.getNextCreature()
-        if (nextCreature instanceof rl.Player) {
+        if (nextCreature?.thing instanceof rl.Player) {
             this.handleInput()
-        } else if (nextCreature instanceof rl.Monster) {
-            this.tickMonster(nextCreature)
+        } else if (nextCreature?.thing instanceof rl.Monster) {
+            this.tickMonster(nextCreature.position, nextCreature.thing)
         } else {
             this.tickRound()
         }
@@ -639,19 +643,19 @@ class App {
         requestAnimationFrame(() => this.tick())
     }
 
-    private getNextMonster(): rl.Monster | null {
+    private getNextMonster(): maps.Placed<rl.Monster> | null {
         // determine whose turn it is
         let nextMonster = null
         for (const monster of this.map.monsters) {
-            if (monster.state !== rl.MonsterState.aggro) {
+            if (monster.thing.state !== rl.MonsterState.aggro) {
                 continue
             }
 
-            if (monster.action <= 0) {
+            if (monster.thing.action <= 0) {
                 continue
             }
 
-            if (!nextMonster || monster.action > nextMonster.action) {
+            if (!nextMonster || monster.thing.action > nextMonster.thing.action) {
                 nextMonster = monster
             }
         }
@@ -659,10 +663,12 @@ class App {
         return nextMonster
     }
 
-    private getNextCreature(): rl.Monster | rl.Player | null {
+    private getNextCreature(): maps.Placed<rl.Monster> | maps.Placed<rl.Player> | null {
         const monster = this.getNextMonster()
-        if (this.player.action > 0 && this.player.action > (monster?.action ?? 0)) {
-            return this.player
+        const player = this.map.player.thing
+
+        if (player.action > 0 && player.action > (monster?.thing?.action ?? 0)) {
+            return this.map.player
         }
 
         return monster
@@ -670,23 +676,24 @@ class App {
 
     private tickRound() {
         // accumulate action points
-        for (const monster of iter.filter(this.map.monsters, m => m.state === rl.MonsterState.aggro)) {
+        for (const monster of iter.filter(this.map.monsters.things(), m => m.state === rl.MonsterState.aggro)) {
             const reserve = Math.min(monster.actionReserve, monster.agility)
             monster.action = 1 + monster.agility + reserve
             monster.actionReserve = 0
         }
 
         // cap action reserve 
-        const reserve = Math.min(this.player.actionReserve, this.player.agility)
-        this.player.action = 1 + this.player.agility + reserve
-        this.player.actionReserve = 0
+        const player = this.map.player.thing
+        const reserve = Math.min(player.actionReserve, player.agility)
+        player.action = 1 + player.agility + reserve
+        player.actionReserve = 0
 
         this.updateMonsterStates()
     }
 
     private getScrollOffset(): geo.Point {
         // convert map point to canvas point, noting that canvas is centered on player
-        const playerPosition = this.player.position
+        const playerPosition = this.map.player.position
         const canvasCenter = new geo.Point(this.canvas.width / 2, this.canvas.height / 2)
         const offset = canvasCenter.subPoint(playerPosition.addScalar(.5).mulScalar(this.tileSize))
         return offset.floor()
@@ -708,7 +715,7 @@ class App {
         // base 60% chance to hit
         // 10% bonus / penalty for every point difference between attack and defense
         // bottoms out at 5% - always SOME chance to hit
-        const attacker = this.player
+        const attacker = this.map.player.thing
         const bonus = (attacker.meleeAttack - defender.defense) * .1
         const hitChance = Math.min(Math.max(.6 + bonus, .05), .95)
         const hit = rand.chance(this.rng, hitChance)
@@ -728,7 +735,7 @@ class App {
 
         if (defender.health < 0) {
             output.warning(`${defender.name} has been defeated and ${attacker.name} receives ${defender.experience} experience`)
-            this.player.experience += defender.experience
+            attacker.experience += defender.experience
             this.map.monsters.delete(defender)
         }
     }
@@ -737,7 +744,7 @@ class App {
         // base 40% chance to hit
         // 10% bonus / penalty for every point difference between attack and defense
         // bottoms out at 5% - always SOME chance to hit
-        const attacker = this.player
+        const attacker = this.map.player.thing
         if (!attacker.rangedWeapon) {
             throw new Error("Player has no ranged weapon equipped")
         }
@@ -761,7 +768,7 @@ class App {
 
         if (defender.health < 0) {
             output.warning(`${defender.name} has been defeated and ${attacker.name} receives ${defender.experience} experience`)
-            this.player.experience += defender.experience
+            attacker.experience += defender.experience
             this.map.monsters.delete(defender)
         }
     }
@@ -771,7 +778,7 @@ class App {
         // 10% bonus / penalty for every point difference between attack and defense
         // clamps to out at [5, 95] - always SOME chance to hit or miss
         // choose an attack from repertoire of monster
-        const defender = this.player
+        const defender = this.map.player.thing
         const bonus = (attack.attack - defender.defense) * .1
         const hitChance = Math.max(.6 + bonus, .05)
         const hit = rand.chance(this.rng, hitChance)
@@ -800,25 +807,29 @@ class App {
         }
     }
 
-    private updateMonsterState(monster: rl.Monster) {
+    private updateMonsterState(placedMonster: maps.Placed<rl.Monster>) {
         // aggro state
         const map = this.map
+        let { position, thing: monster } = placedMonster
+
         const lightRadius = this.calcLightRadius()
-        if (monster.state !== rl.MonsterState.aggro && canSee(map, monster.position, map.player.position, lightRadius)) {
+        if (monster.state !== rl.MonsterState.aggro && canSee(map, position, map.player.position, lightRadius)) {
             monster.action = 0
             monster.state = rl.MonsterState.aggro
         }
 
-        if (monster.state === rl.MonsterState.aggro && !canSee(map, monster.position, map.player.position, lightRadius)) {
+        if (monster.state === rl.MonsterState.aggro && !canSee(map, position, map.player.position, lightRadius)) {
             monster.action = 0
             monster.state = rl.MonsterState.idle
         }
     }
 
-    private tickMonster(monster: rl.Monster) {
+    private tickMonster(monsterPosition: geo.Point, monster: rl.Monster) {
         // if player is within reach (and alive), attack
-        if (this.player.health > 0) {
-            const distanceToPlayer = geo.calcManhattenDist(this.player.position, monster.position)
+        let { position: playerPosition, thing: player } = this.map.player
+
+        if (player.health > 0) {
+            const distanceToPlayer = geo.calcManhattenDist(playerPosition, monsterPosition)
             const attacks = monster.attacks.filter(a => a.range >= distanceToPlayer)
             if (attacks.length > 0) {
                 const attack = rand.choose(this.rng, attacks)
@@ -830,7 +841,7 @@ class App {
         // determine whether monster can see player
         // seek and destroy
         const map = this.map
-        const path = maps.findPath(map, monster.position, this.player.position)
+        const path = maps.findPath(map, monsterPosition, playerPosition)
         if (path.length === 0) {
             // pass
             monster.action = 0
@@ -840,7 +851,7 @@ class App {
         const position = path[0]
         if (map.isPassable(position)) {
             monster.action -= 1
-            monster.position = path[0]
+            monsterPosition = path[0]
         } else {
             monster.action = 0
         }
@@ -893,8 +904,10 @@ class App {
             return false
         }
 
+        const { position: playerPosition, thing: player } = this.map.player
+
         if (!this.cursorPosition) {
-            this.cursorPosition = this.player.position.clone();
+            this.cursorPosition = playerPosition.clone()
         }
 
         if (inp.pressed("w") || inp.pressed("W") || inp.pressed("ArrowUp")) {
@@ -918,8 +931,8 @@ class App {
         }
 
         if (inp.pressed(" ")) {
-            this.player.actionReserve += this.player.action
-            this.player.action = 0
+            player.actionReserve += player.action
+            player.action = 0
             return true
         }
 
@@ -936,7 +949,7 @@ class App {
 
         const mxy = this.canvasToMapPoint(new geo.Point(inp.mouseX, inp.mouseY))
         const map = this.map
-        const player = this.player
+        const { position: playerPosition, thing: player } = this.map.player
 
         const clickFixture = map.fixtureAt(mxy)
         if (clickFixture) {
@@ -950,7 +963,7 @@ class App {
             return true
         }
 
-        const dxy = mxy.subPoint(player.position)
+        const dxy = mxy.subPoint(playerPosition)
         const sgn = dxy.sign()
         const abs = dxy.abs()
 
@@ -996,8 +1009,9 @@ class App {
     private handleMove(dir: Direction) {
         // clear cursor on movement
         this.cursorPosition = undefined
+        const { position: playerPosition, thing: player } = this.map.player
 
-        let newPosition = this.player.position.addPoint(directionVector(dir))
+        let newPosition = playerPosition.addPoint(directionVector(dir))
         if (!this.map.inBounds(newPosition)) {
             return
         }
@@ -1025,7 +1039,7 @@ class App {
         if (fixture instanceof rl.Door) {
             output.info(`${fixture.name} opened`)
             this.map.fixtures.delete(fixture)
-            this.player.action -= 1
+            player.action -= 1
             return
         } else if (fixture instanceof rl.StairsUp) {
             output.error("Stairs not implemented")
@@ -1036,8 +1050,8 @@ class App {
             return false
         }
 
-        this.player.position = newPosition
-        this.player.action -= 1
+        map.player.position = newPosition
+        player.action -= 1
         this.updateVisibility()
 
         return
@@ -1062,8 +1076,7 @@ class App {
             return
         }
 
-        const player = this.player
-        const playerPosition = player.position
+        const { position: playerPosition, thing: player } = this.map.player
         const distToTarget = geo.calcManhattenDist(playerPosition, cursorPosition)
         const monster = map.monsterAt(cursorPosition)
 
@@ -1087,7 +1100,7 @@ class App {
         if (fixture instanceof rl.Door && distToTarget <= 1) {
             output.info(`${fixture.name} opened`)
             this.map.fixtures.delete(fixture)
-            this.player.action -= 1
+            player.action -= 1
             return
         }
 
@@ -1107,7 +1120,7 @@ class App {
         const mxy = this.canvasToMapPoint(cxy)
 
         const lightRadius = this.calcLightRadius()
-        if (!canSee(this.map, this.player.position, mxy, lightRadius)) {
+        if (!canSee(this.map, this.map.player.position, mxy, lightRadius)) {
             this.inp.flush()
             output.error(`Can't see!`)
             return false
@@ -1148,7 +1161,7 @@ class App {
         // update visibility around player
         // limit radius to visible viewport area
         const lightRadius = this.calcLightRadius()
-        maps.updateVisibility(this.map, this.player.position, lightRadius)
+        maps.updateVisibility(this.map, lightRadius)
     }
 
     private calcMapViewport(): geo.AABB {
@@ -1166,7 +1179,7 @@ class App {
             return viewportLightRadius
         }
 
-        return Math.min(viewportLightRadius, this.player.lightRadius)
+        return Math.min(viewportLightRadius, this.map.player.thing.lightRadius)
     }
 
     private drawFrame() {
@@ -1181,7 +1194,7 @@ class App {
             this.canvas.style.cursor = ""
         }
 
-        this.shootButton.disabled = !this.player.rangedWeapon
+        this.shootButton.disabled = !this.map.player.thing.rangedWeapon
 
         const map = this.map
         const tiles = map.tiles.within(viewportAABB)
@@ -1205,24 +1218,25 @@ class App {
             this.drawThing(offset, creature)
         }
 
-        this.drawThing(offset, this.player)
-        this.drawHealthBar(offset, this.player)
+        this.drawThing(offset, this.map.player)
+        this.drawHealthBar(offset, this.map.player)
         this.drawCursor(offset);
 
         this.renderer.flush()
     }
 
-    private drawThing(offset: geo.Point, th: rl.Thing) {
-        if (th.visible === rl.Visibility.None) {
+    private drawThing(offset: geo.Point, placedThing: maps.Placed<rl.Thing>) {
+        const { position, thing } = placedThing
+        if (thing.visible === rl.Visibility.None) {
             return
         }
 
-        const color = th.color.clone()
-        if (th.visible === rl.Visibility.Fog) {
+        const color = thing.color.clone()
+        if (thing.visible === rl.Visibility.Fog) {
             color.a = .5
         }
 
-        this.drawImage(offset, th.position, th.image, color)
+        this.drawImage(offset, position, thing.image, color)
     }
 
     private drawCursor(offset: geo.Point) {
@@ -1254,15 +1268,12 @@ class App {
         this.renderer.drawSprite(sprite)
     }
 
-    private drawHealthBar(offset: geo.Point, creature: rl.Creature) {
-        if (!creature.position) {
-            return
-        }
-
+    private drawHealthBar(offset: geo.Point, placedCreature: maps.Placed<rl.Creature>) {
+        const { position, thing: creature } = placedCreature
         const health = Math.max(creature.health, 0)
         const borderWidth = health * 4 + 2
         const interiorWidth = health * 4
-        const spritePosition = creature.position.mulScalar(this.tileSize).addPoint(offset).subPoint(new geo.Point(0, this.tileSize / 2))
+        const spritePosition = position.mulScalar(this.tileSize).addPoint(offset).subPoint(new geo.Point(0, this.tileSize / 2))
         this.renderer.drawSprite(new gfx.Sprite({
             position: spritePosition,
             color: gfx.Color.white,
@@ -1347,7 +1358,7 @@ class App {
 async function loadImages(renderer: gfx.Renderer, map: maps.Map): Promise<[gfx.Texture, Map<string, number>]> {
     // bake all 24x24 tile images to a single array texture
     // store mapping from image url to index
-    const imageUrls = iter.wrap(map).map(th => th.image).filter().distinct().toArray()
+    const imageUrls = iter.wrap(map.things()).map(th => th.image).filter().distinct().toArray()
     imageUrls.push("./assets/cursor.png")
 
     const imageMap = new Map<string, number>(imageUrls.map((url, i) => [url, i]))

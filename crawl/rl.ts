@@ -14,7 +14,6 @@ export enum Visibility {
 }
 
 export interface ThingOptions {
-    position?: geo.Point
     passable: boolean
     transparent: boolean
     name: string
@@ -23,7 +22,6 @@ export interface ThingOptions {
 }
 
 export class Thing {
-    position: geo.Point
     passable: boolean
     transparent: boolean
     name: string
@@ -32,7 +30,6 @@ export class Thing {
     visible: Visibility = Visibility.None
 
     constructor(options: ThingOptions) {
-        this.position = options.position?.clone() ?? new geo.Point(-1, -1)
         this.passable = options.passable
         this.transparent = options.transparent
         this.name = options.name
@@ -269,6 +266,12 @@ export interface Creature extends Thing {
     agility: number
     action: number
     actionReserve: number
+}
+
+export interface CreatureState {
+    health: number,
+    action: number,
+    actionReserve: number,
 }
 
 export interface PlayerOptions extends CreatureOptions {

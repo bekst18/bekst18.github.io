@@ -78,7 +78,7 @@ export async function generateDungeonLevel(rng: rand.RNG, player: rl.Player, wid
 }
 
 function generateMapRooms(rng: rand.RNG, width: number, height: number, player: rl.Player): maps.Map {
-    const map = new maps.Map(width, height, 1, player)
+    const map = new maps.Map(width, height, 1, { position: new geo.Point(0, 0), thing: player })
     const minRooms = 4
 
     const [cells, rooms] = (() => {
@@ -99,8 +99,7 @@ function generateMapRooms(rng: rand.RNG, width: number, height: number, player: 
         throw new Error("Failed to place stairs up")
     }
 
-    stairsUp.position = stairsUpPosition.clone()
-    map.fixtures.add(stairsUp)
+    map.fixtures.set(stairsUpPosition.clone(), stairsUp)
 
     const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
     const stairsDown = tileset.stairsDown.clone()
@@ -109,8 +108,7 @@ function generateMapRooms(rng: rand.RNG, width: number, height: number, player: 
         throw new Error("Failed to place stairs down")
     }
 
-    stairsDown.position = stairsDownPosition.clone()
-    map.fixtures.add(stairsDown)
+    map.fixtures.set(stairsDownPosition.clone(), stairsDown)
 
     // generate tiles and fixtures from cells
     for (const [v, x, y] of cells.scan()) {
@@ -124,26 +122,26 @@ function generateMapRooms(rng: rand.RNG, width: number, height: number, player: 
 
             case CellType.Interior: {
                 const tile = tileset.floor.clone()
-                tile.position = new geo.Point(x, y)
-                map.tiles.add(tile)
+                const position = new geo.Point(x, y)
+                map.tiles.set(position, tile)
             }
                 break
 
             case CellType.Wall: {
                 const tile = tileset.wall.clone()
-                tile.position = new geo.Point(x, y)
-                map.tiles.add(tile)
+                const position = new geo.Point(x, y)
+                map.tiles.set(position, tile)
             }
                 break
 
             case CellType.Door: {
                 const fixture = tileset.door.clone()
-                fixture.position = new geo.Point(x, y)
-                map.fixtures.add(fixture)
+                const position = new geo.Point(x, y)
+                map.fixtures.set(position, fixture)
 
                 const tile = tileset.floor.clone()
-                tile.position = new geo.Point(x, y)
-                map.tiles.add(tile)
+                const tilePosition = new geo.Point(x, y)
+                map.tiles.set(tilePosition, tile)
             }
                 break
         }
@@ -193,13 +191,12 @@ function tryPlaceMonster(rng: rand.RNG, cells: CellGrid, room: Room, map: maps.M
             continue
         }
 
-        if (iter.any(map, th => (th.position?.equal(pt) ?? false) && !th.passable)) {
+        if (iter.any(map, th => (th.position?.equal(pt) ?? false) && !th.thing.passable)) {
             continue
         }
 
         const monster = rand.choose(rng, monsters).clone()
-        monster.position = pt.clone()
-        map.monsters.add(monster)
+        map.monsters.set(pt, monster)
 
         return true
     }
@@ -232,12 +229,11 @@ function tryPlaceTreasure(rng: rand.RNG, cells: CellGrid, room: Room, map: maps.
             continue
         }
 
-        if (iter.any(map, th => (th.position?.equal(pt) ?? false) && !th.passable)) {
+        if (iter.any(map, th => (th.position?.equal(pt) ?? false) && !th.thing.passable)) {
             continue
         }
 
         const chest = things.chest.clone()
-        chest.position = pt.clone()
 
         // choose loot
         const item = rand.choose(rng, loot)
@@ -251,7 +247,7 @@ function tryPlaceTreasure(rng: rand.RNG, cells: CellGrid, room: Room, map: maps.
             chest.items.add(item)
         }
 
-        map.containers.add(chest)
+        map.containers.set(pt, chest)
         return true
     }
 
@@ -438,9 +434,8 @@ function isValidPlacement(src: CellGrid, dst: CellGrid, offset: geo.Point): bool
 }
 
 export async function generateOutdoorMap(player: rl.Player, width: number, height: number): Promise<maps.Map> {
-    const map = new maps.Map(width, height, 0, player)
+    const map = new maps.Map(width, height, 0, { position: new geo.Point(0, 0), thing: player })
     map.lighting = maps.Lighting.Ambient
-    player.position = new geo.Point(0, 0)
     generateOutdoorTerrain(map)
     return map
 }
@@ -483,29 +478,25 @@ function generateOutdoorTerrain(map: maps.Map) {
         switch (t) {
             case (OutdoorTileType.water): {
                 const tile = things.water.clone()
-                tile.position = new geo.Point(x, y)
-                map.tiles.add(tile)
+                map.tiles.set(new geo.Point(x, y), tile)
             }
                 break
 
             case (OutdoorTileType.dirt): {
                 const tile = things.dirt.clone()
-                tile.position = new geo.Point(x, y)
-                map.tiles.add(tile)
+                map.tiles.set(new geo.Point(x, y), tile)
             }
                 break
 
             case (OutdoorTileType.grass): {
                 const tile = things.grass.clone()
-                tile.position = new geo.Point(x, y)
-                map.tiles.add(tile)
+                map.tiles.set(new geo.Point(x, y), tile)
             }
                 break
 
             case (OutdoorTileType.sand): {
                 const tile = things.sand.clone()
-                tile.position = new geo.Point(x, y)
-                map.tiles.add(tile)
+                map.tiles.set(new geo.Point(x, y), tile)
             }
                 break
         }
@@ -515,29 +506,25 @@ function generateOutdoorTerrain(map: maps.Map) {
         switch (f) {
             case (OutdoorFixtureType.hills): {
                 const fixture = things.hills.clone()
-                fixture.position = new geo.Point(x, y)
-                map.fixtures.add(fixture)
+                map.fixtures.set(new geo.Point(x, y), fixture)
             }
                 break
 
             case (OutdoorFixtureType.mountains): {
                 const fixture = things.mountains.clone()
-                fixture.position = new geo.Point(x, y)
-                map.fixtures.add(fixture)
+                map.fixtures.set(new geo.Point(x, y), fixture)
             }
                 break
 
             case (OutdoorFixtureType.trees): {
                 const fixture = things.trees.clone()
-                fixture.position = new geo.Point(x, y)
-                map.fixtures.add(fixture)
+                map.fixtures.set(new geo.Point(x, y), fixture)
             }
                 break
 
             case (OutdoorFixtureType.snow): {
                 const fixture = things.snow.clone()
-                fixture.position = new geo.Point(x, y)
-                map.fixtures.add(fixture)
+                map.fixtures.set(new geo.Point(x, y), fixture)
             }
                 break
         }

@@ -3,63 +3,88 @@ import * as iter from "../shared/iter.js"
 import * as rl from "./rl.js"
 import * as grid from "../shared/grid.js"
 
+export interface Placed<T extends rl.Thing> {
+    thing: T,
+    position: geo.Point,
+}
+
 /**
  * a layer of things on a map
  */
 export interface Layer<T extends rl.Thing> {
-    add(item: T): void
-    delete(item: T): void
-    has(item: T): boolean
-    at(position: geo.Point): T | null
-    within(aabb: geo.AABB): Generator<T>
+    set(position: geo.Point, thing: T): void
+    delete(thing: T): void
+    has(thing: T): boolean
+    at(position: geo.Point): T | undefined
+    within(aabb: geo.AABB): Generator<Placed<T>>,
+    thingsWithin(aabb: geo.AABB): Generator<T>,
+    where(thing: T): geo.Point | undefined,
     size: number
-    [Symbol.iterator](): Generator<T>
+    [Symbol.iterator](): Generator<Placed<T>>
+    things(): Generator<T>
 }
 
 /**
  * a layer that is based on a set
  * works well for sparse layers
  */
-export class SetLayer<T extends rl.Thing> implements Layer<T> {
-    private readonly set = new Set<T>()
+export class MapLayer<T extends rl.Thing> implements Layer<T> {
+    private readonly map = new window.Map<T, Placed<T>>()
 
-    add(item: T): void {
-        this.set.add(item)
+    set(position: geo.Point, thing: T): void {
+        position = position.clone()
+        this.map.set(thing, { thing, position })
     }
 
-    delete(item: T): void {
-        this.set.delete(item)
+    delete(thing: T): void {
+        this.map.delete(thing)
     }
 
-    has(item: T): boolean {
-        return this.set.has(item)
+    has(thing: T): boolean {
+        return this.map.has(thing)
     }
 
-    at(position: geo.Point): T | null {
-        for (const value of this.set) {
-            if (value.position?.equal(position)) {
-                return value
+    at(position: geo.Point): T | undefined {
+        for (const pth of this.map.values()) {
+            if (pth.position.equal(position)) {
+                return pth.thing
             }
         }
 
-        return null
+        return undefined
     }
 
-    *within(aabb: geo.AABB): Generator<T> {
-        for (const item of this.set) {
-            if (aabb.contains(item.position)) {
-                yield item
+    where(thing: T): geo.Point | undefined {
+        return this.map.get(thing)?.position?.clone()
+    }
+
+    *within(aabb: geo.AABB): Generator<Placed<T>> {
+        for (const pth of this.map.values()) {
+            if (aabb.contains(pth.position)) {
+                yield pth
             }
         }
     }
 
     get size() {
-        return this.set.size
+        return this.map.size
     }
 
-    *[Symbol.iterator](): Generator<T> {
-        for (const value of this.set) {
+    *[Symbol.iterator](): Generator<Placed<T>> {
+        for (const value of this.map.values()) {
             yield value
+        }
+    }
+
+    *things(): Generator<T> {
+        for (const th of this.map.keys()) {
+            yield th
+        }
+    }
+
+    *thingsWithin(aabb: geo.AABB): Generator<T> {
+        for (const pth of this.within(aabb)) {
+            yield pth.thing
         }
     }
 }
@@ -70,11 +95,11 @@ export class SetLayer<T extends rl.Thing> implements Layer<T> {
  * works well for dense layers
  */
 export class GridLayer<T extends rl.Thing> implements Layer<T> {
-    private readonly set = new Set<T>()
-    private readonly grd: grid.Grid<T | null>
+    private readonly map = new MapLayer<T>()
+    private readonly grd: grid.Grid<T | undefined>
 
     constructor(width: number, height: number) {
-        this.grd = grid.generate(width, height, () => null)
+        this.grd = grid.generate(width, height, () => undefined)
     }
 
     get width() {
@@ -85,40 +110,70 @@ export class GridLayer<T extends rl.Thing> implements Layer<T> {
         return this.grd.height
     }
 
-    add(item: T): void {
-        this.grd.setPoint(item.position, item)
-        this.set.add(item)
+    set(position: geo.Point, thing: T): void {
+        // remove from grid if already present
+        const oldPosition = this.map.where(thing)
+        if (oldPosition) {
+            this.grd.setPoint(oldPosition, undefined)
+        }
+
+        this.grd.setPoint(position, thing)
+        this.map.set(position, thing)
     }
 
-    delete(item: T): void {
-        this.grd.setPoint(item.position, null)
-        this.set.delete(item)
+    delete(thing: T): void {
+        const pos = this.map.where(thing)
+        if (!pos) {
+            return
+        }
+
+        this.grd.setPoint(pos, undefined)
+        this.map.delete(thing)
     }
 
     has(item: T): boolean {
-        return this.set.has(item)
+        return this.map.has(item)
     }
 
-    at(position: geo.Point): T | null {
+    at(position: geo.Point): T | undefined {
         return this.grd.atPoint(position)
     }
 
-    *within(aabb: geo.AABB): Generator<T> {
-        for (const [item] of this.grd.scanAABB(aabb)) {
-            if (item) {
-                yield item
+    where(thing: T): geo.Point | undefined {
+        return this.map.where(thing)
+    }
+
+    *within(aabb: geo.AABB): Generator<Placed<T>> {
+        for (const [thing, x, y] of this.grd.scanAABB(aabb)) {
+            if (!thing) {
+                continue
+            }
+
+            yield {
+                position: new geo.Point(x, y),
+                thing,
             }
         }
     }
 
-    get size() {
-        return this.set.size
+    *thingsWithin(aabb: geo.AABB): Generator<T> {
+        for (const pth of this.within(aabb)) {
+            yield pth.thing
+        }
     }
 
-    *[Symbol.iterator](): Generator<T> {
-        for (const value of this.set) {
+    get size() {
+        return this.map.size
+    }
+
+    *[Symbol.iterator](): Generator<Placed<T>> {
+        for (const value of this.map) {
             yield value
         }
+    }
+
+    things(): Generator<T> {
+        return this.map.things()
     }
 }
 
@@ -137,17 +192,17 @@ export class Map {
     containers: Layer<rl.Container>
     lighting: Lighting = Lighting.None
 
-    constructor(readonly width: number, readonly height: number, readonly depth: number, readonly player: rl.Player) {
+    constructor(readonly width: number, readonly height: number, readonly depth: number, readonly player: Placed<rl.Player>) {
         this.tiles = new GridLayer(width, height)
-        this.fixtures = new SetLayer()
-        this.monsters = new SetLayer()
-        this.containers = new SetLayer()
+        this.fixtures = new MapLayer()
+        this.monsters = new MapLayer()
+        this.containers = new MapLayer()
     }
 
     /**
       * iterate over all things in map
     */
-    public *[Symbol.iterator](): Generator<rl.Thing> {
+    public *[Symbol.iterator](): Generator<Placed<rl.Thing>> {
         for (const tile of this.tiles) {
             yield tile
         }
@@ -167,19 +222,28 @@ export class Map {
         yield this.player
     }
 
-    tileAt(xy: geo.Point): rl.Tile | null {
+    /**
+     * iterate over all things in map
+   */
+    public *things(): Generator<rl.Thing> {
+        for (const pth of this) {
+            yield pth.thing
+        }
+    }
+
+    tileAt(xy: geo.Point): rl.Tile | undefined {
         return this.tiles.at(xy)
     }
 
-    fixtureAt(xy: geo.Point): rl.Fixture | null {
+    fixtureAt(xy: geo.Point): rl.Fixture | undefined {
         return this.fixtures.at(xy)
     }
 
-    containerAt(xy: geo.Point): rl.Container | null {
+    containerAt(xy: geo.Point): rl.Container | undefined {
         return this.containers.at(xy)
     }
 
-    monsterAt(xy: geo.Point): rl.Monster | null {
+    monsterAt(xy: geo.Point): rl.Monster | undefined {
         return this.monsters.at(xy)
     }
 
@@ -205,7 +269,7 @@ export class Map {
         }
 
         if (this.player.position.equal(xy)) {
-            yield this.player
+            yield this.player.thing
         }
     }
 
@@ -220,20 +284,22 @@ export class Map {
 
 function resetVisibility(map: Map) {
     for (const th of map) {
-        if (th.visible === rl.Visibility.Visible) {
-            th.visible = rl.Visibility.Fog
+        if (th.thing.visible === rl.Visibility.Visible) {
+            th.thing.visible = rl.Visibility.Fog
         }
     }
 
     for (const monster of map.monsters) {
-        monster.visible = rl.Visibility.None
+        monster.thing.visible = rl.Visibility.None
     }
 
-    map.player.visible = rl.Visibility.Visible
+    map.player.thing.visible = rl.Visibility.Visible
 }
 
-export function updateVisibility(map: Map, eye: geo.Point, radius: number) {
+export function updateVisibility(map: Map, radius: number) {
     resetVisibility(map)
+
+    const eye = map.player.position
     for (let i = 0; i < 8; ++i) {
         updateVisibilityOctant(map, eye, radius, i)
     }
