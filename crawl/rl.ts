@@ -443,7 +443,6 @@ export class Player extends Thing implements Creature {
     }
 
     delete(item: Item) {
-
         if (isEquippable(item)) {
             this.remove(item)
         }
@@ -564,4 +563,8 @@ export function getExperienceRequirement(level: number): number {
     }
 
     return levels[level - 2]
+}
+
+interface PlayerSaveState {
+    
 }

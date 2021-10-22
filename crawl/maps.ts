@@ -24,6 +24,10 @@ export interface Layer<T extends rl.Thing> {
     things(): Generator<T>
 }
 
+interface LayerSaveState  {
+    
+}
+
 /**
  * a layer that is based on a set
  * works well for sparse layers
