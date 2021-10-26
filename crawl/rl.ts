@@ -1,7 +1,6 @@
 /**
  * rogue-like library
  */
-import * as geo from "../shared/geo2d.js"
 import * as rand from "../shared/rand.js"
 import * as gfx from "./gfx.js"
 
@@ -14,6 +13,7 @@ export enum Visibility {
 }
 
 export interface ThingOptions {
+    id: string
     passable: boolean
     transparent: boolean
     name: string
@@ -22,6 +22,7 @@ export interface ThingOptions {
 }
 
 export class Thing {
+    id: string
     passable: boolean
     transparent: boolean
     name: string
@@ -30,6 +31,7 @@ export class Thing {
     visible: Visibility = Visibility.None
 
     constructor(options: ThingOptions) {
+        this.id = options.id
         this.passable = options.passable
         this.transparent = options.transparent
         this.name = options.name
@@ -83,20 +85,34 @@ export class Door extends Fixture {
     }
 }
 
-export class StairsUp extends Fixture {
-    clone(): StairsUp {
-        return new StairsUp(this)
-    }
+export enum ExitDirection {
+    Up,
+    Down,
 }
 
-export class StairsDown extends Fixture {
-    clone(): StairsDown {
-        return new StairsDown(this)
+interface ExitOptions {
+    id: string
+    name: string
+    image?: string
+    color?: gfx.Color
+    direction: ExitDirection
+}
+
+export class Exit extends Fixture {
+    direction: ExitDirection
+
+    constructor(options: ExitOptions) {
+        super(Object.assign({ passable: false, transparent: false }, options))
+        this.direction = options.direction
+    }
+
+    clone(): Exit {
+        return new Exit(this)
     }
 }
 
 export interface ItemOptions {
-    position?: geo.Point
+    id: string
     name: string
     image?: string
     color?: gfx.Color
@@ -229,7 +245,7 @@ export function isEquippable(item: Item): item is Equippable {
 }
 
 export interface UsableOptions {
-    position?: geo.Point
+    id: string
     name: string
     image?: string
     color?: gfx.Color
@@ -250,7 +266,7 @@ export class Usable extends Item {
 }
 
 export interface CreatureOptions {
-    position?: geo.Point
+    id: string
     name: string
     image: string
     color?: gfx.Color
@@ -268,12 +284,6 @@ export interface Creature extends Thing {
     actionReserve: number
 }
 
-export interface CreatureState {
-    health: number,
-    action: number,
-    actionReserve: number,
-}
-
 export interface PlayerOptions extends CreatureOptions {
     lightRadius: number
     level?: number
@@ -287,7 +297,7 @@ export interface PlayerOptions extends CreatureOptions {
     helm?: Helm | null
     shield?: Shield | null
     ring?: Ring | null
-    inventory?: Set<Item>
+    inventory?: Item[]
 }
 
 export class Player extends Thing implements Creature {
@@ -307,7 +317,7 @@ export class Player extends Thing implements Creature {
     shield: Shield | null
     ring: Ring | null
     lightRadius: number
-    inventory: Set<Item>
+    inventory: Item[]
 
     constructor(options: PlayerOptions) {
         super(Object.assign({ passable: false, transparent: true }, options))
@@ -325,7 +335,7 @@ export class Player extends Thing implements Creature {
         this.shield = options.shield ?? null
         this.ring = options.ring ?? null
         this.lightRadius = options.lightRadius
-        this.inventory = options.inventory ? new Set<Item>(options.inventory) : new Set<Item>()
+        this.inventory = options.inventory ? [...options.inventory] : []
     }
 
     get strength(): number {
@@ -399,11 +409,9 @@ export class Player extends Thing implements Creature {
     }
 
     equip(item: Item) {
-        console.log(item)
         if (item instanceof MeleeWeapon) {
             this.meleeWeapon = item
         } else if (item instanceof RangedWeapon) {
-            console.log("ranged weapon")
             this.rangedWeapon = item
         } else if (item instanceof Armor) {
             this.armor = item
@@ -443,11 +451,88 @@ export class Player extends Thing implements Creature {
     }
 
     delete(item: Item) {
-        if (isEquippable(item)) {
+        const index = this.inventory.indexOf(item);
+        console.log(index)
+        if (index >= 0) {
+            this.inventory.splice(index, 1)
             this.remove(item)
         }
+    }
 
-        this.inventory.delete(item)
+    save(): PlayerSaveState {
+        return {
+            id: this.id,
+            baseStrength: this.baseStrength,
+            baseIntelligence: this.baseIntelligence,
+            baseAgility: this.baseAgility,
+            baseMaxHealth: this.baseMaxHealth,
+            level: this.level,
+            experience: this.experience,
+            health: this.health,
+            meleeWeapon: this.meleeWeapon ? this.inventory.indexOf(this.meleeWeapon) : -1,
+            rangedWeapon: this.rangedWeapon ? this.inventory.indexOf(this.rangedWeapon) : -1,
+            armor: this.armor ? this.inventory.indexOf(this.armor) : -1,
+            helm: this.helm ? this.inventory.indexOf(this.helm) : -1,
+            shield: this.shield ? this.inventory.indexOf(this.shield) : -1,
+            ring: this.ring ? this.inventory.indexOf(this.ring) : -1,
+            inventory: this.inventory.map(i => i.id)
+        }
+    }
+
+
+    load(db: ThingDB, state: PlayerSaveState) {
+        this.baseStrength = state.baseStrength
+        this.baseIntelligence = state.baseIntelligence
+        this.baseAgility = state.baseAgility
+        this.baseMaxHealth = state.baseMaxHealth
+        this.level = state.level
+        this.experience = state.experience
+        this.health = state.health
+
+        this.inventory = state.inventory.map(id => {
+            const item = db.get(id)
+            if (!(item instanceof Item)) {
+                throw new Error("non-item in inventory, load failed.")
+            }
+
+            return item.clone()
+        })
+
+        if (state.meleeWeapon >= 0) {
+            this.equip(this.inventory[state.meleeWeapon])
+        } else {
+            this.meleeWeapon = null
+        }
+
+        if (state.rangedWeapon >= 0) {
+            this.equip(this.inventory[state.rangedWeapon])
+        } else {
+            this.rangedWeapon = null
+        }
+
+        if (state.helm >= 0) {
+            this.equip(this.inventory[state.helm])
+        } else {
+            this.helm = null
+        }
+
+        if (state.armor >= 0) {
+            this.equip(this.inventory[state.armor])
+        } else {
+            this.armor = null
+        }
+
+        if (state.shield >= 0) {
+            this.equip(this.inventory[state.shield])
+        } else {
+            this.shield = null
+        }
+
+        if (state.ring >= 0) {
+            this.equip(this.inventory[state.ring])
+        } else {
+            this.ring = null
+        }
     }
 }
 
@@ -521,7 +606,7 @@ export class Monster extends Thing implements Creature {
 }
 
 export interface ContainerOptions {
-    position?: geo.Point
+    id: string
     name: string
     image: string
     color?: gfx.Color
@@ -565,6 +650,74 @@ export function getExperienceRequirement(level: number): number {
     return levels[level - 2]
 }
 
-interface PlayerSaveState {
-    
+export class Table<T extends Thing> {
+    private readonly map = new Map<string, T>();
+
+    insert(thing: T): T {
+        if (this.has(thing.id)) {
+            throw new Error(`Attempt to insert duplicate id of ${thing.id}`)
+        }
+
+        this.map.set(thing.id, thing)
+        return thing
+    }
+
+    has(id: string): boolean {
+        return this.map.has(id)
+    }
+
+    get(id: string): T | undefined {
+        return this.map.get(id)
+    }
+
+    *[Symbol.iterator](): Generator<T> {
+        for (const [_, v] of this.map) {
+            yield v
+        }
+    }
+}
+
+export class ThingDB {
+    private readonly map = new Map<string, Thing>()
+
+    insert<T extends Thing>(thing: T): T {
+        if (this.has(thing.id)) {
+            throw new Error(`Attempt to insert duplicate id of ${thing.id}`)
+        }
+
+        this.map.set(thing.id, thing)
+        return thing
+    }
+
+    has(id: string): boolean {
+        return this.map.has(id)
+    }
+
+    get(id: string): Thing | undefined {
+        return this.map.get(id)
+    }
+
+    *[Symbol.iterator](): Generator<Thing> {
+        for (const [_, v] of this.map) {
+            yield v
+        }
+    }
+}
+
+export interface PlayerSaveState {
+    id: string,
+    baseStrength: number
+    baseIntelligence: number
+    baseAgility: number
+    baseMaxHealth: number
+    level: number
+    experience: number
+    health: number
+    meleeWeapon: number
+    rangedWeapon: number
+    armor: number
+    helm: number
+    shield: number
+    ring: number
+    inventory: string[]
 }

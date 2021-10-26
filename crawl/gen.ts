@@ -16,8 +16,8 @@ interface DungeonTileset {
     wall: rl.Tile,
     floor: rl.Tile,
     door: rl.Door,
-    stairsUp: rl.StairsUp
-    stairsDown: rl.StairsDown
+    stairsUp: rl.Exit
+    stairsDown: rl.Exit
 }
 
 const tileset: DungeonTileset = {
@@ -71,13 +71,16 @@ interface Room {
     depth: number,
 }
 
-export async function generateDungeonLevel(rng: rand.RNG, player: rl.Player, width: number, height: number): Promise<maps.Map> {
-    const map = generateMapRooms(rng, width, height, player)
+export async function generateDungeonLevel(rng: rand.SFC32RNG, player: rl.Player, floor: number): Promise<maps.Map> {
+    let minDim = 24;
+    let maxDim = 32 + floor * 4;
+    let dimDice = new rl.Dice(minDim, maxDim)
+    const map = generateMapRooms(rng, dimDice.roll(rng), dimDice.roll(rng), player)
     map.lighting = maps.Lighting.None
     return map
 }
 
-function generateMapRooms(rng: rand.RNG, width: number, height: number, player: rl.Player): maps.Map {
+function generateMapRooms(rng: rand.SFC32RNG, width: number, height: number, player: rl.Player): maps.Map {
     const map = new maps.Map(width, height, 1, { position: new geo.Point(0, 0), thing: player })
     const minRooms = 4
 

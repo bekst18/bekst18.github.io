@@ -1,15 +1,58 @@
 /**
- * Random number generator type alias
- * an RNG should return a pseudo-random number in the range (0,1)
+ * Random number generator
+ * Provides a single next() method that generates a random number
  */
-export type RNG = () => number
+export interface RNG {
+    next(): number
+}
+
+/**
+ * sfc32 is part of the PractRand random number testing suite (which it passes of course). sfc32 has a 128-bit state and is very fast in JS.
+ */
+export class SFC32RNG implements RNG {
+    /**
+     * * sfc32 is part of the PractRand random number testing suite (which it passes of course). sfc32 has a 128-bit state and is very fast in JS.
+     * @param a seed 1
+     * @param b seed 2
+     * @param c seed 3
+     * @param d seed 4
+     */
+    constructor(private a: number, private b: number, private c: number, private d: number) { }
+
+    next(): number {
+        let a = this.a
+        let b = this.b
+        let c = this.c
+        let d = this.d
+
+        a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+        var t = (a + b) | 0;
+        a = b ^ b >>> 9;
+        b = c + (c << 3) | 0;
+        c = (c << 21 | c >>> 11);
+        d = d + 1 | 0;
+        t = t + d | 0;
+        c = c + t | 0;
+
+        this.a = a
+        this.b = b
+        this.c = c
+        this.d = d
+
+        return (t >>> 0) / 4294967296;
+    }
+
+    save(): [number, number, number, number] {
+        return [this.a, this.b, this.c, this.d]
+    }
+}
 
 /**
  * returns a function that generates hashes
  * @param str string state
  * @returns hash function
  */
-export function xmur3(str: string): RNG {
+export function xmur3(str: string): () => number {
     for (var i = 0, h = 1779033703 ^ str.length; i < str.length; i++)
         h = Math.imul(h ^ str.charCodeAt(i), 3432918353),
             h = h << 13 | h >>> 19;
@@ -28,33 +71,33 @@ export function xmur3(str: string): RNG {
  * @param d seed4
  * @returns rng
  */
-export function sfc32(a: number, b: number, c: number, d: number): RNG {
-    return () => {
-        a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
-        var t = (a + b) | 0;
-        a = b ^ b >>> 9;
-        b = c + (c << 3) | 0;
-        c = (c << 21 | c >>> 11);
-        d = d + 1 | 0;
-        t = t + d | 0;
-        c = c + t | 0;
-        return (t >>> 0) / 4294967296;
-    }
-}
+// export function sfc32(a: number, b: number, c: number, d: number): RNG {
+//     return () => {
+//         a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+//         let t = (a + b) | 0;
+//         a = b ^ b >>> 9;
+//         b = c + (c << 3) | 0;
+//         c = (c << 21 | c >>> 11);
+//         d = d + 1 | 0;
+//         t = t + d | 0;
+//         c = c + t | 0;
+//         return (t >>> 0) / 4294967296;
+//     }
+// }
 
 /**
  * Mulberry32 is a simple generator with a 32-bit state, but is extremely fast and has good quality (author states it passes all tests of gjrand testing suite and has a full 232 period, but I haven't verified).
  * @param a seed
  * @returns rng
  */
-export function mulberry32(a: number): RNG {
-    return () => {
-        var t = a += 0x6D2B79F5;
-        t = Math.imul(t ^ t >>> 15, t | 1);
-        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-        return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    }
-}
+// export function mulberry32(a: number): RNG {
+//     return () => {
+//         let t = a += 0x6D2B79F5;
+//         t = Math.imul(t ^ t >>> 15, t | 1);
+//         t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+//         return ((t ^ t >>> 14) >>> 0) / 4294967296;
+//     }
+// }
 
 /**
  * As of May 2018, xoshiro128** is the new member of the Xorshift family, by Vigna & Blackman (professor Vigna was also responsible for the Xorshift128+ algorithm powering most Math.random implementations under the hood). It is the fastest generator that offers a 128-bit state.
@@ -64,15 +107,15 @@ export function mulberry32(a: number): RNG {
  * @param d seed4
  * @returns rng
  */
-export function xoshiro128ss(a: number, b: number, c: number, d: number): RNG {
-    return () => {
-        var t = b << 9, r = a * 5; r = (r << 7 | r >>> 25) * 9;
-        c ^= a; d ^= b;
-        b ^= c; a ^= d; c ^= t;
-        d = d << 11 | d >>> 21;
-        return (r >>> 0) / 4294967296;
-    }
-}
+// export function xoshiro128ss(a: number, b: number, c: number, d: number): RNG {
+//     return () => {
+//         let t = b << 9, r = a * 5; r = (r << 7 | r >>> 25) * 9;
+//         c ^= a; d ^= b;
+//         b ^= c; a ^= d; c ^= t;
+//         d = d << 11 | d >>> 21;
+//         return (r >>> 0) / 4294967296;
+//     }
+// }
 
 /**
  * This is JSF or 'smallprng' by Bob Jenkins (2007), who also made ISAAC and SpookyHash. It passes PractRand tests and should be quite fast, although not as fast as sfc32.
@@ -82,17 +125,17 @@ export function xoshiro128ss(a: number, b: number, c: number, d: number): RNG {
  * @param d seed4
  * @returns rnhg
  */
-export function jsf32(a: number, b: number, c: number, d: number): RNG {
-    return () => {
-        a |= 0; b |= 0; c |= 0; d |= 0;
-        var t = a - (b << 27 | b >>> 5) | 0;
-        a = b ^ (c << 17 | c >>> 15);
-        b = c + d | 0;
-        c = d + t | 0;
-        d = a + t | 0;
-        return (d >>> 0) / 4294967296;
-    }
-}
+// export function jsf32(a: number, b: number, c: number, d: number): RNG {
+//     return () => {
+//         a |= 0; b |= 0; c |= 0; d |= 0;
+//         let t = a - (b << 27 | b >>> 5) | 0;
+//         a = b ^ (c << 17 | c >>> 15);
+//         b = c + d | 0;
+//         c = d + t | 0;
+//         d = a + t | 0;
+//         return (d >>> 0) / 4294967296;
+//     }
+// }
 
 /**
  * choose a uniform random float from interval [min, max)
@@ -101,7 +144,7 @@ export function jsf32(a: number, b: number, c: number, d: number): RNG {
  */
 export function float(rng: RNG, min: number, max: number): number {
     const range = max - min;
-    return rng() * range + min
+    return rng.next() * range + min
 }
 
 /**
@@ -128,7 +171,7 @@ export function choose<T>(rng: RNG, a: ArrayLike<T>) {
  */
 export function shuffle<T>(rng: RNG, a: Array<T>): Array<T> {
     for (let i = a.length - 1; i >= 0; --i) {
-        const j = Math.floor(rng() * i)
+        const j = Math.floor(rng.next() * i)
         const tmp = a[i]
         a[i] = a[j]
         a[j] = tmp
@@ -142,5 +185,5 @@ export function shuffle<T>(rng: RNG, a: Array<T>): Array<T> {
  * @param x true chance
  */
 export function chance(rng: RNG, x: number): boolean {
-    return rng() < x
+    return rng.next() < x
 }

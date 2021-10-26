@@ -24,8 +24,8 @@ export interface Layer<T extends rl.Thing> {
     things(): Generator<T>
 }
 
-interface LayerSaveState  {
-    
+export interface LayerSaveState {
+
 }
 
 /**
@@ -92,7 +92,6 @@ export class MapLayer<T extends rl.Thing> implements Layer<T> {
         }
     }
 }
-
 
 /**
  * a layer that is based on a grid
@@ -192,6 +191,7 @@ export enum Lighting {
 export class Map {
     tiles: Layer<rl.Tile>
     fixtures: Layer<rl.Fixture>
+    exits: Layer<rl.Exit>
     monsters: Layer<rl.Monster>
     containers: Layer<rl.Container>
     lighting: Lighting = Lighting.None
@@ -199,6 +199,7 @@ export class Map {
     constructor(readonly width: number, readonly height: number, readonly depth: number, readonly player: Placed<rl.Player>) {
         this.tiles = new GridLayer(width, height)
         this.fixtures = new MapLayer()
+        this.exits = new MapLayer()
         this.monsters = new MapLayer()
         this.containers = new MapLayer()
     }
@@ -213,6 +214,10 @@ export class Map {
 
         for (const fixture of this.fixtures) {
             yield fixture
+        }
+
+        for (const exit of this.exits) {
+            yield exit
         }
 
         for (const container of this.containers) {

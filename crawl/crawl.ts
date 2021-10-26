@@ -10,6 +10,8 @@ import * as things from "./things.js"
 import * as maps from "./maps.js"
 import * as rand from "../shared/rand.js"
 
+const STORAGE_KEY = "crawl_storage"
+
 const enum Direction {
     North,
     South,
@@ -124,7 +126,7 @@ class InventoryDialog extends Dialog {
 
         this.nextPageButton.addEventListener("click", () => {
             this.pageIndex++
-            this.pageIndex = Math.min(this.pageIndex, Math.ceil(this.player.inventory.size / this.pageSize))
+            this.pageIndex = Math.min(this.pageIndex, Math.ceil(this.player.inventory.length / this.pageSize))
             this.refresh()
         })
 
@@ -217,7 +219,7 @@ class InventoryDialog extends Dialog {
         const tbody = this.table.tBodies[0]
         dom.removeAllChildren(tbody)
 
-        if (this.player.inventory.size === 0) {
+        if (this.player.inventory.length === 0) {
             this.emptyDiv.hidden = false
             this.infoDiv.hidden = true
         } else {
@@ -225,7 +227,7 @@ class InventoryDialog extends Dialog {
             this.infoDiv.hidden = false
         }
 
-        const pageCount = Math.ceil(this.player.inventory.size / this.pageSize)
+        const pageCount = Math.ceil(this.player.inventory.length / this.pageSize)
         this.pageIndex = Math.min(Math.max(0, this.pageIndex), pageCount - 1)
         this.prevPageButton.disabled = this.pageIndex <= 0
         this.nextPageButton.disabled = this.pageIndex >= pageCount - 1
@@ -420,7 +422,7 @@ class ContainerDialog {
         }
 
         this.container.items.delete(item)
-        this.player.inventory.add(item)
+        this.player.inventory.push(item)
 
         // hide if this was the last item
         if (this.container.items.size == 0) {
@@ -437,7 +439,7 @@ class ContainerDialog {
 
         for (const item of this.container.items) {
             this.container.items.delete(item)
-            this.player.inventory.add(item)
+            this.player.inventory.push(item)
         }
 
         this.hide()
@@ -578,8 +580,9 @@ class App {
     private cursorPosition?: geo.Point
 
     private constructor(
-        private readonly rng: rand.RNG,
+        private readonly rng: rand.SFC32RNG,
         private readonly renderer: gfx.Renderer,
+        private floor: number,
         private map: maps.Map,
         private readonly texture: gfx.Texture,
         private readonly imageMap: Map<string, number>) {
@@ -587,20 +590,31 @@ class App {
         this.statsDialog = new StatsDialog(player, this.canvas)
         this.inventoryDialog = new InventoryDialog(player, this.canvas)
         this.containerDialog = new ContainerDialog(player, this.canvas)
-
-        player.inventory.add(things.healthPotion.clone())
-        player.inventory.add(things.slingShot.clone())
     }
 
     public static async create(): Promise<App> {
         const canvas = dom.byId("canvas") as HTMLCanvasElement
         const renderer = new gfx.Renderer(canvas)
+
+        // check for any saved state
+        const state = loadState()
+        // const state = null as AppSaveState | null
         const seed = rand.xmur3(new Date().toString())
-        const rng = rand.sfc32(seed(), seed(), seed(), seed())
+        const rngState = state ? state.rng : [seed(), seed(), seed(), seed()] as [number, number, number, number]
+        const rng = new rand.SFC32RNG(...rngState)
+        const floor = state?.floor ?? 1
+
         const player = things.player.clone()
-        const map = await gen.generateDungeonLevel(rng, player, 32, 32)
+        if (state) {
+            player.load(things.db, state.player)
+        } else {
+            player.inventory.push(things.healthPotion.clone())
+            player.inventory.push(things.slingShot.clone())
+        }
+
+        const map = await gen.generateDungeonLevel(rng, player, floor)
         const [texture, imageMap] = await loadImages(renderer, map)
-        const app = new App(rng, renderer, map, texture, imageMap)
+        const app = new App(rng, renderer, floor, map, texture, imageMap)
         return app
     }
 
@@ -689,6 +703,14 @@ class App {
         player.actionReserve = 0
 
         this.updateMonsterStates()
+
+        // save current state
+        this.saveState()
+
+        if (player.health <= 0) {
+            this.clearState()
+            this.defeatDialog.show()
+        }
     }
 
     private getScrollOffset(): geo.Point {
@@ -797,6 +819,7 @@ class App {
 
         if (defender.health <= 0) {
             output.warning(`${defender.name} has been defeated!`)
+            this.clearState()
             this.defeatDialog.show()
         }
     }
@@ -828,6 +851,7 @@ class App {
         // if player is within reach (and alive), attack
         let { position: playerPosition, thing: player } = this.map.player
 
+        // first attempt to attack
         if (player.health > 0) {
             const distanceToPlayer = geo.calcManhattenDist(playerPosition, monsterPosition)
             const attacks = monster.attacks.filter(a => a.range >= distanceToPlayer)
@@ -851,7 +875,7 @@ class App {
         const position = path[0]
         if (map.isPassable(position)) {
             monster.action -= 1
-            monsterPosition = path[0]
+            this.map.monsters.set(position, monster)
         } else {
             monster.action = 0
         }
@@ -1041,9 +1065,8 @@ class App {
             this.map.fixtures.delete(fixture)
             player.action -= 1
             return
-        } else if (fixture instanceof rl.StairsUp) {
+        } else if (fixture instanceof rl.Exit) {
             output.error("Stairs not implemented")
-        } else if (fixture instanceof rl.StairsDown) {
             output.error("Stairs not implemented")
         } else if (fixture && !fixture.passable) {
             output.info(`Can't move that way, blocked by ${fixture.name}`)
@@ -1350,9 +1373,27 @@ class App {
         }
     }
 
-    private saveState() {
-
+    private clearState() {
+        localStorage.removeItem(STORAGE_KEY)
     }
+
+    private saveState() {
+        // save the current game state
+        var state: AppSaveState = {
+            rng: this.rng.save(),
+            floor: this.floor,
+            player: this.map.player.thing.save(),
+        }
+
+        const jsonState = JSON.stringify(state)
+        localStorage.setItem(STORAGE_KEY, jsonState)
+    }
+}
+
+interface AppSaveState {
+    readonly rng: [number, number, number, number]
+    readonly player: rl.PlayerSaveState
+    readonly floor: number
 }
 
 async function loadImages(renderer: gfx.Renderer, map: maps.Map): Promise<[gfx.Texture, Map<string, number>]> {
@@ -1366,6 +1407,17 @@ async function loadImages(renderer: gfx.Renderer, map: maps.Map): Promise<[gfx.T
     const texture = renderer.bakeTextureArray(rl.tileSize, rl.tileSize, images)
 
     return [texture, imageMap]
+}
+
+function loadState(): AppSaveState | null {
+    const json = localStorage.getItem(STORAGE_KEY)
+    if (!json) {
+        return null
+    }
+
+    const state = JSON.parse(json) as AppSaveState
+    console.log("STATE LOADED:", state)
+    return state
 }
 
 async function init() {
