@@ -702,6 +702,7 @@ class App {
         }
 
         this.drawFrame()
+
         requestAnimationFrame(() => this.tick())
     }
 
@@ -751,6 +752,13 @@ class App {
         player.actionReserve = 0
 
         this.updateMonsterStates()
+
+        const experienceRequired = rl.getExperienceRequirement(player.level + 1)
+        if (player.experience >= experienceRequired) {
+            this.levelDialog.show()
+            ++player.level
+            player.experience -= experienceRequired
+        }
 
         // save current state
         this.saveState()
