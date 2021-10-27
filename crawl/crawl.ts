@@ -474,6 +474,35 @@ class DefeatDialog {
     }
 }
 
+class LevelDialog extends Dialog {
+    constructor(private readonly player: rl.Player, canvas: HTMLCanvasElement) {
+        super(dom.byId("levelDialog"), canvas)
+
+        const levelStrengthRow = dom.byId("#levelStrengthRow")
+        const levelIntelligenceRow = dom.byId("#levelIntelligenceRow")
+        const levelAgilityRow = dom.byId("#levelAgilityRow")
+
+        levelStrengthRow.addEventListener("click", () => this.levelStrenth())
+        levelIntelligenceRow.addEventListener("click", () => this.levelIntelligence())
+        levelAgilityRow.addEventListener("click", () => this.levelAgility())
+    }
+
+    private levelStrenth() {
+        this.player.baseStrength++
+        this.hide()
+    }
+
+    private levelIntelligence() {
+        this.player.baseIntelligence++
+        this.hide()
+    }
+
+    private levelAgility() {
+        this.player.baseAgility++
+        this.hide()
+    }
+}
+
 function getSortedItems(items: Iterable<rl.Item>): rl.Item[] {
     const sortedItems = iter.orderBy(items, i => i.name)
     return sortedItems
@@ -575,6 +604,7 @@ class App {
     private readonly inventoryDialog: InventoryDialog
     private readonly containerDialog: ContainerDialog
     private readonly defeatDialog = new DefeatDialog(this.canvas)
+    private readonly levelDialog: LevelDialog
     private zoom = 1
     private targetCommand: TargetCommand = TargetCommand.None
     private cursorPosition?: geo.Point
@@ -590,6 +620,7 @@ class App {
         this.statsDialog = new StatsDialog(player, this.canvas)
         this.inventoryDialog = new InventoryDialog(player, this.canvas)
         this.containerDialog = new ContainerDialog(player, this.canvas)
+        this.levelDialog = new LevelDialog(player, this.canvas)
     }
 
     public static async create(): Promise<App> {
@@ -612,7 +643,7 @@ class App {
             player.inventory.push(things.slingShot.clone())
         }
 
-        const map = await gen.generateDungeonLevel(rng, player, floor)
+        const map = await gen.generateDungeonLevel(rng, things.db, player, floor)
         const [texture, imageMap] = await loadImages(renderer, map)
         const app = new App(rng, renderer, floor, map, texture, imageMap)
         return app
@@ -1347,6 +1378,13 @@ class App {
                 this.targetCommand = TargetCommand.Look
                 break;
 
+            case "P":
+                const wasHidden = this.statsDialog.hidden
+                this.hideDialogs()
+                if (wasHidden) {
+                    this.levelDialog.show()
+                }
+                break
             /*
             case "ENTER":
                 if (ev.ctrlKey && this.player.rangedWeapon) {

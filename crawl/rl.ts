@@ -22,12 +22,12 @@ export interface ThingOptions {
 }
 
 export class Thing {
-    id: string
+    readonly id: string
     passable: boolean
     transparent: boolean
-    name: string
-    image: string
-    color = new gfx.Color(1, 1, 1, 1)
+    readonly name: string
+    readonly image: string
+    readonly color = new gfx.Color(1, 1, 1, 1)
     visible: Visibility = Visibility.None
 
     constructor(options: ThingOptions) {
@@ -116,20 +116,32 @@ export interface ItemOptions {
     name: string
     image?: string
     color?: gfx.Color
+    level: number
+    freq?: number
 }
 
 export class Item extends Thing {
+    readonly level: number
+    readonly freq: number
+
     constructor(options: ItemOptions) {
         super(Object.assign({ passable: false, transparent: true }, options))
+
+        this.level = options.level
+        this.freq = options.freq ?? 1
+    }
+
+    clone(): Item {
+        return new Item(this)
     }
 }
 
 export interface WeaponOptions extends ItemOptions {
-    attack: number
-    range?: number
-    verb?: string
-    action: number
-    damage: Dice
+    readonly attack: number
+    readonly range?: number
+    readonly verb?: string
+    readonly action: number
+    readonly damage: Dice
 }
 
 export class Weapon extends Item {
@@ -244,11 +256,7 @@ export function isEquippable(item: Item): item is Equippable {
     return item instanceof Weapon || item instanceof Armor || item instanceof Shield
 }
 
-export interface UsableOptions {
-    id: string
-    name: string
-    image?: string
-    color?: gfx.Color
+export interface UsableOptions extends ItemOptions {
     health: number
 }
 
@@ -273,6 +281,7 @@ export interface CreatureOptions {
     maxHealth: number
     health?: number
     agility?: number
+    level: number
 }
 
 export interface Creature extends Thing {
@@ -282,11 +291,11 @@ export interface Creature extends Thing {
     agility: number
     action: number
     actionReserve: number
+    level: number
 }
 
 export interface PlayerOptions extends CreatureOptions {
     lightRadius: number
-    level?: number
     experience?: number
     strength?: number
     intelligence?: number
@@ -452,7 +461,6 @@ export class Player extends Thing implements Creature {
 
     delete(item: Item) {
         const index = this.inventory.indexOf(item);
-        console.log(index)
         if (index >= 0) {
             this.inventory.splice(index, 1)
             this.remove(item)
@@ -478,7 +486,6 @@ export class Player extends Thing implements Creature {
             inventory: this.inventory.map(i => i.id)
         }
     }
-
 
     load(db: ThingDB, state: PlayerSaveState) {
         this.baseStrength = state.baseStrength
@@ -573,18 +580,21 @@ export interface MonsterOptions extends CreatureOptions {
     defense: number
     experience: number,
     attacks: Attack[]
+    freq?: number
 }
 
 export class Monster extends Thing implements Creature {
-    agility: number
-    defense: number
-    maxHealth: number
+    readonly agility: number
+    readonly defense: number
+    readonly maxHealth: number
     health: number
-    experience: number
+    readonly experience: number
     readonly attacks: Attack[] = []
     state: MonsterState = MonsterState.idle
     action: number = 0
     actionReserve: number = 0
+    readonly level: number
+    readonly freq: number = 1
 
     constructor(options: MonsterOptions) {
         super(Object.assign({ passable: false, transparent: true }, options))
@@ -594,6 +604,8 @@ export class Monster extends Thing implements Creature {
         this.health = options.health ?? this.maxHealth
         this.experience = options.experience
         this.attacks = [...options.attacks]
+        this.level = options.level
+        this.freq = options.freq ?? 1
 
         if (this.attacks.length == 0) {
             throw new Error(`No attacks defined for monster ${this.name}`)
@@ -720,4 +732,33 @@ export interface PlayerSaveState {
     shield: number
     ring: number
     inventory: string[]
+}
+
+/**
+ * a weighted list from which a random selection can be drawn.
+ */
+export class WeightedList<T> {
+    /**
+     * constructor
+     * @param data list of [item, relative weight] items
+     */
+    constructor(private readonly data: [T, number][]) {
+        const total = data.map(x => x[1]).reduce((x, y) => x + y, 0)
+
+        for (let i = 0; i < data.length; ++i) {
+            data[i][1] /= total
+        }
+    }
+
+    select(rng: rand.RNG): T {
+        let dist = rng.next()
+        for (const [x, w] of this.data) {
+            dist -= w
+            if (dist <= 0) {
+                return x
+            }
+        }
+
+        throw new Error("Invalid or empty list, no selection made")
+    }
 }

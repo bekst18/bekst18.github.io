@@ -28,28 +28,6 @@ const tileset: DungeonTileset = {
     stairsDown: things.stairsDown.clone()
 }
 
-const monsters = [
-    things.bat.clone(),
-    things.skeleton.clone(),
-    things.greenSlime.clone(),
-    things.redSlime.clone(),
-    things.spider.clone(),
-    things.rat.clone(),
-    things.redy.clone(),
-    things.fider.clone(),
-]
-
-const loot = [
-    things.clothArmor.clone(),
-    things.sharpStick.clone(),
-    things.dagger.clone(),
-    things.leatherArmor.clone(),
-    things.woodenBow.clone(),
-    things.slingShot.clone(),
-    things.weakHealthPotion.clone(),
-    things.healthPotion.clone()
-]
-
 enum CellType {
     Exterior,
     Interior,
@@ -71,16 +49,22 @@ interface Room {
     depth: number,
 }
 
-export async function generateDungeonLevel(rng: rand.SFC32RNG, player: rl.Player, floor: number): Promise<maps.Map> {
+export async function generateDungeonLevel(rng: rand.SFC32RNG, db: rl.ThingDB, player: rl.Player, floor: number): Promise<maps.Map> {
     let minDim = 24;
     let maxDim = 32 + floor * 4;
     let dimDice = new rl.Dice(minDim, maxDim)
-    const map = generateMapRooms(rng, dimDice.roll(rng), dimDice.roll(rng), player)
+    let width = dimDice.roll(rng)
+    let height = dimDice.roll(rng)
+
+    const monsters = createMonsterList(db, floor)
+    const items = createItemList(db, floor)
+    const map = generateMapRooms(rng, monsters, items, width, height, player)
+
     map.lighting = maps.Lighting.None
     return map
 }
 
-function generateMapRooms(rng: rand.SFC32RNG, width: number, height: number, player: rl.Player): maps.Map {
+function generateMapRooms(rng: rand.SFC32RNG, monsters: rl.WeightedList<rl.Monster>, items: rl.WeightedList<rl.Item>, width: number, height: number, player: rl.Player): maps.Map {
     const map = new maps.Map(width, height, 1, { position: new geo.Point(0, 0), thing: player })
     const minRooms = 4
 
@@ -150,13 +134,13 @@ function generateMapRooms(rng: rand.SFC32RNG, width: number, height: number, pla
         }
     }
 
-    placeMonsters(rng, cells, rooms, map)
-    placeTreasures(rng, cells, rooms, map)
+    placeMonsters(rng, monsters, cells, rooms, map)
+    placeItems(rng, items, cells, rooms, map)
 
     return map
 }
 
-function placeMonsters(rng: rand.RNG, cells: CellGrid, rooms: Room[], map: maps.Map) {
+function placeMonsters(rng: rand.RNG, monsters: rl.WeightedList<rl.Monster>, cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
     const encounterChance = .35
     const secondEncounterChance = .2
@@ -171,23 +155,23 @@ function placeMonsters(rng: rand.RNG, cells: CellGrid, rooms: Room[], map: maps.
             continue
         }
 
-        tryPlaceMonster(rng, cells, room, map)
+        tryPlaceMonster(rng, monsters, cells, room, map)
 
         if (!rand.chance(rng, secondEncounterChance)) {
             continue
         }
 
-        tryPlaceMonster(rng, cells, room, map)
+        tryPlaceMonster(rng, monsters, cells, room, map)
 
         if (!rand.chance(rng, thirdEncounterChance)) {
             continue
         }
 
-        tryPlaceMonster(rng, cells, room, map)
+        tryPlaceMonster(rng, monsters, cells, room, map)
     }
 }
 
-function tryPlaceMonster(rng: rand.RNG, cells: CellGrid, room: Room, map: maps.Map): boolean {
+function tryPlaceMonster(rng: rand.RNG, monsters: rl.WeightedList<rl.Monster>, cells: CellGrid, room: Room, map: maps.Map): boolean {
     // attempt to place monster
     for (const [t, pt] of visitInterior(cells, room.interiorPt)) {
         if (t !== CellType.Interior) {
@@ -198,7 +182,7 @@ function tryPlaceMonster(rng: rand.RNG, cells: CellGrid, room: Room, map: maps.M
             continue
         }
 
-        const monster = rand.choose(rng, monsters).clone()
+        const monster = monsters.select(rng)
         map.monsters.set(pt, monster)
 
         return true
@@ -207,7 +191,7 @@ function tryPlaceMonster(rng: rand.RNG, cells: CellGrid, room: Room, map: maps.M
     return false
 }
 
-function placeTreasures(rng: rand.RNG, cells: CellGrid, rooms: Room[], map: maps.Map) {
+function placeItems(rng: rand.RNG, items: rl.WeightedList<rl.Item>, cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
     const treasureChance = .2
 
@@ -220,12 +204,12 @@ function placeTreasures(rng: rand.RNG, cells: CellGrid, rooms: Room[], map: maps
             continue
         }
 
-        tryPlaceTreasure(rng, cells, room, map)
+        tryPlaceTreasure(rng, items, cells, room, map)
     }
 }
 
 
-function tryPlaceTreasure(rng: rand.RNG, cells: CellGrid, room: Room, map: maps.Map): boolean {
+function tryPlaceTreasure(rng: rand.RNG, items: rl.WeightedList<rl.Item>, cells: CellGrid, room: Room, map: maps.Map): boolean {
     // attempt to place treasure
     for (const [t, pt] of visitInterior(cells, room.interiorPt)) {
         if (t !== CellType.Interior) {
@@ -239,14 +223,14 @@ function tryPlaceTreasure(rng: rand.RNG, cells: CellGrid, room: Room, map: maps.
         const chest = things.chest.clone()
 
         // choose loot
-        const item = rand.choose(rng, loot)
+        const item = items.select(rng)
         chest.items.add(item)
 
         // extra loot
         let extraLootChance = .5
         while (rand.chance(rng, extraLootChance)) {
             extraLootChance *= .5
-            const item = rand.choose(rng, loot)
+            const item = items.select(rng)
             chest.items.add(item)
         }
 
@@ -639,4 +623,61 @@ function fbm(width: number, height: number, bias: number, freq: number, lacunari
     return imaging.generate(width, height, (x, y) => {
         return noise.fbmPerlin2(x * freq + bias, y * freq + bias, lacunarity, gain, octaves)
     })
+}
+
+function createMonsterList(db: rl.ThingDB, floor: number): rl.WeightedList<rl.Monster> {
+    // create weighted list of monsters/items appropriate for level
+    const list: [rl.Monster, number][] = []
+    for (const monster of db) {
+        if (!(monster instanceof rl.Monster)) {
+            continue
+        }
+
+        if (monster.level > floor + 1) {
+            continue
+        }
+
+        if (monster.level <= 0) {
+            continue
+        }
+
+        let w = monster.freq
+        let dl = Math.abs(monster.level - floor)
+        if (dl > 0) {
+            w /= (dl + 1)
+        }
+
+        list.push([monster, w])
+    }
+
+    return new rl.WeightedList(list)
+}
+
+function createItemList(db: rl.ThingDB, floor: number) {
+    // create weighted list of monsters/items appropriate for level
+    const list: [rl.Item, number][] = []
+    for (const item of db) {
+        if (!(item instanceof rl.Item)) {
+            continue
+        }
+
+        if (item.level > floor + 1) {
+            continue
+        }
+
+        if (item.level <= 0 || item.level < floor - 2) {
+            continue
+        }
+
+        let w = item.freq
+        let dl = Math.abs(item.level - floor)
+        if (dl > 0) {
+            w /= (dl + 1)
+        }
+
+        list.push([item, w])
+    }
+
+    console.log(list)
+    return new rl.WeightedList(list)
 }

@@ -115,6 +115,7 @@ export const rat = db.insert(new rl.Monster({
     experience: 1,
     agility: 0,
     defense: 0,
+    level: 1,
     attacks: [
         new rl.Attack({
             attack: 0,
@@ -130,6 +131,7 @@ export const bat = db.insert(new rl.Monster({
     name: "Bat",
     maxHealth: 3,
     image: "./assets/bat.png",
+    level: 1,
     experience: 1,
     agility: 0,
     defense: 0,
@@ -149,6 +151,7 @@ export const greenSlime = db.insert(new rl.Monster({
     maxHealth: 3,
     color: gfx.Color.green,
     image: "./assets/slime.png",
+    level: 1,
     experience: 1,
     agility: 0,
     defense: 0,
@@ -168,6 +171,7 @@ export const redSlime = db.insert(new rl.Monster({
     maxHealth: 5,
     color: gfx.Color.red,
     image: "./assets/slime.png",
+    level: 2,
     experience: 2,
     agility: 1,
     defense: 1,
@@ -186,6 +190,7 @@ export const spider = db.insert(new rl.Monster({
     name: "Spider",
     maxHealth: 3,
     image: "./assets/spider.png",
+    level: 1,
     experience: 1,
     agility: 1,
     defense: 0,
@@ -205,7 +210,8 @@ export const skeleton = db.insert(new rl.Monster({
     maxHealth: 5,
     image: "./assets/skeleton.png",
     experience: 2,
-    agility: 1,
+    level: 1,
+    agility: 0,
     defense: 0,
     attacks: [
         new rl.Attack({
@@ -229,6 +235,7 @@ export const redy = db.insert(new rl.Monster({
     maxHealth: 3,
     image: "./assets/redy.png",
     experience: 2,
+    level: 1,
     agility: 1,
     defense: 0,
     attacks: [
@@ -246,6 +253,7 @@ export const fider = db.insert(new rl.Monster({
     name: "Fider",
     maxHealth: 4,
     image: "./assets/fider.png",
+    level: 2,
     experience: 2,
     agility: 1,
     defense: 2,
@@ -271,7 +279,9 @@ export const fists = db.insert(new rl.MeleeWeapon({
     attack: 0,
     damage: new rl.Dice(1, 2),
     action: 1,
-    verb: "punches at"
+    verb: "punches at",
+    level: 0,
+    freq: 0,
 }))
 
 export const sharpStick = db.insert(new rl.MeleeWeapon({
@@ -280,7 +290,9 @@ export const sharpStick = db.insert(new rl.MeleeWeapon({
     attack: 1,
     action: 1,
     damage: new rl.Dice(1, 2),
-    verb: "swings at"
+    verb: "swings at",
+    level: 0,
+    freq: 0
 }))
 
 export const dagger = db.insert(new rl.MeleeWeapon({
@@ -289,7 +301,8 @@ export const dagger = db.insert(new rl.MeleeWeapon({
     attack: 1,
     action: 1,
     damage: new rl.Dice(1, 3),
-    verb: "jabs at"
+    verb: "jabs at",
+    level: 1,
 }))
 
 export const ironSword = db.insert(new rl.MeleeWeapon({
@@ -298,7 +311,8 @@ export const ironSword = db.insert(new rl.MeleeWeapon({
     attack: 2,
     action: 1,
     damage: new rl.Dice(2, 4),
-    verb: "thrusts at"
+    verb: "thrusts at",
+    level: 1,
 }))
 
 export const steelSword = db.insert(new rl.MeleeWeapon({
@@ -307,7 +321,8 @@ export const steelSword = db.insert(new rl.MeleeWeapon({
     attack: 3,
     damage: new rl.Dice(3, 5),
     action: 1,
-    verb: "thrusts at"
+    verb: "thrusts at",
+    level: 2,
 }))
 
 export const slingShot = db.insert(new rl.RangedWeapon({
@@ -317,7 +332,8 @@ export const slingShot = db.insert(new rl.RangedWeapon({
     range: 3,
     damage: new rl.Dice(1, 2),
     action: 1,
-    verb: "shoots at"
+    verb: "shoots at",
+    level: 1,
 }))
 
 export const woodenBow = db.insert(new rl.RangedWeapon({
@@ -327,84 +343,98 @@ export const woodenBow = db.insert(new rl.RangedWeapon({
     range: 5,
     damage: new rl.Dice(2, 5),
     action: 1,
-    verb: "shoots at"
+    verb: "shoots at",
+    level: 2,
 }))
 
 export const clothArmor = db.insert(new rl.Armor({
     id: "cloth_armor",
     name: "Cloth Armor",
-    defense: 1
+    defense: 1,
+    level: 1,
 }))
 
 export const leatherArmor = db.insert(new rl.Armor({
     id: "leather_armor",
     name: "Leather Armor",
-    defense: 2
+    defense: 2,
+    level: 1,
 }))
 
 export const paddedArmor = db.insert(new rl.Armor({
     id: "padded_armor",
     name: "Padded Armor",
-    defense: 3
+    defense: 3,
+    level: 2,
 }))
 
 export const chainArmor = db.insert(new rl.Armor({
     id: "chain_armor",
     name: "Chain Armor",
-    defense: 4
+    defense: 4,
+    level: 2,
 }))
 
 export const scaleArmor = db.insert(new rl.Armor({
     id: "scale_armor",
     name: "Scale Armor",
-    defense: 5
+    defense: 5,
+    level: 3,
 }))
 
 export const plateArmor = db.insert(new rl.Armor({
     id: "plate_armor",
     name: "Plate Armor",
-    defense: 6
+    defense: 6,
+    level: 3,
 }))
 
 export const steelPlateArmor = db.insert(new rl.Armor({
     id: "steel_plate_armor",
     name: "Steel Plate Armor",
-    defense: 7
+    defense: 7,
+    level: 4,
 }))
 
 export const woodenShield = db.insert(new rl.Shield({
     id: "wooden_shield",
     name: "Wooden Shield",
-    defense: 1
+    defense: 1,
+    level: 2,
 }))
 
 export const ironShield = db.insert(new rl.Shield({
     id: "iron_shield",
     name: "Iron Shield",
-    defense: 2
+    defense: 2,
+    level: 2,
 }))
 
 export const steelShield = db.insert(new rl.Shield({
     id: "steel_shield",
     name: "Steel Shield",
-    defense: 3
+    defense: 3,
+    level: 3,
 }))
 
 export const towerShield = db.insert(new rl.Shield({
     id: "tower_shield",
     name: "Tower Shield",
-    defense: 4
+    defense: 4,
+    level: 4,
 }))
 
 export const weakHealthPotion = db.insert(new rl.Usable({
     id: "weak_health_potion",
     name: "Weak Health Potion",
-    health: 4
+    level: 1,
+    health: 4,
 }))
 
 export const healthPotion = db.insert(new rl.Usable({
     id: "health_potion",
     name: "Health Potion",
+    level: 2,
     health: 10
 }))
 
@@ -419,5 +449,6 @@ export const player = db.insert(new rl.Player({
     name: "Player",
     image: "./assets/char.png",
     maxHealth: 6,
-    lightRadius: 5
+    lightRadius: 5,
+    level: 1,
 }))
