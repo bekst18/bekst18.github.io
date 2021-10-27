@@ -232,11 +232,11 @@ export const skeleton = db.insert(new rl.Monster({
 export const redy = db.insert(new rl.Monster({
     id: "redy",
     name: "Redy",
-    maxHealth: 3,
+    maxHealth: 5,
     image: "./assets/redy.png",
     experience: 2,
-    level: 1,
-    agility: 1,
+    level: 2,
+    agility: 2,
     defense: 0,
     attacks: [
         new rl.Attack({
@@ -244,6 +244,12 @@ export const redy = db.insert(new rl.Monster({
             damage: new rl.Dice(1, 1),
             action: 1,
             verb: "touches"
+        }),
+        new rl.Attack({
+            attack: 0,
+            damage: new rl.Dice(1, 1),
+            action: 1,
+            verb: "licks"
         })
     ]
 }))
@@ -251,7 +257,7 @@ export const redy = db.insert(new rl.Monster({
 export const fider = db.insert(new rl.Monster({
     id: "fider",
     name: "Fider",
-    maxHealth: 4,
+    maxHealth: 5,
     image: "./assets/fider.png",
     level: 2,
     experience: 2,

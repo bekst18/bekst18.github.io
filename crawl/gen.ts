@@ -97,7 +97,7 @@ function generateMapRooms(
     const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
     const stairsDown = tileset.stairsDown.clone()
     const stairsDownPosition = iter.find(
-        visitInteriorCoords(cells, lastRoom.interiorPt), 
+        visitInteriorCoords(cells, lastRoom.interiorPt),
         pt => iter.any(grid.visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsDownPosition) {
         throw new Error("Failed to place stairs down")
@@ -191,7 +191,7 @@ function tryPlaceMonster(rng: rand.RNG, monsters: rl.WeightedList<rl.Monster>, c
         }
 
         const monster = monsters.select(rng)
-        map.monsters.set(pt, monster)
+        map.monsters.set(pt, monster.clone())
 
         return true
     }
@@ -232,17 +232,17 @@ function tryPlaceTreasure(rng: rand.RNG, items: rl.WeightedList<rl.Item>, cells:
 
         // choose loot
         const item = items.select(rng)
-        chest.items.add(item)
+        chest.items.add(item.clone())
 
         // extra loot
         let extraLootChance = .5
         while (rand.chance(rng, extraLootChance)) {
             extraLootChance *= .5
             const item = items.select(rng)
-            chest.items.add(item)
+            chest.items.add(item.clone())
         }
 
-        map.containers.set(pt, chest)
+        map.containers.set(pt, chest.clone())
         return true
     }
 
