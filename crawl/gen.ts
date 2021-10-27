@@ -64,7 +64,13 @@ export async function generateDungeonLevel(rng: rand.SFC32RNG, db: rl.ThingDB, p
     return map
 }
 
-function generateMapRooms(rng: rand.SFC32RNG, monsters: rl.WeightedList<rl.Monster>, items: rl.WeightedList<rl.Item>, width: number, height: number, player: rl.Player): maps.Map {
+function generateMapRooms(
+    rng: rand.SFC32RNG,
+    monsters: rl.WeightedList<rl.Monster>,
+    items: rl.WeightedList<rl.Item>,
+    width: number,
+    height: number,
+    player: rl.Player): maps.Map {
     const map = new maps.Map(width, height, 1, { position: new geo.Point(0, 0), thing: player })
     const minRooms = 4
 
@@ -86,16 +92,18 @@ function generateMapRooms(rng: rand.SFC32RNG, monsters: rl.WeightedList<rl.Monst
         throw new Error("Failed to place stairs up")
     }
 
-    map.fixtures.set(stairsUpPosition.clone(), stairsUp)
+    map.fixtures.set(stairsUpPosition, stairsUp)
 
     const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
     const stairsDown = tileset.stairsDown.clone()
-    const stairsDownPosition = iter.find(visitInteriorCoords(cells, lastRoom.interiorPt), pt => iter.any(grid.visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
+    const stairsDownPosition = iter.find(
+        visitInteriorCoords(cells, lastRoom.interiorPt), 
+        pt => iter.any(grid.visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsDownPosition) {
         throw new Error("Failed to place stairs down")
     }
 
-    map.fixtures.set(stairsDownPosition.clone(), stairsDown)
+    map.fixtures.set(stairsDownPosition, stairsDown)
 
     // generate tiles and fixtures from cells
     for (const [v, x, y] of cells.scan()) {
@@ -326,7 +334,7 @@ function placeTemplate(rng: rand.RNG, cells: CellGrid, template: RoomTemplate, o
 }
 
 function generateRoomTemplates(): RoomTemplate[] {
-    const lengths = [5, 7, 9, 11, 13, 15]
+    const lengths = [4, 5, 6, 7, 8, 9, 10, 11]
     const pairs = lengths.map(x => lengths.map(y => [x, y])).flat().filter(a => a[0] > 3 || a[1] > 3)
     const templates = pairs.map(a => generateRoomTemplate(a[0], a[1]))
     return templates

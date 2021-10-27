@@ -140,3 +140,11 @@ table, tr, td {
 .item-row.selected, .item-row.selected td {
     background-color: darkgray;
 }
+
+#levelAttributeTable {
+    width: 100%;
+}
+
+#levelAttributeTable td {
+    padding: .25em;
+}

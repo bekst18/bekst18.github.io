@@ -449,6 +449,6 @@ export const player = db.insert(new rl.Player({
     name: "Player",
     image: "./assets/char.png",
     maxHealth: 6,
-    lightRadius: 5,
+    lightRadius: 4,
     level: 1,
 }))

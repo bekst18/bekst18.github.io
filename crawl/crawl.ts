@@ -475,16 +475,33 @@ class DefeatDialog {
 }
 
 class LevelDialog extends Dialog {
+    private readonly levelStrengthRow = dom.byId("levelStrengthRow")
+    private readonly levelIntelligenceRow = dom.byId("levelIntelligenceRow")
+    private readonly levelAgilityRow = dom.byId("levelAgilityRow")
+
     constructor(private readonly player: rl.Player, canvas: HTMLCanvasElement) {
         super(dom.byId("levelDialog"), canvas)
 
-        const levelStrengthRow = dom.byId("#levelStrengthRow")
-        const levelIntelligenceRow = dom.byId("#levelIntelligenceRow")
-        const levelAgilityRow = dom.byId("#levelAgilityRow")
+        this.levelStrengthRow.addEventListener("click", () => this.levelStrenth())
+        this.levelIntelligenceRow.addEventListener("click", () => this.levelIntelligence())
+        this.levelAgilityRow.addEventListener("click", () => this.levelAgility())
 
-        levelStrengthRow.addEventListener("click", () => this.levelStrenth())
-        levelIntelligenceRow.addEventListener("click", () => this.levelIntelligence())
-        levelAgilityRow.addEventListener("click", () => this.levelAgility())
+        this.elem.addEventListener("keydown", (ev) => {
+            const key = ev.key.toUpperCase()
+            const index = parseInt(ev.key)
+
+            if (index == 1 || key == "S") {
+                this.levelStrenth()
+            }
+
+            if (index == 2 || key == "I") {
+                this.levelIntelligence()
+            }
+
+            if (index == 3 || key == "A") {
+                this.levelAgility()
+            }
+        })
     }
 
     private levelStrenth() {
@@ -614,8 +631,8 @@ class App {
         private readonly renderer: gfx.Renderer,
         private floor: number,
         private map: maps.Map,
-        private readonly texture: gfx.Texture,
-        private readonly imageMap: Map<string, number>) {
+        private texture: gfx.Texture,
+        private imageMap: Map<string, number>) {
         const player = map.player.thing
         this.statsDialog = new StatsDialog(player, this.canvas)
         this.inventoryDialog = new InventoryDialog(player, this.canvas)
@@ -628,8 +645,8 @@ class App {
         const renderer = new gfx.Renderer(canvas)
 
         // check for any saved state
-        const state = loadState()
-        // const state = null as AppSaveState | null
+        // const state = loadState()
+        const state = null as AppSaveState | null
         const seed = rand.xmur3(new Date().toString())
         const rngState = state ? state.rng : [seed(), seed(), seed(), seed()] as [number, number, number, number]
         const rng = new rand.SFC32RNG(...rngState)
@@ -1061,7 +1078,7 @@ class App {
         return false
     }
 
-    private handleMove(dir: Direction) {
+    private async handleMove(dir: Direction) {
         // clear cursor on movement
         this.cursorPosition = undefined
         const { position: playerPosition, thing: player } = this.map.player
@@ -1097,8 +1114,8 @@ class App {
             player.action -= 1
             return
         } else if (fixture instanceof rl.Exit) {
-            output.error("Stairs not implemented")
-            output.error("Stairs not implemented")
+            await this.handleExit(fixture.direction)
+            return
         } else if (fixture && !fixture.passable) {
             output.info(`Can't move that way, blocked by ${fixture.name}`)
             return false
@@ -1425,6 +1442,33 @@ class App {
 
         const jsonState = JSON.stringify(state)
         localStorage.setItem(STORAGE_KEY, jsonState)
+    }
+
+    private handleExit(dir: rl.ExitDirection) {
+        if (dir == rl.ExitDirection.Up && this.floor == 1) {
+            output.warning("Someone has covered the exit with a boulder, you are stuck here!")
+            return
+        }
+
+        switch (dir) {
+            case rl.ExitDirection.Up:
+                this.floor -= 1
+                break
+            case rl.ExitDirection.Down:
+                this.floor += 1
+                break
+
+        }
+
+        this.generateMap()
+    }
+
+    private async generateMap() {
+        this.map = await gen.generateDungeonLevel(this.rng, things.db, this.map.player.thing, this.floor)
+        const [texture, imageMap] = await loadImages(this.renderer, this.map)
+        this.texture = texture
+        this.imageMap = imageMap
+        this.updateVisibility()
     }
 }
 
