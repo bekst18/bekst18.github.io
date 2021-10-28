@@ -869,6 +869,7 @@ class App {
     private readonly attackButton = dom.byId("attackButton") as HTMLButtonElement
     private readonly shootButton = dom.byId("shootButton") as HTMLButtonElement
     private readonly lookButton = dom.byId("lookButton") as HTMLButtonElement
+    private readonly resetButton = dom.byId("resetButton") as HTMLButtonElement
     private readonly inp: input.Input = new input.Input(this.canvas)
     private readonly statsDialog: StatsDialog
     private readonly inventoryDialog: InventoryDialog
@@ -940,6 +941,11 @@ class App {
 
         this.lookButton.addEventListener("click", () => {
             this.targetCommand = TargetCommand.Look
+        })
+
+        this.resetButton.addEventListener("click", () => {
+            this.clearState()
+            window.location.reload()
         })
     }
 
@@ -1480,9 +1486,6 @@ class App {
         }
 
         switch (this.targetCommand) {
-            case TargetCommand.None:
-                return false
-                break
             case TargetCommand.Look: {
                 // show what user clicked on
                 for (const th of this.map.at(mxy)) {
