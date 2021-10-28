@@ -546,7 +546,7 @@ function canSee(map: maps.Map, eye: geo.Point, target: geo.Point, lightRadius: n
 
         for (const th of map.at(pt)) {
             if (!th.transparent) {
-                return false
+                return pt.equal(target)
             }
         }
     }
@@ -645,20 +645,21 @@ class App {
         const renderer = new gfx.Renderer(canvas)
 
         // check for any saved state
-        // const state = loadState()
-        const state = null as AppSaveState | null
+        const state = loadState()
+        // const state = null as AppSaveState | null
         const seed = rand.xmur3(new Date().toString())
         const rngState = state ? state.rng : [seed(), seed(), seed(), seed()] as [number, number, number, number]
         const rng = new rand.SFC32RNG(...rngState)
         const floor = state?.floor ?? 1
 
         const player = things.player.clone()
-        if (state) {
-            player.load(things.db, state.player)
-        } else {
-            player.inventory.push(things.healthPotion.clone())
-            player.inventory.push(things.slingShot.clone())
-        }
+        player.experience = 9
+        // if (state) {
+        //     player.load(things.db, state.player)
+        // } else {
+        player.inventory.push(things.healthPotion.clone())
+        player.inventory.push(things.slingShot.clone())
+        // }
 
         const map = await gen.generateDungeonLevel(rng, things.db, player, floor)
         const [texture, imageMap] = await loadImages(renderer, map)
@@ -1027,6 +1028,10 @@ class App {
             return false
         }
 
+        if (this.handleTargetCommandClick()) {
+            return true;
+        }
+
         const mxy = this.canvasToMapPoint(new geo.Point(inp.mouseX, inp.mouseY))
         const map = this.map
         const { position: playerPosition, thing: player } = this.map.player
@@ -1037,9 +1042,22 @@ class App {
             return true
         }
 
-        const clickCreature = map.monsterAt(mxy)
-        if (clickCreature) {
-            output.info(`You see ${clickCreature.name}`)
+        const clickMonster = map.monsterAt(mxy)
+        // first, try melee
+        if (clickMonster) {
+            const dist = geo.calcManhattenDist(playerPosition, mxy)
+            console.log("dist:", dist)
+            if (dist <= (player.meleeWeapon?.range ?? 0)) {
+                this.processPlayerMeleeAttack(clickMonster)
+                return true
+            }
+
+            if (dist <= (player.rangedWeapon?.range ?? 0)) {
+                this.processPlayerRangedAttack(clickMonster)
+                return true
+            }
+
+            output.info(`You see ${clickMonster.name}`)
             return true
         }
 
@@ -1189,9 +1207,8 @@ class App {
         }
     }
 
-    private handleTargetingInput() {
+    private handleTargetCommandClick() {
         if (!this.inp.mouseLeftReleased) {
-            this.inp.flush()
             return false
         }
 
@@ -1200,12 +1217,14 @@ class App {
 
         const lightRadius = this.calcLightRadius()
         if (!canSee(this.map, this.map.player.position, mxy, lightRadius)) {
-            this.inp.flush()
             output.error(`Can't see!`)
-            return false
+            return true
         }
 
         switch (this.targetCommand) {
+            case TargetCommand.None:
+                return false
+                break;
             case TargetCommand.Look: {
                 // show what user clicked on
                 for (const th of this.map.at(mxy)) {
@@ -1218,6 +1237,8 @@ class App {
                 const monster = this.map.monsterAt(mxy)
                 if (monster) {
                     this.processPlayerMeleeAttack(monster)
+                } else {
+                    output.info("Nothing to attack here.")
                 }
             }
                 break
@@ -1226,14 +1247,15 @@ class App {
                 const monster = this.map.monsterAt(mxy)
                 if (monster) {
                     this.processPlayerRangedAttack(monster)
+                } else {
+                    output.info("Nothing to shoot here.")
                 }
             }
                 break
         }
 
         this.targetCommand = TargetCommand.None
-        this.inp.flush()
-        return false
+        return true
     }
 
     private updateVisibility() {
