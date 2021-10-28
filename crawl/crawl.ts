@@ -621,17 +621,17 @@ class ShopDialog {
         switch (this.mode) {
             case ShopDialogMode.Buy:
                 this.buy(idx)
-                break;
+                break
             case ShopDialogMode.Sell:
                 this.sell(idx)
-                break;
+                break
         }
     }
 
     setMode(mode: ShopDialogMode) {
-        this.mode = mode;
-        this.pageIndex = 0;
-        this.selectedIndex = -1;
+        this.mode = mode
+        this.pageIndex = 0
+        this.selectedIndex = -1
         this.refresh()
     }
 
@@ -809,28 +809,28 @@ function canSee(map: maps.Map, eye: geo.Point, target: geo.Point, lightRadius: n
 
 function* march(start: geo.Point, end: geo.Point): Generator<geo.Point> {
     const cur = start.clone()
-    const dy = Math.abs(end.y - start.y);
-    const sy = start.y < end.y ? 1 : -1;
-    const dx = -Math.abs(end.x - start.x);
-    const sx = start.x < end.x ? 1 : -1;
-    let err = dy + dx;
+    const dy = Math.abs(end.y - start.y)
+    const sy = start.y < end.y ? 1 : -1
+    const dx = -Math.abs(end.x - start.x)
+    const sx = start.x < end.x ? 1 : -1
+    let err = dy + dx
 
     while (true) {
         yield cur
 
         if (cur.equal(end)) {
-            break;
+            break
         }
 
-        const e2 = 2 * err;
+        const e2 = 2 * err
         if (e2 >= dx) {
-            err += dx;
-            cur.y += sy;
+            err += dx
+            cur.y += sy
         }
 
         if (e2 <= dy) {
-            err += dy;
-            cur.x += sx;
+            err += dy
+            cur.x += sx
         }
     }
 }
@@ -1283,7 +1283,7 @@ class App {
         }
 
         if (this.handleTargetCommandClick()) {
-            return true;
+            return true
         }
 
         const mxy = this.canvasToMapPoint(new geo.Point(inp.mouseX, inp.mouseY))
@@ -1466,6 +1466,10 @@ class App {
             return false
         }
 
+        if (this.targetCommand === TargetCommand.None) {
+            return false
+        }
+
         const cxy = new geo.Point(this.inp.mouseX, this.inp.mouseY)
         const mxy = this.canvasToMapPoint(cxy)
 
@@ -1478,7 +1482,7 @@ class App {
         switch (this.targetCommand) {
             case TargetCommand.None:
                 return false
-                break;
+                break
             case TargetCommand.Look: {
                 // show what user clicked on
                 for (const th of this.map.at(mxy)) {
@@ -1575,7 +1579,7 @@ class App {
 
         this.drawThing(offset, this.map.player)
         this.drawHealthBar(offset, this.map.player)
-        this.drawCursor(offset);
+        this.drawCursor(offset)
 
         this.renderer.flush()
     }
@@ -1664,7 +1668,7 @@ class App {
                     this.inventoryDialog.show()
                 }
             }
-                break;
+                break
 
             case "Z": {
                 const wasHidden = this.statsDialog.hidden
@@ -1673,11 +1677,11 @@ class App {
                     this.statsDialog.show()
                 }
             }
-                break;
+                break
 
             case "L":
                 this.targetCommand = TargetCommand.Look
-                break;
+                break
 
             case "ENTER":
                 if (ev.ctrlKey && this.map.player.thing.rangedWeapon) {
@@ -1685,11 +1689,11 @@ class App {
                 } else {
                     this.targetCommand = TargetCommand.Attack
                 }
-                break;
+                break
 
             case "L":
                 this.targetCommand = TargetCommand.Look
-                break;
+                break
 
             case "=":
                 this.zoom = Math.min(this.zoom * 2, 16)
