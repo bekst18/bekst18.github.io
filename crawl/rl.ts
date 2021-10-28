@@ -118,17 +118,20 @@ export interface ItemOptions {
     color?: gfx.Color
     level: number
     freq?: number
+    value: number
 }
 
 export class Item extends Thing {
     readonly level: number
     readonly freq: number
+    readonly value: number
 
     constructor(options: ItemOptions) {
         super(Object.assign({ passable: false, transparent: true }, options))
 
         this.level = options.level
         this.freq = options.freq ?? 1
+        this.value = options.value ?? 1
     }
 
     clone(): Item {
@@ -281,7 +284,8 @@ export interface CreatureOptions {
     maxHealth: number
     health?: number
     agility?: number
-    level: number
+    level: number,
+    gold: number,
 }
 
 export interface Creature extends Thing {
@@ -291,7 +295,8 @@ export interface Creature extends Thing {
     agility: number
     action: number
     actionReserve: number
-    level: number
+    level: number,
+    gold: number,
 }
 
 export interface PlayerOptions extends CreatureOptions {
@@ -306,7 +311,7 @@ export interface PlayerOptions extends CreatureOptions {
     helm?: Helm | null
     shield?: Shield | null
     ring?: Ring | null
-    inventory?: Item[]
+    inventory?: Item[],
 }
 
 export class Player extends Thing implements Creature {
@@ -327,6 +332,7 @@ export class Player extends Thing implements Creature {
     ring: Ring | null
     lightRadius: number
     inventory: Item[]
+    gold: number
 
     constructor(options: PlayerOptions) {
         super(Object.assign({ passable: false, transparent: true }, options))
@@ -345,6 +351,7 @@ export class Player extends Thing implements Creature {
         this.ring = options.ring ?? null
         this.lightRadius = options.lightRadius
         this.inventory = options.inventory ? [...options.inventory] : []
+        this.gold = options.gold ?? 0
     }
 
     get strength(): number {
@@ -483,7 +490,8 @@ export class Player extends Thing implements Creature {
             helm: this.helm ? this.inventory.indexOf(this.helm) : -1,
             shield: this.shield ? this.inventory.indexOf(this.shield) : -1,
             ring: this.ring ? this.inventory.indexOf(this.ring) : -1,
-            inventory: this.inventory.map(i => i.id)
+            inventory: this.inventory.map(i => i.id),
+            gold: this.gold,
         }
     }
 
@@ -540,6 +548,8 @@ export class Player extends Thing implements Creature {
         } else {
             this.ring = null
         }
+
+        this.gold = state.gold
     }
 }
 
@@ -595,6 +605,7 @@ export class Monster extends Thing implements Creature {
     actionReserve: number = 0
     readonly level: number
     readonly freq: number = 1
+    readonly gold: number
 
     constructor(options: MonsterOptions) {
         super(Object.assign({ passable: false, transparent: true }, options))
@@ -606,6 +617,7 @@ export class Monster extends Thing implements Creature {
         this.attacks = [...options.attacks]
         this.level = options.level
         this.freq = options.freq ?? 1
+        this.gold = options.gold ?? 0
 
         if (this.attacks.length == 0) {
             throw new Error(`No attacks defined for monster ${this.name}`)
@@ -731,7 +743,8 @@ export interface PlayerSaveState {
     helm: number
     shield: number
     ring: number
-    inventory: string[]
+    inventory: string[],
+    gold: number,
 }
 
 /**

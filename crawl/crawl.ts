@@ -89,6 +89,7 @@ class StatsDialog extends Dialog {
         const defenseSpan = dom.byId("statsDefense") as HTMLSpanElement
         const levelSpan = dom.byId("statsLevel") as HTMLSpanElement
         const experienceSpan = dom.byId("statsExperience") as HTMLSpanElement
+        const goldSpan = dom.byId("statsGold") as HTMLSpanElement
         const experienceRequirement = rl.getExperienceRequirement(player.level + 1)
 
         healthSpan.textContent = `${player.health} / ${player.maxHealth}`
@@ -101,6 +102,7 @@ class StatsDialog extends Dialog {
         agilitySpan.textContent = `${player.agility}`
         levelSpan.textContent = `${player.level}`
         experienceSpan.textContent = `${player.experience} / ${experienceRequirement}`
+        goldSpan.textContent = `${player.gold}`
 
         super.show()
     }
@@ -136,7 +138,7 @@ class InventoryDialog extends Dialog {
             this.refresh()
         })
 
-        this.elem.addEventListener("keydown", (ev) => {
+        this.elem.addEventListener("keydown", ev => {
             const key = ev.key.toUpperCase()
             const index = parseInt(ev.key)
 
@@ -520,6 +522,257 @@ class LevelDialog extends Dialog {
     }
 }
 
+enum ShopDialogMode {
+    Buy,
+    Sell
+}
+
+class ShopDialog {
+    private readonly dialog: Dialog
+    private readonly closeButton = dom.byId("shopExitButton") as HTMLButtonElement
+    private readonly buyButton = dom.byId("shopBuyButton") as HTMLButtonElement
+    private readonly sellButton = dom.byId("shopSellButton") as HTMLButtonElement
+    private readonly nextPageButton = dom.byId("shopNextPageButton") as HTMLButtonElement
+    private readonly prevPageButton = dom.byId("shopPrevPageButton") as HTMLButtonElement
+    private readonly shopTable = dom.byId("shopTable") as HTMLTableElement
+    private readonly shopBuyItemTemplate = dom.byId("shopBuyItemTemplate") as HTMLTemplateElement
+    private readonly shopSellItemTemplate = dom.byId("shopSellItemTemplate") as HTMLTemplateElement
+    private mode: ShopDialogMode = ShopDialogMode.Buy
+    private items: rl.Item[] = []
+    private readonly pageSize: number = 9
+    private pageIndex: number = 0
+    private selectedIndex: number = -1
+
+    constructor(private readonly player: rl.Player, canvas: HTMLCanvasElement) {
+        this.dialog = new Dialog(dom.byId("shopDialog"), canvas)
+        this.player = player
+        this.buyButton.addEventListener("click", () => this.setMode(ShopDialogMode.Buy))
+        this.sellButton.addEventListener("click", () => this.setMode(ShopDialogMode.Sell))
+        this.nextPageButton.addEventListener("click", () => this.nextPage())
+        this.prevPageButton.addEventListener("click", () => this.prevPage())
+        this.closeButton.addEventListener("click", () => this.hide())
+
+        const elem = this.dialog.elem
+
+        dom.delegate(elem, "click", ".shop-item-row", (ev) => {
+            const btn = ev.target as HTMLButtonElement
+            const row = btn.closest(".item-row") as HTMLTableRowElement
+            const idx = dom.getElementIndex(row)
+            this.choose(idx)
+        })
+
+        elem.addEventListener("keydown", (ev) => {
+            const key = ev.key.toUpperCase()
+
+            if (key === "X") {
+                this.hide()
+            }
+
+            if (key === "B") {
+                this.setMode(ShopDialogMode.Buy)
+            }
+
+            if (key === "S") {
+                this.setMode(ShopDialogMode.Sell)
+            }
+
+            if (key === "ARROWDOWN" || key === "S") {
+                this.nextItem()
+            }
+
+            if (key === "ARROWUP" || key === "W") {
+                this.prevItem()
+            }
+
+            if (key === "PAGEDOWN" || key === "N") {
+                this.nextPage()
+            }
+
+            if (key === "PAGEUP" || key === "P") {
+                this.prevPage()
+            }
+
+            if (key === "ESCAPE") {
+                this.hide()
+            }
+
+            if (key === "ENTER") {
+                this.choose(this.selectedIndex)
+            }
+
+            const index = parseInt(ev.key)
+            if (index && index > 0 && index <= 9) {
+                this.choose(index - 1)
+            }
+        })
+    }
+
+    show() {
+        this.refresh()
+        this.dialog.show()
+    }
+
+    hide() {
+        this.dialog.hide()
+    }
+
+    choose(idx: number) {
+        idx = this.pageIndex * this.pageSize + idx
+        switch (this.mode) {
+            case ShopDialogMode.Buy:
+                this.buy(idx)
+                break;
+            case ShopDialogMode.Sell:
+                this.sell(idx)
+                break;
+        }
+    }
+
+    setMode(mode: ShopDialogMode) {
+        this.mode = mode;
+        this.pageIndex = 0;
+        this.selectedIndex = -1;
+        this.refresh()
+    }
+
+    buy(idx: number) {
+        const item = this.items[idx]
+
+        if (item.value > this.player.gold) {
+            output.error(`You do not have enough gold for ${item.name}!`)
+            return
+        }
+
+        output.info(`You bought ${item.name}.`)
+        this.player.gold -= item.value
+        this.player.inventory.push(item.clone())
+    }
+
+    sell(idx: number) {
+        const item = this.items[idx]
+        const invIdx = this.player.inventory.indexOf(item)
+        if (invIdx == -1) {
+            return
+        }
+
+        this.player.remove(item)
+        this.player.inventory.splice(invIdx, 1)
+        this.player.gold += Math.floor(item.value / 2)
+        console.log(`You sold ${item.name}.`)
+    }
+
+    get hidden() {
+        return this.dialog.hidden
+    }
+
+    nextPage() {
+        this.pageIndex++
+        this.pageIndex = Math.min(this.pageIndex, Math.ceil(this.items.length / this.pageSize) - 1)
+        this.refresh()
+    }
+
+    prevPage() {
+        this.pageIndex--
+        this.pageIndex = Math.max(this.pageIndex, 0)
+        this.refresh()
+    }
+
+    nextItem() {
+        ++this.selectedIndex
+        this.selectedIndex = Math.min(this.selectedIndex, 8)
+        this.refresh()
+    }
+
+    prevItem() {
+        --this.selectedIndex
+        this.selectedIndex = Math.max(this.selectedIndex, -1)
+        this.refresh()
+    }
+
+    refresh() {
+        switch (this.mode) {
+            case ShopDialogMode.Buy:
+                this.refreshBuy()
+                break
+
+            case ShopDialogMode.Sell:
+                this.refreshSell()
+                break
+        }
+    }
+
+    refreshBuy() {
+        const tbody = this.shopTable.tBodies[0]
+        dom.removeAllChildren(tbody)
+
+        // assemble item list
+        const player = this.player
+        this.items = [...things.db].filter(t => t instanceof rl.Item && t.value > 0 && t.level <= player.level) as rl.Item[]
+
+        const pageOffset = this.pageIndex * this.pageSize
+        const pageSize = Math.min(this.pageSize, this.items.length - pageOffset)
+        this.selectedIndex = Math.min(this.selectedIndex, pageSize - 1)
+
+        for (let i = 0; i < pageSize; ++i) {
+            const item = this.items[pageOffset + i]
+            const fragment = this.shopBuyItemTemplate.content.cloneNode(true) as DocumentFragment
+            const tr = dom.bySelector(fragment, ".item-row")
+            const itemIndexTd = dom.bySelector(tr, ".item-index")
+            const itemNameTd = dom.bySelector(tr, ".item-name")
+            const itemCostTd = dom.bySelector(tr, ".item-cost")
+            itemIndexTd.textContent = `${i + 1}`
+            itemNameTd.textContent = item.name
+            itemCostTd.textContent = `${item.value}`
+
+            if (i === this.selectedIndex) {
+                tr.classList.add("selected")
+            }
+
+            if (item.value > player.gold) {
+                tr.classList.add("disabled")
+            }
+
+            tbody.appendChild(fragment)
+        }
+
+        this.buyButton.disabled = true
+        this.sellButton.disabled = false
+    }
+
+    refreshSell() {
+        const tbody = this.shopTable.tBodies[0]
+        dom.removeAllChildren(tbody)
+
+        // assemble item list
+        const player = this.player
+        this.items = [...player.inventory].filter(t => t.value > 0) as rl.Item[]
+        const pageOffset = this.pageIndex * this.pageSize
+        const pageSize = Math.min(this.pageSize, this.items.length - pageOffset)
+        this.selectedIndex = Math.min(this.selectedIndex, pageSize - 1)
+
+        for (let i = 0; i < pageSize; ++i) {
+            const item = this.items[pageOffset + i]
+            const fragment = this.shopSellItemTemplate.content.cloneNode(true) as DocumentFragment
+            const tr = dom.bySelector(fragment, ".item-row")
+            const itemIndexTd = dom.bySelector(tr, ".item-index")
+            const itemNameTd = dom.bySelector(tr, ".item-name")
+            const itemCostTd = dom.bySelector(tr, ".item-cost")
+            itemIndexTd.textContent = `${i + 1}`
+            itemNameTd.textContent = item.name
+            itemCostTd.textContent = `${Math.floor(item.value / 2)}`
+
+            if (i === this.selectedIndex) {
+                tr.classList.add("selected")
+            }
+
+            tbody.appendChild(fragment)
+        }
+
+        this.buyButton.disabled = false
+        this.sellButton.disabled = true
+    }
+}
+
 function getSortedItems(items: Iterable<rl.Item>): rl.Item[] {
     const sortedItems = iter.orderBy(items, i => i.name)
     return sortedItems
@@ -622,6 +875,7 @@ class App {
     private readonly containerDialog: ContainerDialog
     private readonly defeatDialog = new DefeatDialog(this.canvas)
     private readonly levelDialog: LevelDialog
+    private readonly shopDialog: ShopDialog
     private zoom = 1
     private targetCommand: TargetCommand = TargetCommand.None
     private cursorPosition?: geo.Point
@@ -638,6 +892,7 @@ class App {
         this.inventoryDialog = new InventoryDialog(player, this.canvas)
         this.containerDialog = new ContainerDialog(player, this.canvas)
         this.levelDialog = new LevelDialog(player, this.canvas)
+        this.shopDialog = new ShopDialog(player, this.canvas)
     }
 
     public static async create(): Promise<App> {
@@ -653,13 +908,12 @@ class App {
         const floor = state?.floor ?? 1
 
         const player = things.player.clone()
-        player.experience = 9
-        // if (state) {
-        //     player.load(things.db, state.player)
-        // } else {
-        player.inventory.push(things.healthPotion.clone())
-        player.inventory.push(things.slingShot.clone())
-        // }
+        if (state) {
+            player.load(things.db, state.player)
+        } else {
+            player.inventory.push(things.healthPotion.clone())
+            player.inventory.push(things.slingShot.clone())
+        }
 
         const map = await gen.generateDungeonLevel(rng, things.db, player, floor)
         const [texture, imageMap] = await loadImages(renderer, map)
@@ -1425,16 +1679,8 @@ class App {
                 this.targetCommand = TargetCommand.Look
                 break;
 
-            case "P":
-                const wasHidden = this.statsDialog.hidden
-                this.hideDialogs()
-                if (wasHidden) {
-                    this.levelDialog.show()
-                }
-                break
-            /*
             case "ENTER":
-                if (ev.ctrlKey && this.player.rangedWeapon) {
+                if (ev.ctrlKey && this.map.player.thing.rangedWeapon) {
                     this.targetCommand = TargetCommand.Shoot
                 } else {
                     this.targetCommand = TargetCommand.Attack
@@ -1442,9 +1688,8 @@ class App {
                 break;
 
             case "L":
-                this.targetCommand = TargetCommand.Shoot
+                this.targetCommand = TargetCommand.Look
                 break;
-                */
 
             case "=":
                 this.zoom = Math.min(this.zoom * 2, 16)
@@ -1476,7 +1721,7 @@ class App {
 
     private handleExit(dir: rl.ExitDirection) {
         if (dir == rl.ExitDirection.Up && this.floor == 1) {
-            output.warning("Someone has covered the exit with a boulder, you are stuck here!")
+            this.shopDialog.show()
             return
         }
 

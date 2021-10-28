@@ -56,9 +56,12 @@
                         <td id="statsLevel"></td>
                     </tr>
                     <tr>
-                        <td>Experience</td>
-                        </td>
+                        <td>Experience:</td>
                         <td id="statsExperience"></td>
+                    </tr>
+                    <tr>
+                        <td>Gold:</td>
+                        <td id="statsGold"></td>
                     </tr>
                 </tbody>
             </table>
@@ -116,24 +119,34 @@
                 </tr>
             </template>
         </div>
-        <div id="townDialog" class="dialog" tabindex="0" hidden>
-            <h1>Town</h1>
-            <table id="townTable">
-                <tr>
-                    <td>1. <strong>I</strong>nn</td>
-                </tr>
-                <tr>
-                    <td>2. <strong>S</strong>hop</td>
-                </tr>
+        <div id="shopDialog" class="dialog" tabindex="0" hidden>
+            <h1>Shop</h1>
+            <table id="shopTable">
+                <thead></thead>
+                <tbody></tbody>
             </table>
-        </div>
-        <div id="innDialog" class="dialog" tabindex="0" hidden>
-            <h1>Inn</h1>
-            <table id="innTable">
-                <tr>
-                    <td>1. <strong>R</strong>est</td>
+            <div class="button-group">
+                <button id="shopBuyButton" class="mt-3" type="button"><strong>B</strong>uy</button>
+                <button id="shopSellButton" class="mt-3" type="button"><strong>S</strong>ell</button>
+                <button id="shopPrevPageButton" class="mt-3" type="button"><strong>P</strong>rev</button>
+                <button id="shopNextPageButton" class="mt-3" type="button"><strong>N</strong>ext</button>
+                <button id="shopExitButton" class="dialog-close-button mt-3"
+                    type="button">E<strong>x</strong>it</button>
+            </div>
+            <template id="shopBuyItemTemplate">
+                <tr class="shop-buy-row item-row">
+                    <td class="item-index"></td>
+                    <td class="item-name"></td>
+                    <td class="item-cost"></td>
                 </tr>
-            </table>
+            </template>
+            <template id="shopSellItemTemplate">
+                <tr class="shop-sell-row item-row">
+                    <td class="item-index"></td>
+                    <td class="item-name"></td>
+                    <td class="item-cost"></td>
+                </tr>
+            </template>
         </div>
         <div id="levelDialog" class="dialog" tabindex="0" hidden>
             <h1>You have leveled up!</h1>

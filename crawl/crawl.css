@@ -141,10 +141,23 @@ table, tr, td {
     background-color: darkgray;
 }
 
+.item-row.disabled {
+    cursor: not-allowed;
+    color: gray;
+}
+
 #levelAttributeTable {
     width: 100%;
 }
 
 #levelAttributeTable td {
+    padding: .25em;
+}
+
+#shopTable {
+    width: 100%;
+}
+
+#shopTable td {
     padding: .25em;
 }
