@@ -308,6 +308,33 @@ export const fider = db.insert(new rl.Monster({
     gold: 2,
 }))
 
+export const goblin = db.insert(new rl.Monster({
+    id: "goblin",
+    name: "Fider",
+    maxHealth: 7,
+    image: "./assets/goblin.png",
+    level: 2,
+    experience: 2,
+    agility: 1,
+    defense: 1,
+    attacks: [
+        new rl.Attack({
+            attack: 0,
+            damage: new rl.Dice(2, 3),
+            action: 1,
+            verb: "strikes at"
+        }),
+        new rl.Attack({
+            attack: 0,
+            damage: new rl.Dice(1, 2),
+            action: 1,
+            range: 3,
+            verb: "throws rock at"
+        })
+    ],
+    gold: 2,
+}))
+
 export const fists = db.insert(new rl.MeleeWeapon({
     id: "fists",
     name: "Fists",
@@ -576,7 +603,7 @@ export const player = db.insert(new rl.Player({
     name: "Player",
     image: "./assets/char.png",
     maxHealth: 6,
-    lightRadius: 4,
+    lightRadius: 2,
     level: 1,
     gold: 0,
 }))

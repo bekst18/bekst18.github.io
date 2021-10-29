@@ -529,6 +529,7 @@ enum ShopDialogMode {
 
 class ShopDialog {
     private readonly dialog: Dialog
+    private readonly goldSpan = dom.byId("shopGoldSpan") as HTMLSpanElement;
     private readonly closeButton = dom.byId("shopExitButton") as HTMLButtonElement
     private readonly buyButton = dom.byId("shopBuyButton") as HTMLButtonElement
     private readonly sellButton = dom.byId("shopSellButton") as HTMLButtonElement
@@ -699,6 +700,8 @@ class ShopDialog {
                 this.refreshSell()
                 break
         }
+
+        this.goldSpan.textContent = `Gold: ${this.player.gold}`
     }
 
     refreshBuy() {
@@ -752,13 +755,14 @@ class ShopDialog {
 
         for (let i = 0; i < pageSize; ++i) {
             const item = this.items[pageOffset + i]
+            const equipped = this.player.isEquipped(item)
             const fragment = this.shopSellItemTemplate.content.cloneNode(true) as DocumentFragment
             const tr = dom.bySelector(fragment, ".item-row")
             const itemIndexTd = dom.bySelector(tr, ".item-index")
             const itemNameTd = dom.bySelector(tr, ".item-name")
             const itemCostTd = dom.bySelector(tr, ".item-cost")
             itemIndexTd.textContent = `${i + 1}`
-            itemNameTd.textContent = item.name
+            itemNameTd.textContent = `${equipped ? "* " : ""}${item.name}`
             itemCostTd.textContent = `${Math.floor(item.value / 2)}`
 
             if (i === this.selectedIndex) {
@@ -1595,7 +1599,7 @@ class App {
 
         const color = thing.color.clone()
         if (thing.visible === rl.Visibility.Fog) {
-            color.a = .5
+            color.a = .25
         }
 
         this.drawImage(offset, position, thing.image, color)

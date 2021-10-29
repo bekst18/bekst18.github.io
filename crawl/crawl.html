@@ -2,11 +2,12 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width">
-    <title>WebGL Play</title>
+    <title>Dungeon Crawl (Early Alpha)</title>
     <link rel="stylesheet" type="text/css" href="/shared/shared.css">
     <link rel="stylesheet" type="text/css" href="crawl.css">
 </head>
 <body>
+    <div id="modalBackground" hidden></div>
     <div id="container">
         <div id="ui" class="button-group">
             <button id="attackButton" type="button">Attack (Enter)</button>
@@ -18,7 +19,6 @@
         </div>
         <canvas id="canvas" tabindex="1"></canvas>
         <div id="output"></div>
-        <div id="modalBackground" hidden></div>
         <div id="statsDialog" class="dialog" tabindex="0" hidden>
             <h1>Character Stats</h1>
             <table id="statsTable">
@@ -120,10 +120,12 @@
         </div>
         <div id="shopDialog" class="dialog" tabindex="0" hidden>
             <h1>Shop</h1>
+            <span id="shopGoldSpan" class="my-3"></span>
             <table id="shopTable">
                 <thead></thead>
                 <tbody></tbody>
             </table>
+            <span class="my-3">* - indicates that item is equipped.</span>
             <div class="button-group">
                 <button id="shopBuyButton" class="mt-3" type="button"><strong>B</strong>uy</button>
                 <button id="shopSellButton" class="mt-3" type="button"><strong>S</strong>ell</button>

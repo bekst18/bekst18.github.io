@@ -59,7 +59,7 @@ body {
 }
 
 .dialog {
-    z-index: 1;
+    z-index: 3;
     position: fixed;
     top: 50%;
     left: 50%;
@@ -81,11 +81,11 @@ body {
 }
 
 #ui {
-    z-index: 2;
+    z-index: 1;
 }
 
 #modalBackground {
-    z-index: 1;
+    z-index: 2;
     position: fixed;
     top: 0;
     left: 0;
