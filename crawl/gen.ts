@@ -49,7 +49,7 @@ interface Room {
     depth: number,
 }
 
-export async function generateDungeonLevel(rng: rand.SFC32RNG, db: rl.ThingDB, player: rl.Player, floor: number): Promise<maps.Map> {
+export async function generateDungeonLevel(rng: rand.SFC32RNG, db: rl.ThingDB, player: rl.Player, floor: number, dir: rl.ExitDirection): Promise<maps.Map> {
     let minDim = 24;
     let maxDim = 32 + floor * 4;
     let dimDice = new rl.Dice(minDim, maxDim)
@@ -58,7 +58,7 @@ export async function generateDungeonLevel(rng: rand.SFC32RNG, db: rl.ThingDB, p
 
     const monsters = createMonsterList(db, floor)
     const items = createItemList(db, floor)
-    const map = generateMapRooms(rng, monsters, items, width, height, player)
+    const map = generateMapRooms(rng, monsters, items, width, height, player, dir)
 
     map.lighting = maps.Lighting.None
     return map
@@ -70,7 +70,8 @@ function generateMapRooms(
     items: rl.WeightedList<rl.Item>,
     width: number,
     height: number,
-    player: rl.Player): maps.Map {
+    player: rl.Player,
+    dir: rl.ExitDirection): maps.Map {
     const map = new maps.Map(width, height, 1, { position: new geo.Point(0, 0), thing: player })
     const minRooms = 4
 
@@ -84,8 +85,6 @@ function generateMapRooms(
     })() as [CellGrid, Room[]]
 
     const firstRoom = rooms.reduce((x, y) => x.depth < y.depth ? x : y)
-    map.player.position = firstRoom.interiorPt.clone()
-
     const stairsUp = tileset.stairsUp.clone()
     const stairsUpPosition = iter.find(visitInteriorCoords(cells, firstRoom.interiorPt), pt => iter.any(grid.visitNeighbors(cells, pt), a => a[0] === CellType.Wall))
     if (!stairsUpPosition) {
@@ -94,7 +93,9 @@ function generateMapRooms(
 
     map.fixtures.set(stairsUpPosition, stairsUp)
 
-    const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
+    // const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
+    // TODO - test code!
+    const lastRoom = rooms.find(r => r.depth === 1)!
     const stairsDown = tileset.stairsDown.clone()
     const stairsDownPosition = iter.find(
         visitInteriorCoords(cells, lastRoom.interiorPt),
@@ -104,6 +105,17 @@ function generateMapRooms(
     }
 
     map.fixtures.set(stairsDownPosition, stairsDown)
+
+    {
+        const stairsPosition = dir === rl.ExitDirection.Up ? stairsDownPosition : stairsUpPosition
+        const playerPosition = iter.find(grid.visitNeighbors(cells, stairsPosition), ([x, _]) => x === CellType.Interior)
+        if (!playerPosition) {
+            throw new Error("Nowhere to put player")
+        }
+
+        map.player.position = playerPosition[1]
+    }
+
 
     // generate tiles and fixtures from cells
     for (const [v, x, y] of cells.scan()) {

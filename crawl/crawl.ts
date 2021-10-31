@@ -920,7 +920,7 @@ class App {
             player.inventory.push(things.slingShot.clone())
         }
 
-        const map = await gen.generateDungeonLevel(rng, things.db, player, floor)
+        const map = await gen.generateDungeonLevel(rng, things.db, player, floor, rl.ExitDirection.Down)
         const [texture, imageMap] = await loadImages(renderer, map)
         const app = new App(rng, renderer, floor, map, texture, imageMap)
         return app
@@ -1747,11 +1747,11 @@ class App {
 
         }
 
-        this.generateMap()
+        this.generateMap(dir)
     }
 
-    private async generateMap() {
-        this.map = await gen.generateDungeonLevel(this.rng, things.db, this.map.player.thing, this.floor)
+    private async generateMap(dir: rl.ExitDirection) {
+        this.map = await gen.generateDungeonLevel(this.rng, things.db, this.map.player.thing, this.floor, dir)
         const [texture, imageMap] = await loadImages(this.renderer, this.map)
         this.texture = texture
         this.imageMap = imageMap
