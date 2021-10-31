@@ -6,12 +6,6 @@ import * as gfx from "./gfx.js"
 
 export const tileSize = 24
 
-export enum Visibility {
-    None,
-    Fog,
-    Visible
-}
-
 export interface ThingOptions {
     id: string
     passable: boolean
@@ -28,7 +22,6 @@ export class Thing {
     readonly name: string
     readonly image: string
     readonly color = new gfx.Color(1, 1, 1, 1)
-    visible: Visibility = Visibility.None
 
     constructor(options: ThingOptions) {
         this.id = options.id
@@ -73,7 +66,21 @@ export class Tile extends Thing {
     }
 }
 
+interface FixtureOptions extends ThingOptions {
+    lightColor?: gfx.Color
+    lightRadius?: number
+}
+
 export class Fixture extends Thing {
+    lightColor: gfx.Color
+    lightRadius: number
+
+    constructor(options: FixtureOptions) {
+        super(options)
+        this.lightColor = options.lightColor ?? gfx.Color.white.clone()
+        this.lightRadius = options.lightRadius ?? 0
+    }
+
     clone(): Fixture {
         return new Fixture(this)
     }

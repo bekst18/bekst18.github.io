@@ -3,6 +3,13 @@ import * as iter from "../shared/iter.js"
 import * as rl from "./rl.js"
 import * as grid from "../shared/grid.js"
 
+export enum Visibility {
+    None,
+    Fog,
+    Dark,
+    Visible
+}
+
 export interface Placed<T extends rl.Thing> {
     thing: T,
     position: geo.Point,
@@ -24,19 +31,23 @@ export interface Layer<T extends rl.Thing> {
     things(): Generator<T>
 }
 
-export interface LayerSaveState {
-
-}
-
 /**
- * a layer that is based on a set
+ * a layer that is based on a map
  * works well for sparse layers
  */
 export class MapLayer<T extends rl.Thing> implements Layer<T> {
     private readonly map = new window.Map<T, Placed<T>>()
 
+    // this isn't quite right!
+    // need to remove any old item at the specified position!
     set(position: geo.Point, thing: T): void {
         position = position.clone()
+
+        let th = iter.wrap(this.map.values()).find(pth => pth.position.equal(position))
+        if (th) {
+            this.map.delete(th.thing)
+        }
+
         this.map.set(thing, { thing, position })
     }
 
@@ -190,6 +201,7 @@ export enum Lighting {
  */
 export class Map {
     tiles: Layer<rl.Tile>
+    visible: grid.Grid<Visibility>
     fixtures: Layer<rl.Fixture>
     exits: Layer<rl.Exit>
     monsters: Layer<rl.Monster>
@@ -198,6 +210,7 @@ export class Map {
 
     constructor(readonly width: number, readonly height: number, readonly depth: number, readonly player: Placed<rl.Player>) {
         this.tiles = new GridLayer(width, height)
+        this.visible = grid.generate(width, height, _ => Visibility.None)
         this.fixtures = new MapLayer()
         this.exits = new MapLayer()
         this.monsters = new MapLayer()
@@ -256,6 +269,10 @@ export class Map {
         return this.monsters.at(xy)
     }
 
+    visibilityAt(xy: geo.Point): Visibility {
+        return this.visible.atPoint(xy)
+    }
+
     *at(xy: geo.Point): Generator<rl.Monster | rl.Fixture | rl.Tile> {
         const fixture = this.fixtureAt(xy)
         if (fixture) {
@@ -289,32 +306,155 @@ export class Map {
     isPassable(position: geo.Point): boolean {
         return this.inBounds(position) && iter.all(this.at(position), th => th.passable)
     }
-}
 
-function resetVisibility(map: Map) {
-    for (const th of map) {
-        if (th.thing.visible === rl.Visibility.Visible) {
-            th.thing.visible = rl.Visibility.Fog
+    updateVisible(viewportRadius: number) {
+        this.clearVisible()
+        const eye = this.player.position
+        const lightRadius = this.player.thing.lightRadius
+
+        for (let i = 0; i < 8; ++i) {
+            this.updateVisibleOctant(eye, viewportRadius, lightRadius, i)
+        }
+
+        this.visible.setPoint(eye, Visibility.Visible)
+
+        // process each light source, lighting any tile that is marked as dark
+        const sources = iter.filter(this.fixtures, f => f.thing.lightRadius > 0)
+
+        for (const source of sources) {
+            this.processLightSource(source)
         }
     }
 
-    for (const monster of map.monsters) {
-        monster.thing.visible = rl.Visibility.None
+    private clearVisible() {
+        for (let i = 0; i < this.visible.size; ++i) {
+            this.visible.setf(i, Visibility.None)
+        }
     }
 
-    map.player.thing.visible = rl.Visibility.Visible
+    private updateVisibleOctant(eye: geo.Point, viewportRadius: number, lightRadius: number, octant: number) {
+        const shadows: geo.Point[] = []
+
+        for (let y = 1; y <= viewportRadius; ++y) {
+            for (let x = 0; x <= y; ++x) {
+                const octantPoint = new geo.Point(x, y)
+
+                const mapPoint = transformOctant(octantPoint, octant).addPoint(eye)
+                if (!this.inBounds(mapPoint)) {
+                    continue
+                }
+
+                if (isShadowed(shadows, octantPoint)) {
+                    this.visible.set(mapPoint.x, mapPoint.y, Visibility.None)
+                    continue
+                }
+
+                const opaque = iter.any(this.at(mapPoint), th => !th.transparent)
+                if (opaque) {
+                    shadows.push(octantPoint)
+                }
+
+                if (geo.calcManhattenDist(mapPoint, eye) > lightRadius) {
+                    this.visible.set(mapPoint.x, mapPoint.y, Visibility.Dark)
+                    continue
+                }
+
+                this.visible.set(mapPoint.x, mapPoint.y, Visibility.Visible)
+            }
+        }
+    }
+
+    private processLightSource(positionedSource: Placed<rl.Fixture>) {
+        const { position, thing: source } = positionedSource
+        if (source.lightRadius <= 0) {
+            return
+        }
+
+        for (let i = 0; i < 8; ++i) {
+            this.updateVisibleOctantLightSource(position, source.lightRadius, i)
+        }
+
+        if (this.visibilityAt(position) == Visibility.Dark) {
+            this.visible.setPoint(position, Visibility.Visible)
+        }
+    }
+
+    private updateVisibleOctantLightSource(eye: geo.Point, radius: number, octant: number) {
+        const shadows: geo.Point[] = []
+
+        // for light source, should only light darkened squares
+        for (let y = 1; y <= radius; ++y) {
+            for (let x = 0; x <= y; ++x) {
+                const octantPoint = new geo.Point(x, y)
+
+                const mapPoint = transformOctant(octantPoint, octant).addPoint(eye)
+                if (!this.inBounds(mapPoint)) {
+                    continue
+                }
+
+                if (isShadowed(shadows, octantPoint)) {
+                    continue
+                }
+
+                const opaque = iter.any(this.at(mapPoint), th => !th.transparent)
+                if (opaque) {
+                    shadows.push(octantPoint)
+                }
+
+                if (geo.calcManhattenDist(mapPoint, eye) > radius) {
+                    continue
+                }
+
+                if (this.visibilityAt(mapPoint) === Visibility.Dark) {
+                    this.visible.set(mapPoint.x, mapPoint.y, Visibility.Visible)
+                }
+            }
+        }
+    }
 }
 
+/*
 export function updateVisibility(map: Map, radius: number) {
     resetVisibility(map)
 
     const eye = map.player.position
+
     for (let i = 0; i < 8; ++i) {
         updateVisibilityOctant(map, eye, radius, i)
     }
 
     // eye point always visible
     iter.each(map.at(eye), th => th.visible = rl.Visibility.Visible)
+
+    // process other light sources
+    processLightSources(map)
+}
+
+function processLightSources(map: Map) {
+    // have we uncovered other light sources?
+    // need a way to evaluate LOS - not JUST visible!
+    const lights = new Set(iter.filter(map.fixtures, x => x.thing.lightRadius > 0 && ))
+
+    while (lights.size > 0) {
+        const light = iter.find(lights, l => l.thing.visible == rl.Visibility.Visible)
+        if (!light) {
+            break
+        }
+
+        lights.delete(light)
+
+        for (let i = 0; i < 8; ++i) {
+            updateVisibilityOctant(map, light.position, light.thing.lightRadius, i)
+        }
+    }
+}
+
+function processLightSource(source: rl.Fixture) {
+    if (source.lightRadius <= 0) {
+        return
+    }
+
+
 }
 
 function updateVisibilityOctant(map: Map, eye: geo.Point, radius: number, octant: number) {
@@ -343,22 +483,23 @@ function updateVisibilityOctant(map: Map, eye: geo.Point, radius: number, octant
             }
 
             for (const th of map.at(mapPoint)) {
-                th.visible = rl.Visibility.Visible
+                th.visible = Visibility.Visible
             }
         }
     }
 }
+*/
 
 function transformOctant(coords: geo.Point, octant: number): geo.Point {
     switch (octant) {
-        case 0: return new geo.Point(-coords.x, coords.y);
-        case 1: return new geo.Point(-coords.y, coords.x);
-        case 2: return new geo.Point(coords.y, coords.x);
-        case 3: return new geo.Point(coords.x, coords.y);
-        case 4: return new geo.Point(coords.x, -coords.y);
-        case 5: return new geo.Point(coords.y, -coords.x);
-        case 6: return new geo.Point(-coords.y, -coords.x);
-        case 7: return new geo.Point(-coords.x, -coords.y);
+        case 0: return new geo.Point(-coords.x, coords.y)
+        case 1: return new geo.Point(-coords.y, coords.x)
+        case 2: return new geo.Point(coords.y, coords.x)
+        case 3: return new geo.Point(coords.x, coords.y)
+        case 4: return new geo.Point(coords.x, -coords.y)
+        case 5: return new geo.Point(coords.y, -coords.x)
+        case 6: return new geo.Point(-coords.y, -coords.x)
+        case 7: return new geo.Point(-coords.x, -coords.y)
     }
 
     throw new Error("Invalid octant - must be in interval [0, 8)")

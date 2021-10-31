@@ -1432,7 +1432,7 @@ class App {
             return
         }
 
-        if (tile.visible !== rl.Visibility.Visible) {
+        if (map.visibilityAt(cursorPosition) !== maps.Visibility.Visible) {
             output.info(`Target not visible`)
             return
         }
@@ -1526,8 +1526,8 @@ class App {
     private updateVisibility() {
         // update visibility around player
         // limit radius to visible viewport area
-        const lightRadius = this.calcLightRadius()
-        maps.updateVisibility(this.map, lightRadius)
+        const viewportLightRadius = Math.max(Math.ceil(this.canvas.width / this.tileSize), Math.ceil(this.canvas.height / this.tileSize))
+        this.map.updateVisible(viewportLightRadius)
     }
 
     private calcMapViewport(): geo.AABB {
@@ -1593,12 +1593,13 @@ class App {
 
     private drawThing(offset: geo.Point, placedThing: maps.Placed<rl.Thing>) {
         const { position, thing } = placedThing
-        if (thing.visible === rl.Visibility.None) {
+        const visible = this.map.visibilityAt(position)
+        if (visible === maps.Visibility.None || visible == maps.Visibility.Dark) {
             return
         }
 
         const color = thing.color.clone()
-        if (thing.visible === rl.Visibility.Fog) {
+        if (visible === maps.Visibility.Fog) {
             color.a = .25
         }
 
@@ -1784,7 +1785,6 @@ function loadState(): AppSaveState | null {
     }
 
     const state = JSON.parse(json) as AppSaveState
-    console.log("STATE LOADED:", state)
     return state
 }
 

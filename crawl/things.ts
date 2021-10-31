@@ -107,6 +107,24 @@ export const stairsDown = db.insert(new rl.Exit({
     direction: rl.ExitDirection.Down,
 }))
 
+export const sconce = db.insert(new rl.Fixture({
+    id: "sconce",
+    name: "Sconce with Torch",
+    image: "./assets/sconce.png",
+    passable: false,
+    transparent: false,
+    lightRadius: 3,
+}))
+
+
+export const brazier = db.insert(new rl.Fixture({
+    id: "brazier",
+    name: "Lit Brazier",
+    passable: false,
+    transparent: false,
+    lightRadius: 3,
+}))
+
 export const rat = db.insert(new rl.Monster({
     id: "rat",
     name: "Rat",

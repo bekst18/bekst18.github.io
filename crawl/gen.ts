@@ -145,6 +145,12 @@ function generateMapRooms(
     placeMonsters(rng, monsters, cells, rooms, map)
     placeItems(rng, items, cells, rooms, map)
 
+    const sconcePosition = iter.find(grid.visitNeighbors(cells, stairsUpPosition), ([cell, _]) => cell === CellType.Wall)
+    if (sconcePosition) {
+        console.log(sconcePosition[1], stairsUpPosition)
+        map.fixtures.set(sconcePosition[1], things.sconce.clone())
+    }
+
     return map
 }
 
@@ -686,6 +692,5 @@ function createItemList(db: rl.ThingDB, floor: number) {
         list.push([item, w])
     }
 
-    console.log(list)
     return new rl.WeightedList(list)
 }
