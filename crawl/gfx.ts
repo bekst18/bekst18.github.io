@@ -3,6 +3,7 @@
  */
 import * as glu from "../shared/glu.js"
 import * as geo from "../shared/geo2d.js"
+import { clamp } from "../shared/math.js"
 
 export class Color {
     constructor(public r: number, public g: number, public b: number, public a: number) { }
@@ -11,12 +12,35 @@ export class Color {
         return new Color(this.r, this.g, this.b, this.a)
     }
 
+    mul(color: Color) {
+        return new Color(this.r * color.r, this.g * color.g, this.b * color.b, this.a * color.a)
+    }
+
+    add(color: Color) {
+        return new Color(this.r + color.r, this.g + color.g, this.b + color.b, this.a + color.a)
+    }
+
+    sub(color: Color) {
+        return new Color(this.r - color.r, this.g - color.g, this.b - color.b, this.a - color.a)
+    }
+
+    div(color: Color) {
+        return new Color(this.r / color.r, this.g / color.g, this.b / color.b, this.a / color.a)
+    }
+
+    sat(): Color {
+        return new Color(clamp(this.r, 0, 1), clamp(this.g, 0, 1), clamp(this.b, 0, 1), clamp(this.a, 0, 1))
+    }
+
     public static white = new Color(1, 1, 1, 1)
     public static black = new Color(0, 0, 0, 1)
     public static gray = new Color(.5, .5, .5, 1)
     public static red = new Color(1, 0, 0, 1)
     public static green = new Color(0, 1, 0, 1)
     public static blue = new Color(0, 0, 1, 1)
+    public static yellow = new Color(1, 1, 0, 1)
+    public static cyan = new Color(0, 1, 1, 1)
+    public static magenta = new Color(1, 0, 1, 1)
 }
 
 const spriteVertexSrc = `#version 300 es

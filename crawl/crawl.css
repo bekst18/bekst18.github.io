@@ -134,7 +134,7 @@ table, tr, td {
 }
 
 .item-row:hover, .item-row:hover td {
-    background-color: darkgray;
+    background-color: dimgrey;
 }
 
 .item-row.selected, .item-row.selected td {

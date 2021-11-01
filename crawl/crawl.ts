@@ -248,9 +248,10 @@ class InventoryDialog extends Dialog {
             const equipButton = dom.bySelector(tr, ".inventory-equip-button") as HTMLButtonElement
             const removeButton = dom.bySelector(tr, ".inventory-remove-button") as HTMLButtonElement
             const useButton = dom.bySelector(tr, ".inventory-use-button") as HTMLButtonElement
+            const name = item instanceof rl.LightSource ? `${item.name} (${item.duration})` : item.name
 
             itemIndexTd.textContent = (i + 1).toString()
-            itemNameTd.textContent = item.name
+            itemNameTd.textContent = name
 
             if (!(item instanceof rl.Usable)) {
                 useButton.remove()
@@ -915,9 +916,6 @@ class App {
         const player = things.player.clone()
         if (state) {
             player.load(things.db, state.player)
-        } else {
-            player.inventory.push(things.healthPotion.clone())
-            player.inventory.push(things.slingShot.clone())
         }
 
         const map = await gen.generateDungeonLevel(rng, things.db, player, floor, rl.ExitDirection.Down)
@@ -1017,6 +1015,14 @@ class App {
         player.actionReserve = 0
 
         this.updateMonsterStates()
+
+        // advance duration of items
+        if (player.lightSource && player.lightSource.duration > 0) {
+            player.lightSource.duration -= 1
+            if (player.lightSource.duration === 0) {
+                output.warning(`Your ${player.lightSource.name} has been extinguished!`)
+            }
+        }
 
         const experienceRequired = rl.getExperienceRequirement(player.level + 1)
         if (player.experience >= experienceRequired) {
@@ -1594,12 +1600,17 @@ class App {
     private drawThing(offset: geo.Point, placedThing: maps.Placed<rl.Thing>) {
         const { position, thing } = placedThing
         const visible = this.map.visibilityAt(position)
-        if (visible === maps.Visibility.None || visible == maps.Visibility.Dark) {
+        const seen = this.map.seenAt(position)
+        const fog = (visible === maps.Visibility.None || visible === maps.Visibility.Dark)
+            && seen
+            && (thing instanceof rl.Tile || thing instanceof rl.Fixture)
+
+        if ((visible === maps.Visibility.None || visible == maps.Visibility.Dark) && !fog) {
             return
         }
 
         const color = thing.color.clone()
-        if (visible === maps.Visibility.Fog) {
+        if (fog) {
             color.a = .25
         }
 

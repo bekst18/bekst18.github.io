@@ -610,6 +610,26 @@ export const potentHealthPotion = db.insert(new rl.Usable({
     value: 100,
 }))
 
+export const torch = db.insert(new rl.LightSource({
+    id: "torch",
+    name: "Torch",
+    level: 1,
+    value: 5,
+    lightRadius: 2,
+    lightColor: gfx.Color.yellow,
+    duration: 500,
+}))
+
+export const lantern = db.insert(new rl.LightSource({
+    id: "lantern",
+    name: "Lantern",
+    level: 3,
+    value: 50,
+    lightRadius: 3,
+    lightColor: gfx.Color.yellow,
+    duration: 5000,
+}))
+
 export const chest = db.insert(new rl.Container({
     id: "chest",
     name: "Chest",
@@ -621,7 +641,10 @@ export const player = db.insert(new rl.Player({
     name: "Player",
     image: "./assets/char.png",
     maxHealth: 6,
-    lightRadius: 2,
     level: 1,
     gold: 0,
+    inventory: [
+        healthPotion.clone(),
+        torch.clone(),
+    ]
 }))

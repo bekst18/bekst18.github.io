@@ -93,9 +93,7 @@ function generateMapRooms(
 
     map.fixtures.set(stairsUpPosition, stairsUp)
 
-    // const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
-    // TODO - test code!
-    const lastRoom = rooms.find(r => r.depth === 1)!
+    const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
     const stairsDown = tileset.stairsDown.clone()
     const stairsDownPosition = iter.find(
         visitInteriorCoords(cells, lastRoom.interiorPt),

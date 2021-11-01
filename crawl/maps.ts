@@ -4,9 +4,11 @@ import * as rl from "./rl.js"
 import * as grid from "../shared/grid.js"
 
 export enum Visibility {
+    // no visibility
     None,
-    Fog,
+    // in line of sight, but outside of light radius
     Dark,
+    // visible and lit
     Visible
 }
 
@@ -202,6 +204,7 @@ export enum Lighting {
 export class Map {
     tiles: Layer<rl.Tile>
     visible: grid.Grid<Visibility>
+    seen: grid.Grid<boolean>
     fixtures: Layer<rl.Fixture>
     exits: Layer<rl.Exit>
     monsters: Layer<rl.Monster>
@@ -211,6 +214,7 @@ export class Map {
     constructor(readonly width: number, readonly height: number, readonly depth: number, readonly player: Placed<rl.Player>) {
         this.tiles = new GridLayer(width, height)
         this.visible = grid.generate(width, height, _ => Visibility.None)
+        this.seen = grid.generate(width, height, _ => false)
         this.fixtures = new MapLayer()
         this.exits = new MapLayer()
         this.monsters = new MapLayer()
@@ -273,6 +277,10 @@ export class Map {
         return this.visible.atPoint(xy)
     }
 
+    seenAt(xy: geo.Point): boolean {
+        return this.seen.atPoint(xy)
+    }
+
     *at(xy: geo.Point): Generator<rl.Monster | rl.Fixture | rl.Tile> {
         const fixture = this.fixtureAt(xy)
         if (fixture) {
@@ -317,6 +325,7 @@ export class Map {
         }
 
         this.visible.setPoint(eye, Visibility.Visible)
+        this.seen.setPoint(eye, true)
 
         // process each light source, lighting any tile that is marked as dark
         const sources = iter.filter(this.fixtures, f => f.thing.lightRadius > 0)
@@ -328,6 +337,7 @@ export class Map {
 
     private clearVisible() {
         for (let i = 0; i < this.visible.size; ++i) {
+            const v = this.visible.atf(i)
             this.visible.setf(i, Visibility.None)
         }
     }
@@ -355,11 +365,12 @@ export class Map {
                 }
 
                 if (geo.calcManhattenDist(mapPoint, eye) > lightRadius) {
-                    this.visible.set(mapPoint.x, mapPoint.y, Visibility.Dark)
+                    this.visible.setPoint(mapPoint, Visibility.Dark)
                     continue
                 }
 
-                this.visible.set(mapPoint.x, mapPoint.y, Visibility.Visible)
+                this.visible.setPoint(mapPoint, Visibility.Visible)
+                this.seen.setPoint(mapPoint, true)
             }
         }
     }
@@ -376,6 +387,7 @@ export class Map {
 
         if (this.visibilityAt(position) == Visibility.Dark) {
             this.visible.setPoint(position, Visibility.Visible)
+            this.seen.setPoint(position, true)
         }
     }
 
@@ -407,6 +419,7 @@ export class Map {
 
                 if (this.visibilityAt(mapPoint) === Visibility.Dark) {
                     this.visible.set(mapPoint.x, mapPoint.y, Visibility.Visible)
+                    this.seen.setPoint(mapPoint, true)
                 }
             }
         }

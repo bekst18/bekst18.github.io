@@ -246,10 +246,10 @@ export interface RingOptions extends ItemOptions {
 }
 
 export class Ring extends Item {
-    strength: number
-    agility: number
-    intelligence: number
-    maxHealth: number
+    readonly strength: number
+    readonly agility: number
+    readonly intelligence: number
+    readonly maxHealth: number
 
     constructor(options: RingOptions) {
         super(options)
@@ -260,10 +260,38 @@ export class Ring extends Item {
     }
 }
 
-export type Equippable = MeleeWeapon | RangedWeapon | Armor | Helm | Shield | Ring
+export interface LightSourceOptions extends ItemOptions {
+    readonly lightRadius: number
+    readonly lightColor?: gfx.Color
+    readonly duration: number
+}
+
+export class LightSource extends Item {
+    readonly lightRadius: number
+    readonly lightColor: gfx.Color
+    duration: number
+
+    constructor(options: LightSourceOptions) {
+        super(options)
+        this.lightRadius = options.lightRadius
+        this.lightColor = options.lightColor ?? gfx.Color.white
+        this.duration = options.duration
+    }
+
+    clone(): LightSource {
+        return new LightSource(this)
+    }
+}
+
+export type Equippable = MeleeWeapon | RangedWeapon | Armor | Helm | Shield | Ring | LightSource
 
 export function isEquippable(item: Item): item is Equippable {
-    return item instanceof Weapon || item instanceof Armor || item instanceof Shield
+    return item instanceof Weapon
+        || item instanceof Armor
+        || item instanceof Shield
+        || item instanceof Ring
+        || item instanceof LightSource
+        || item instanceof Helm
 }
 
 export interface UsableOptions extends ItemOptions {
@@ -307,7 +335,6 @@ export interface Creature extends Thing {
 }
 
 export interface PlayerOptions extends CreatureOptions {
-    lightRadius: number
     experience?: number
     strength?: number
     intelligence?: number
@@ -318,6 +345,7 @@ export interface PlayerOptions extends CreatureOptions {
     helm?: Helm | null
     shield?: Shield | null
     ring?: Ring | null
+    lightSource?: LightSource | null,
     inventory?: Item[],
 }
 
@@ -337,7 +365,7 @@ export class Player extends Thing implements Creature {
     helm: Helm | null
     shield: Shield | null
     ring: Ring | null
-    lightRadius: number
+    lightSource: LightSource | null
     inventory: Item[]
     gold: number
 
@@ -356,7 +384,7 @@ export class Player extends Thing implements Creature {
         this.armor = options.armor ?? null
         this.shield = options.shield ?? null
         this.ring = options.ring ?? null
-        this.lightRadius = options.lightRadius
+        this.lightSource = options.lightSource ?? null
         this.inventory = options.inventory ? [...options.inventory] : []
         this.gold = options.gold ?? 0
     }
@@ -397,6 +425,18 @@ export class Player extends Thing implements Creature {
         return this.agility + (this.armor?.defense ?? 0) + (this.helm?.defense ?? 0) + (this.shield?.defense ?? 0)
     }
 
+    get lightRadius(): number {
+        if (this.lightSource && this.lightSource.duration > 0) {
+            return this.lightSource.lightRadius
+        }
+
+        return 1
+    }
+
+    get lightColor(): gfx.Color {
+        return this.lightSource?.lightColor ?? gfx.Color.white
+    }
+
     isEquipped(item: Item): boolean {
         return [...this.equipment()].includes(item)
     }
@@ -425,6 +465,10 @@ export class Player extends Thing implements Creature {
         if (this.ring) {
             yield this.ring
         }
+
+        if (this.lightSource) {
+            yield this.lightSource
+        }
     }
 
     clone(): Player {
@@ -444,6 +488,8 @@ export class Player extends Thing implements Creature {
             this.helm = item
         } else if (item instanceof Ring) {
             this.ring = item
+        } else if (item instanceof LightSource) {
+            this.lightSource = item
         }
     }
 
@@ -471,6 +517,10 @@ export class Player extends Thing implements Creature {
         if (this.ring === item) {
             this.ring = null
         }
+
+        if (this.lightSource === item) {
+            this.lightSource = null
+        }
     }
 
     delete(item: Item) {
@@ -497,6 +547,7 @@ export class Player extends Thing implements Creature {
             helm: this.helm ? this.inventory.indexOf(this.helm) : -1,
             shield: this.shield ? this.inventory.indexOf(this.shield) : -1,
             ring: this.ring ? this.inventory.indexOf(this.ring) : -1,
+            lightSource: this.lightSource ? this.inventory.indexOf(this.lightSource) : -1,
             inventory: this.inventory.map(i => i.id),
             gold: this.gold,
         }
@@ -750,6 +801,7 @@ export interface PlayerSaveState {
     helm: number
     shield: number
     ring: number
+    lightSource: number
     inventory: string[],
     gold: number,
 }
