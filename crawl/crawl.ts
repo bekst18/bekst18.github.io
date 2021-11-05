@@ -971,6 +971,7 @@ class App {
             this.tickRound()
         }
 
+        this.updateVisibility()
         this.drawFrame()
 
         requestAnimationFrame(() => this.tick())
@@ -1427,7 +1428,6 @@ class App {
 
         map.player.position = newPosition
         player.action -= 1
-        this.updateVisibility()
 
         return
     }
