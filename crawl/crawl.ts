@@ -908,11 +908,14 @@ class App {
         const renderer = new gfx.Renderer(canvas)
 
         // check for any saved state
-        {
+        try {
             const app = await App.load(renderer)
             if (app) {
                 return app
             }
+        } catch (e) {
+            console.log("Failed to load state.", e)
+            clearState()
         }
 
         // failed to load app - create a new one
@@ -950,7 +953,7 @@ class App {
         })
 
         this.resetButton.addEventListener("click", () => {
-            this.clearState()
+            clearState()
             window.location.reload()
         })
     }
@@ -1039,7 +1042,7 @@ class App {
         this.saveState()
 
         if (player.health <= 0) {
-            this.clearState()
+            clearState()
             this.defeatDialog.show()
         }
     }
@@ -1151,7 +1154,7 @@ class App {
 
         if (defender.health <= 0) {
             output.warning(`${defender.name} has been defeated!`)
-            this.clearState()
+            clearState()
             this.defeatDialog.show()
         }
     }
@@ -1737,13 +1740,6 @@ class App {
         }
     }
 
-    private clearState() {
-        localStorage.removeItem(STORAGE_KEY)
-        for (let i = 0; i < 100; ++i) {
-            localStorage.removeItem(`${STORAGE_KEY}_MAP_${i}`)
-        }
-    }
-
     private saveState() {
         // save the current game state
         var state: AppSaveState = {
@@ -1837,6 +1833,20 @@ function loadMap(floor: number): maps.Map | null {
     const state = JSON.parse(json) as maps.MapSaveState
     const map = maps.Map.load(things.db, state)
     return map
+}
+
+function clearState(): void {
+    const keys = new Array<string>()
+    for (let i = 0; i < localStorage.length; ++i) {
+        const key = localStorage.key(i)
+        if (key?.startsWith(STORAGE_KEY)) {
+            keys.push(key)
+        }
+    }
+
+    for (const k of keys) {
+        localStorage.removeItem(k)
+    }
 }
 
 async function init() {
