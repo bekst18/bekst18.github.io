@@ -7,18 +7,18 @@ import * as gfx from "./gfx.js"
 export const tileSize = 24
 
 export interface ThingOptions {
-    id: string
-    passable: boolean
-    transparent: boolean
-    name: string
-    image?: string
-    color?: gfx.Color
+    readonly id: string
+    readonly passable: boolean
+    readonly transparent: boolean
+    readonly name: string
+    readonly image?: string
+    readonly color?: gfx.Color
 }
 
 export class Thing {
     readonly id: string
-    passable: boolean
-    transparent: boolean
+    readonly passable: boolean
+    readonly transparent: boolean
     readonly name: string
     readonly image: string
     readonly color = new gfx.Color(1, 1, 1, 1)
@@ -38,6 +38,45 @@ export class Thing {
     clone(): Thing {
         return new Thing(this)
     }
+
+    save(): ThingSaveState {
+        return {
+            id: this.id,
+            data: null,
+        }
+    }
+}
+
+export interface ThingSaveState {
+    readonly id: string
+    readonly data: DataSaveState
+}
+
+export type DataSaveState = null | PlayerSaveState | LightSourceSaveState | MonsterSaveState
+
+export interface PlayerSaveState {
+    readonly kind: "Player"
+    readonly baseStrength: number
+    readonly baseIntelligence: number
+    readonly baseAgility: number
+    readonly baseMaxHealth: number
+    readonly level: number
+    readonly experience: number
+    readonly health: number
+    readonly meleeWeapon: number
+    readonly rangedWeapon: number
+    readonly armor: number
+    readonly helm: number
+    readonly shield: number
+    readonly ring: number
+    readonly lightSource: number
+    readonly inventory: ThingSaveState[],
+    readonly gold: number,
+}
+
+export interface LightSourceSaveState {
+    readonly kind: "LightSource"
+    readonly duration: number
 }
 
 export class Dice {
@@ -67,13 +106,13 @@ export class Tile extends Thing {
 }
 
 interface FixtureOptions extends ThingOptions {
-    lightColor?: gfx.Color
-    lightRadius?: number
+    readonly lightColor?: gfx.Color
+    readonly lightRadius?: number
 }
 
 export class Fixture extends Thing {
-    lightColor: gfx.Color
-    lightRadius: number
+    readonly lightColor: gfx.Color
+    readonly lightRadius: number
 
     constructor(options: FixtureOptions) {
         super(options)
@@ -98,15 +137,15 @@ export enum ExitDirection {
 }
 
 interface ExitOptions {
-    id: string
-    name: string
-    image?: string
-    color?: gfx.Color
-    direction: ExitDirection
+    readonly id: string
+    readonly name: string
+    readonly image?: string
+    readonly color?: gfx.Color
+    readonly direction: ExitDirection
 }
 
 export class Exit extends Fixture {
-    direction: ExitDirection
+    readonly direction: ExitDirection
 
     constructor(options: ExitOptions) {
         super(Object.assign({ passable: false, transparent: false }, options))
@@ -119,13 +158,13 @@ export class Exit extends Fixture {
 }
 
 export interface ItemOptions {
-    id: string
-    name: string
-    image?: string
-    color?: gfx.Color
-    level: number
-    freq?: number
-    value: number
+    readonly id: string
+    readonly name: string
+    readonly image?: string
+    readonly color?: gfx.Color
+    readonly level: number
+    readonly freq?: number
+    readonly value: number
 }
 
 export class Item extends Thing {
@@ -239,10 +278,10 @@ export class Shield extends Item {
 }
 
 export interface RingOptions extends ItemOptions {
-    strength?: number
-    agility?: number
-    intelligence?: number
-    maxHealth?: number
+    readonly strength?: number
+    readonly agility?: number
+    readonly intelligence?: number
+    readonly maxHealth?: number
 }
 
 export class Ring extends Item {
@@ -281,6 +320,20 @@ export class LightSource extends Item {
     clone(): LightSource {
         return new LightSource(this)
     }
+
+    save(): ThingSaveState {
+        return {
+            id: this.id,
+            data: {
+                kind: "LightSource",
+                duration: this.duration,
+            }
+        }
+    }
+
+    load(state: LightSourceSaveState) {
+        this.duration = state.duration
+    }
 }
 
 export type Equippable = MeleeWeapon | RangedWeapon | Armor | Helm | Shield | Ring | LightSource
@@ -295,7 +348,7 @@ export function isEquippable(item: Item): item is Equippable {
 }
 
 export interface UsableOptions extends ItemOptions {
-    health: number
+    readonly health: number
 }
 
 export class Usable extends Item {
@@ -312,41 +365,41 @@ export class Usable extends Item {
 }
 
 export interface CreatureOptions {
-    id: string
-    name: string
-    image: string
-    color?: gfx.Color
-    maxHealth: number
-    health?: number
-    agility?: number
-    level: number,
-    gold: number,
+    readonly id: string
+    readonly name: string
+    readonly image: string
+    readonly color?: gfx.Color
+    readonly maxHealth: number
+    readonly health?: number
+    readonly agility?: number
+    readonly level: number,
+    readonly gold: number,
 }
 
 export interface Creature extends Thing {
-    maxHealth: number
+    readonly maxHealth: number
     health: number
-    defense: number
-    agility: number
+    readonly defense: number
+    readonly agility: number
     action: number
     actionReserve: number
-    level: number,
-    gold: number,
+    readonly level: number,
+    readonly gold: number,
 }
 
 export interface PlayerOptions extends CreatureOptions {
-    experience?: number
-    strength?: number
-    intelligence?: number
-    maxHealth: number
-    meleeWeapon?: MeleeWeapon | null
-    rangedWeapon?: RangedWeapon | null
-    armor?: Armor | null
-    helm?: Helm | null
-    shield?: Shield | null
-    ring?: Ring | null
-    lightSource?: LightSource | null,
-    inventory?: Item[],
+    readonly experience?: number
+    readonly strength?: number
+    readonly intelligence?: number
+    readonly maxHealth: number
+    readonly meleeWeapon?: MeleeWeapon | null
+    readonly rangedWeapon?: RangedWeapon | null
+    readonly armor?: Armor | null
+    readonly helm?: Helm | null
+    readonly shield?: Shield | null
+    readonly ring?: Ring | null
+    readonly lightSource?: LightSource | null,
+    readonly inventory?: Item[],
 }
 
 export class Player extends Thing implements Creature {
@@ -531,25 +584,28 @@ export class Player extends Thing implements Creature {
         }
     }
 
-    save(): PlayerSaveState {
+    save(): ThingSaveState {
         return {
             id: this.id,
-            baseStrength: this.baseStrength,
-            baseIntelligence: this.baseIntelligence,
-            baseAgility: this.baseAgility,
-            baseMaxHealth: this.baseMaxHealth,
-            level: this.level,
-            experience: this.experience,
-            health: this.health,
-            meleeWeapon: this.meleeWeapon ? this.inventory.indexOf(this.meleeWeapon) : -1,
-            rangedWeapon: this.rangedWeapon ? this.inventory.indexOf(this.rangedWeapon) : -1,
-            armor: this.armor ? this.inventory.indexOf(this.armor) : -1,
-            helm: this.helm ? this.inventory.indexOf(this.helm) : -1,
-            shield: this.shield ? this.inventory.indexOf(this.shield) : -1,
-            ring: this.ring ? this.inventory.indexOf(this.ring) : -1,
-            lightSource: this.lightSource ? this.inventory.indexOf(this.lightSource) : -1,
-            inventory: this.inventory.map(i => i.id),
-            gold: this.gold,
+            data: {
+                kind: "Player",
+                baseStrength: this.baseStrength,
+                baseIntelligence: this.baseIntelligence,
+                baseAgility: this.baseAgility,
+                baseMaxHealth: this.baseMaxHealth,
+                level: this.level,
+                experience: this.experience,
+                health: this.health,
+                meleeWeapon: this.meleeWeapon ? this.inventory.indexOf(this.meleeWeapon) : -1,
+                rangedWeapon: this.rangedWeapon ? this.inventory.indexOf(this.rangedWeapon) : -1,
+                armor: this.armor ? this.inventory.indexOf(this.armor) : -1,
+                helm: this.helm ? this.inventory.indexOf(this.helm) : -1,
+                shield: this.shield ? this.inventory.indexOf(this.shield) : -1,
+                ring: this.ring ? this.inventory.indexOf(this.ring) : -1,
+                lightSource: this.lightSource ? this.inventory.indexOf(this.lightSource) : -1,
+                inventory: this.inventory.map(i => i.save()),
+                gold: this.gold,
+            }
         }
     }
 
@@ -562,13 +618,14 @@ export class Player extends Thing implements Creature {
         this.experience = state.experience
         this.health = state.health
 
-        this.inventory = state.inventory.map(id => {
-            const item = db.get(id)
+        this.inventory = state.inventory.map(invState => {
+            const item = db.load(invState)
+
             if (!(item instanceof Item)) {
                 throw new Error("non-item in inventory, load failed.")
             }
 
-            return item.clone()
+            return item
         })
 
         if (state.meleeWeapon >= 0) {
@@ -685,6 +742,34 @@ export class Monster extends Thing implements Creature {
     clone(): Monster {
         return new Monster(this)
     }
+
+    save(): ThingSaveState {
+        return {
+            id: this.id,
+            data: {
+                kind: "Monster",
+                health: this.health,
+                action: this.action,
+                actionReserve: this.actionReserve,
+                state: this.state,
+            }
+        }
+    }
+
+    load(state: MonsterSaveState) {
+        this.health = state.health
+        this.action = state.action
+        this.actionReserve = state.actionReserve
+        this.state = state.state
+    }
+}
+
+export interface MonsterSaveState {
+    readonly kind: "Monster"
+    readonly health: number
+    readonly action: number
+    readonly actionReserve: number
+    readonly state: MonsterState
 }
 
 export interface ContainerOptions {
@@ -779,31 +864,42 @@ export class ThingDB {
         return this.map.get(id)
     }
 
+    load(state: ThingSaveState): Thing {
+        const thing = this.get(state.id)?.clone()
+        if (!thing) {
+            throw new Error(`No thing with id ${state.id} found, cannot load.`)
+        }
+
+        if (!state.data) {
+            return thing
+        }
+
+        switch (state.data.kind) {
+            case "Player":
+                if (!(thing instanceof Player)) {
+                    throw new Error("Invalid thing - expected player.")
+                }
+
+                thing.load(this, state.data)
+                break;
+
+            case "LightSource":
+                if (!(thing instanceof LightSource)) {
+                    throw new Error("Invalid thing - expected light source.")
+                }
+
+                thing.load(state.data)
+                break;
+        }
+
+        return thing
+    }
+
     *[Symbol.iterator](): Generator<Thing> {
         for (const [_, v] of this.map) {
             yield v
         }
     }
-}
-
-export interface PlayerSaveState {
-    id: string,
-    baseStrength: number
-    baseIntelligence: number
-    baseAgility: number
-    baseMaxHealth: number
-    level: number
-    experience: number
-    health: number
-    meleeWeapon: number
-    rangedWeapon: number
-    armor: number
-    helm: number
-    shield: number
-    ring: number
-    lightSource: number
-    inventory: string[],
-    gold: number,
 }
 
 /**

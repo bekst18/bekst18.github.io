@@ -4,7 +4,7 @@ import * as rl from "./rl.js"
 import * as grid from "../shared/grid.js"
 
 export enum Visibility {
-    // no visibility
+    // no visibility, no line of site
     None,
     // in line of sight, but outside of light radius
     Dark,
@@ -15,6 +15,12 @@ export enum Visibility {
 export interface Placed<T extends rl.Thing> {
     thing: T,
     position: geo.Point,
+}
+
+export interface PlacedSaveState {
+    thing: rl.ThingSaveState,
+    x: number,
+    y: number,
 }
 
 /**
@@ -31,6 +37,12 @@ export interface Layer<T extends rl.Thing> {
     size: number
     [Symbol.iterator](): Generator<Placed<T>>
     things(): Generator<T>
+    save(): LayerSaveState
+    load(db: rl.ThingDB, state: LayerSaveState): void
+}
+
+export interface LayerSaveState {
+    things: PlacedSaveState[]
 }
 
 /**
@@ -102,6 +114,21 @@ export class MapLayer<T extends rl.Thing> implements Layer<T> {
     *thingsWithin(aabb: geo.AABB): Generator<T> {
         for (const pth of this.within(aabb)) {
             yield pth.thing
+        }
+    }
+
+    save(): LayerSaveState {
+        const things = [...iter.map(this, pth => ({ thing: pth.thing.save(), x: pth.position.x, y: pth.position.y }))]
+        return {
+            things
+        }
+    }
+
+    load(db: rl.ThingDB, state: LayerSaveState) {
+        for (const placedThingState of state.things) {
+            const position = new geo.Point(placedThingState.x, placedThingState.y)
+            const thing = db.load(placedThingState.thing) as T
+            this.set(position, thing)
         }
     }
 }
@@ -191,6 +218,21 @@ export class GridLayer<T extends rl.Thing> implements Layer<T> {
     things(): Generator<T> {
         return this.map.things()
     }
+
+    save(): LayerSaveState {
+        const things = [...iter.map(this, pth => ({ thing: pth.thing.save(), x: pth.position.x, y: pth.position.y }))]
+        return {
+            things
+        }
+    }
+
+    load(db: rl.ThingDB, state: LayerSaveState) {
+        for (const placedThingState of state.things) {
+            const position = new geo.Point(placedThingState.x, placedThingState.y)
+            const thing = db.load(placedThingState.thing) as T
+            this.set(position, thing)
+        }
+    }
 }
 
 export enum Lighting {
@@ -209,9 +251,10 @@ export class Map {
     exits: Layer<rl.Exit>
     monsters: Layer<rl.Monster>
     containers: Layer<rl.Container>
+    players: Layer<rl.Player>
     lighting: Lighting = Lighting.None
 
-    constructor(readonly width: number, readonly height: number, readonly depth: number, readonly player: Placed<rl.Player>) {
+    constructor(readonly width: number, readonly height: number) {
         this.tiles = new GridLayer(width, height)
         this.visible = grid.generate(width, height, _ => Visibility.None)
         this.seen = grid.generate(width, height, _ => false)
@@ -219,6 +262,15 @@ export class Map {
         this.exits = new MapLayer()
         this.monsters = new MapLayer()
         this.containers = new MapLayer()
+        this.players = new MapLayer()
+    }
+
+    /**
+     * retrieve player from map, throwing an exception if not found
+     */
+    get player(): Placed<rl.Player> {
+        const player = iter.first(this.players)
+        return player
     }
 
     /**
@@ -245,7 +297,9 @@ export class Map {
             yield monster
         }
 
-        yield this.player
+        for (const player of this.players) {
+            yield player
+        }
     }
 
     /**
@@ -271,6 +325,10 @@ export class Map {
 
     monsterAt(xy: geo.Point): rl.Monster | undefined {
         return this.monsters.at(xy)
+    }
+
+    playerAt(xy: geo.Point): rl.Player | undefined {
+        return this.players.at(xy)
     }
 
     visibilityAt(xy: geo.Point): Visibility {
@@ -302,8 +360,9 @@ export class Map {
             yield monster
         }
 
-        if (this.player.position.equal(xy)) {
-            yield this.player.thing
+        const player = this.playerAt(xy)
+        if (player) {
+            yield player
         }
     }
 
@@ -337,7 +396,6 @@ export class Map {
 
     private clearVisible() {
         for (let i = 0; i < this.visible.size; ++i) {
-            const v = this.visible.atf(i)
             this.visible.setf(i, Visibility.None)
         }
     }
@@ -424,84 +482,59 @@ export class Map {
             }
         }
     }
-}
 
-/*
-export function updateVisibility(map: Map, radius: number) {
-    resetVisibility(map)
-
-    const eye = map.player.position
-
-    for (let i = 0; i < 8; ++i) {
-        updateVisibilityOctant(map, eye, radius, i)
-    }
-
-    // eye point always visible
-    iter.each(map.at(eye), th => th.visible = rl.Visibility.Visible)
-
-    // process other light sources
-    processLightSources(map)
-}
-
-function processLightSources(map: Map) {
-    // have we uncovered other light sources?
-    // need a way to evaluate LOS - not JUST visible!
-    const lights = new Set(iter.filter(map.fixtures, x => x.thing.lightRadius > 0 && ))
-
-    while (lights.size > 0) {
-        const light = iter.find(lights, l => l.thing.visible == rl.Visibility.Visible)
-        if (!light) {
-            break
-        }
-
-        lights.delete(light)
-
-        for (let i = 0; i < 8; ++i) {
-            updateVisibilityOctant(map, light.position, light.thing.lightRadius, i)
+    save(): MapSaveState {
+        return {
+            width: this.visible.width,
+            height: this.visible.height,
+            tiles: this.tiles.save(),
+            visible: [...this.visible],
+            seen: [...this.seen],
+            fixtures: this.fixtures.save(),
+            exits: this.exits.save(),
+            monsters: this.monsters.save(),
+            containers: this.containers.save(),
+            players: this.players.save(),
+            lighting: this.lighting,
         }
     }
-}
 
-function processLightSource(source: rl.Fixture) {
-    if (source.lightRadius <= 0) {
-        return
-    }
+    static load(db: rl.ThingDB, state: MapSaveState): Map {
+        const map = new Map(state.width, state.height)
+        map.tiles.load(db, state.tiles)
 
-
-}
-
-function updateVisibilityOctant(map: Map, eye: geo.Point, radius: number, octant: number) {
-    const shadows: geo.Point[] = []
-
-    for (let y = 1; y <= radius; ++y) {
-        for (let x = 0; x <= y; ++x) {
-            const octantPoint = new geo.Point(x, y)
-
-            const mapPoint = transformOctant(octantPoint, octant).addPoint(eye)
-            if (!map.inBounds(mapPoint)) {
-                continue
-            }
-
-            if (isShadowed(shadows, octantPoint)) {
-                continue
-            }
-
-            const opaque = iter.any(map.at(mapPoint), th => !th.transparent)
-            if (opaque) {
-                shadows.push(octantPoint)
-            }
-
-            if (geo.calcManhattenDist(mapPoint, eye) > radius) {
-                continue
-            }
-
-            for (const th of map.at(mapPoint)) {
-                th.visible = Visibility.Visible
-            }
+        for (let i = 0; i < state.visible.length; ++i) {
+            map.visible.setf(i, state.visible[i])
         }
+
+        for (let i = 0; i < state.visible.length; ++i) {
+            map.seen.setf(i, state.seen[i])
+        }
+
+        map.fixtures.load(db, state.fixtures)
+        map.exits.load(db, state.exits)
+        map.monsters.load(db, state.monsters)
+        map.containers.load(db, state.containers)
+        map.players.load(db, state.players)
+        map.lighting = state.lighting
+
+        return map
     }
 }
-*/
+
+export interface MapSaveState {
+    width: number,
+    height: number,
+    tiles: LayerSaveState
+    visible: Visibility[]
+    seen: boolean[]
+    fixtures: LayerSaveState
+    exits: LayerSaveState
+    monsters: LayerSaveState
+    containers: LayerSaveState
+    players: LayerSaveState
+    lighting: Lighting
+}
 
 function transformOctant(coords: geo.Point, octant: number): geo.Point {
     switch (octant) {

@@ -142,6 +142,13 @@ class Iter<T> {
     toArray(): T[] {
         return [...this.a]
     }
+
+    /**
+     * returns the first element in the sequence, throwing an exception if empty
+     */
+    first(): T {
+        return first(this.a)
+    }
 }
 
 /**
@@ -410,4 +417,18 @@ export function* cat<T>(...as: Iterable<T>[]): Iterable<T> {
     for (const a of as) {
         yield* a
     }
+}
+
+/**
+ * returns the first element in an iterable sequence.
+ * an exception is thrown if sequence contains no elements.
+ * @param as iterable sequence
+ * @returns first element in sequence
+ */
+export function first<T>(as: Iterable<T>): T {
+    for (const x of as) {
+        return x
+    }
+
+    throw new Error("Sequence contained no elements.")
 }

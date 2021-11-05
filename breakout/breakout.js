@@ -19,106 +19,106 @@ const startMessage = "Tap, click, or press any key to launch ball.";
 const gameOverMessage = "Game over! Tap, click, or press any key to restart.";
 const nextLevelMessage = "Level Clear! Tap, click, or press any key to advance.";
 const levels = new Array(
-    // level 1
-    {
-        ballSpeed: .2,
-        ballRadius: 1.25,
-        paddleWidth: 6,
-        brickRows: 3,
-        brickCols: 7,
-        borderColor: new geo.Vec4(.25, 0, 0, 1),
-        floorColor: new geo.Vec4(.25, .25, .25, 1)
-    },
-    // level 2
-    {
-        ballSpeed: .3,
-        ballRadius: 1,
-        paddleWidth: 6,
-        brickRows: 3,
-        brickCols: 7,
-        borderColor: new geo.Vec4(0, .25, 0, 1),
-        floorColor: new geo.Vec4(0, 0, .25, 1)
-    },
-    // level 3
-    {
-        ballSpeed: .35,
-        ballRadius: .75,
-        paddleWidth: 6,
-        brickRows: 3,
-        brickCols: 5,
-        borderColor: new geo.Vec4(0, 0, .55, 1),
-        floorColor: new geo.Vec4(0, 0, 0, 1)
-    },
-    // level 4
-    {
-        ballSpeed: .4,
-        ballRadius: .6,
-        paddleWidth: 5,
-        brickRows: 3,
-        brickCols: 6,
-        borderColor: new geo.Vec4(.6, .5, 0, 1),
-        floorColor: new geo.Vec4(0, .25, 0, 1)
-    },
-    // level 5
-    {
-        ballSpeed: .45,
-        ballRadius: .55,
-        paddleWidth: 4,
-        brickRows: 3,
-        brickCols: 8,
-        borderColor: new geo.Vec4(0, .5, .6, 1),
-        floorColor: new geo.Vec4(.25, .25, .25, 1)
-    },
-    // level 6
-    {
-        ballSpeed: .5,
-        ballRadius: .5,
-        paddleWidth: 4,
-        brickRows: 4,
-        brickCols: 8,
-        borderColor: new geo.Vec4(1, 0, 0, 1),
-        floorColor: new geo.Vec4(0, .3, .25, 1)
-    },
-    // level 7
-    {
-        ballSpeed: .6,
-        ballRadius: .4,
-        paddleWidth: 3.5,
-        brickRows: 4,
-        brickCols: 10,
-        borderColor: new geo.Vec4(1, 1, 0, 1),
-        floorColor: new geo.Vec4(.25, .25, .25, 1)
-    },
-    // level 8
-    {
-        ballSpeed: .65,
-        ballRadius: .35,
-        paddleWidth: 3,
-        brickRows: 5,
-        brickCols: 10,
-        borderColor: new geo.Vec4(.5, .6, 1, 1),
-        floorColor: new geo.Vec4(.25, 0, .25, 1)
-    },
-    // level 9
-    {
-        ballSpeed: .7,
-        ballRadius: .3,
-        paddleWidth: 2,
-        brickRows: 6,
-        brickCols: 12,
-        borderColor: new geo.Vec4(0, 1, 1, 1),
-        floorColor: new geo.Vec4(.35, .15, .25, 1)
-    },
-    // level 9
-    {
-        ballSpeed: .8,
-        ballRadius: .2,
-        paddleWidth: 1,
-        brickRows: 8,
-        brickCols: 15,
-        borderColor: new geo.Vec4(1, 1, 1, 1),
-        floorColor: new geo.Vec4(.1, .1, .4, 1)
-    });
+// level 1
+{
+    ballSpeed: .2,
+    ballRadius: 1.25,
+    paddleWidth: 6,
+    brickRows: 3,
+    brickCols: 7,
+    borderColor: new geo.Vec4(.25, 0, 0, 1),
+    floorColor: new geo.Vec4(.25, .25, .25, 1)
+}, 
+// level 2
+{
+    ballSpeed: .3,
+    ballRadius: 1,
+    paddleWidth: 6,
+    brickRows: 3,
+    brickCols: 7,
+    borderColor: new geo.Vec4(0, .25, 0, 1),
+    floorColor: new geo.Vec4(0, 0, .25, 1)
+}, 
+// level 3
+{
+    ballSpeed: .35,
+    ballRadius: .75,
+    paddleWidth: 6,
+    brickRows: 3,
+    brickCols: 5,
+    borderColor: new geo.Vec4(0, 0, .55, 1),
+    floorColor: new geo.Vec4(0, 0, 0, 1)
+}, 
+// level 4
+{
+    ballSpeed: .4,
+    ballRadius: .6,
+    paddleWidth: 5,
+    brickRows: 3,
+    brickCols: 6,
+    borderColor: new geo.Vec4(.6, .5, 0, 1),
+    floorColor: new geo.Vec4(0, .25, 0, 1)
+}, 
+// level 5
+{
+    ballSpeed: .45,
+    ballRadius: .55,
+    paddleWidth: 4,
+    brickRows: 3,
+    brickCols: 8,
+    borderColor: new geo.Vec4(0, .5, .6, 1),
+    floorColor: new geo.Vec4(.25, .25, .25, 1)
+}, 
+// level 6
+{
+    ballSpeed: .5,
+    ballRadius: .5,
+    paddleWidth: 4,
+    brickRows: 4,
+    brickCols: 8,
+    borderColor: new geo.Vec4(1, 0, 0, 1),
+    floorColor: new geo.Vec4(0, .3, .25, 1)
+}, 
+// level 7
+{
+    ballSpeed: .6,
+    ballRadius: .4,
+    paddleWidth: 3.5,
+    brickRows: 4,
+    brickCols: 10,
+    borderColor: new geo.Vec4(1, 1, 0, 1),
+    floorColor: new geo.Vec4(.25, .25, .25, 1)
+}, 
+// level 8
+{
+    ballSpeed: .65,
+    ballRadius: .35,
+    paddleWidth: 3,
+    brickRows: 5,
+    brickCols: 10,
+    borderColor: new geo.Vec4(.5, .6, 1, 1),
+    floorColor: new geo.Vec4(.25, 0, .25, 1)
+}, 
+// level 9
+{
+    ballSpeed: .7,
+    ballRadius: .3,
+    paddleWidth: 2,
+    brickRows: 6,
+    brickCols: 12,
+    borderColor: new geo.Vec4(0, 1, 1, 1),
+    floorColor: new geo.Vec4(.35, .15, .25, 1)
+}, 
+// level 9
+{
+    ballSpeed: .8,
+    ballRadius: .2,
+    paddleWidth: 1,
+    brickRows: 8,
+    brickCols: 15,
+    borderColor: new geo.Vec4(1, 1, 1, 1),
+    floorColor: new geo.Vec4(.1, .1, .4, 1)
+});
 const brickColors = new Array(new geo.Vec4(1, 0, 0, 1), new geo.Vec4(0, 1, 0, 1), new geo.Vec4(0, 0, 1, 1), new geo.Vec4(0, 1, 1, 1), new geo.Vec4(1, 0, 1, 1), new geo.Vec4(1, 1, 1, 1), new geo.Vec4(.5, .5, 0, 1), new geo.Vec4(0, .5, .5, 1), new geo.Vec4(.5, 0, .5, 1), new geo.Vec4(.25, .75, 0, 1), new geo.Vec4(0, .25, .75, 1), new geo.Vec4(.25, 0, .75, 1), new geo.Vec4(.75, .25, 0, 1), new geo.Vec4(0, .75, .25, 1), new geo.Vec4(.75, 0, .25, 1));
 class Paddle {
     constructor(options) {

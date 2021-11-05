@@ -72,7 +72,7 @@ function generateMapRooms(
     height: number,
     player: rl.Player,
     dir: rl.ExitDirection): maps.Map {
-    const map = new maps.Map(width, height, 1, { position: new geo.Point(0, 0), thing: player })
+    const map = new maps.Map(width, height)
     const minRooms = 4
 
     const [cells, rooms] = (() => {
@@ -111,9 +111,9 @@ function generateMapRooms(
             throw new Error("Nowhere to put player")
         }
 
-        map.player.position = playerPosition[1]
+        console.log(playerPosition, player)
+        map.players.set(playerPosition[1], player)
     }
-
 
     // generate tiles and fixtures from cells
     for (const [v, x, y] of cells.scan()) {
@@ -445,7 +445,7 @@ function isValidPlacement(src: CellGrid, dst: CellGrid, offset: geo.Point): bool
 }
 
 export async function generateOutdoorMap(player: rl.Player, width: number, height: number): Promise<maps.Map> {
-    const map = new maps.Map(width, height, 0, { position: new geo.Point(0, 0), thing: player })
+    const map = new maps.Map(width, height)
     map.lighting = maps.Lighting.Ambient
     generateOutdoorTerrain(map)
     return map

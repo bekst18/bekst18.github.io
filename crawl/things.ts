@@ -189,12 +189,12 @@ export const greenSlime = db.insert(new rl.Monster({
 export const redSlime = db.insert(new rl.Monster({
     id: "red_slime",
     name: "Red Slime",
-    maxHealth: 5,
+    maxHealth: 4,
     color: gfx.Color.red,
     image: "./assets/slime.png",
     level: 2,
     experience: 2,
-    agility: 1,
+    agility: 0,
     defense: 1,
     attacks: [
         new rl.Attack({
@@ -328,7 +328,7 @@ export const fider = db.insert(new rl.Monster({
 
 export const goblin = db.insert(new rl.Monster({
     id: "goblin",
-    name: "Fider",
+    name: "Goblin",
     maxHealth: 7,
     image: "./assets/goblin.png",
     level: 2,

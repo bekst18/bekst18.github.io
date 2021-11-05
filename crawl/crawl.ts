@@ -648,6 +648,7 @@ class ShopDialog {
         output.info(`You bought ${item.name}.`)
         this.player.gold -= item.value
         this.player.inventory.push(item.clone())
+        this.refresh()
     }
 
     sell(idx: number) {
@@ -661,6 +662,7 @@ class ShopDialog {
         this.player.inventory.splice(invIdx, 1)
         this.player.gold += Math.floor(item.value / 2)
         console.log(`You sold ${item.name}.`)
+        this.refresh()
     }
 
     get hidden() {
@@ -852,12 +854,12 @@ function useItem(player: rl.Player, item: rl.Usable): void {
     output.info(`${item.name} restored ${amount} health`)
 }
 
-function equipItem(player: rl.Player, item: rl.Equippable): void {
+function equipItem(player: rl.Player, item: rl.Item): void {
     player.equip(item)
     output.info(`${item.name} was equipped`)
 }
 
-function removeItem(player: rl.Player, item: rl.Equippable): void {
+function removeItem(player: rl.Player, item: rl.Item): void {
     player.remove(item)
     output.info(`${item.name} was removed`)
 }
@@ -906,21 +908,23 @@ class App {
         const renderer = new gfx.Renderer(canvas)
 
         // check for any saved state
-        const state = loadState()
-        // const state = null as AppSaveState | null
-        const seed = rand.xmur3(new Date().toString())
-        const rngState = state ? state.rng : [seed(), seed(), seed(), seed()] as [number, number, number, number]
-        const rng = new rand.SFC32RNG(...rngState)
-        const floor = state?.floor ?? 1
-
-        const player = things.player.clone()
-        if (state) {
-            player.load(things.db, state.player)
+        {
+            const app = await App.load(renderer)
+            if (app) {
+                return app
+            }
         }
 
-        const map = await gen.generateDungeonLevel(rng, things.db, player, floor, rl.ExitDirection.Down)
+        // failed to load app - create a new one
+        // const state = null as AppSaveState | null
+        const seed = rand.xmur3(new Date().toString())
+        const rng = new rand.SFC32RNG(seed(), seed(), seed(), seed())
+
+        // load current dungeon map, or generate one
+        const player = things.player.clone()
+        const map = await gen.generateDungeonLevel(rng, things.db, player, 1, rl.ExitDirection.Down)
         const [texture, imageMap] = await loadImages(renderer, map)
-        const app = new App(rng, renderer, floor, map, texture, imageMap)
+        const app = new App(rng, renderer, 1, map, texture, imageMap)
         return app
     }
 
@@ -931,7 +935,7 @@ class App {
         this.handleResize()
         requestAnimationFrame(() => this.tick())
 
-        document.addEventListener("keypress", (ev) => this.handleKeyPress(ev))
+        document.addEventListener("keydown", (ev) => this.handleKeyDown(ev))
 
         this.attackButton.addEventListener("click", () => {
             this.targetCommand = TargetCommand.Attack
@@ -1083,8 +1087,9 @@ class App {
         defender.health -= damage
 
         if (defender.health < 0) {
-            output.warning(`${defender.name} has been defeated and ${attacker.name} receives ${defender.experience} experience`)
+            output.warning(`${defender.name} has been defeated and ${attacker.name} receives ${defender.experience} experience and ${defender.gold} gold`)
             attacker.experience += defender.experience
+            attacker.gold += defender.gold
             this.map.monsters.delete(defender)
         }
     }
@@ -1676,7 +1681,7 @@ class App {
         return rl.tileSize * this.zoom
     }
 
-    private handleKeyPress(ev: KeyboardEvent) {
+    private handleKeyDown(ev: KeyboardEvent) {
         const key = ev.key.toUpperCase()
 
         switch (key) {
@@ -1710,6 +1715,12 @@ class App {
                 }
                 break
 
+            case "ESCAPE":
+                this.targetCommand = TargetCommand.None
+                this.cursorPosition = undefined
+                console.log("ESCAPE")
+                break
+
             case "L":
                 this.targetCommand = TargetCommand.Look
                 break
@@ -1728,6 +1739,9 @@ class App {
 
     private clearState() {
         localStorage.removeItem(STORAGE_KEY)
+        for (let i = 0; i < 100; ++i) {
+            localStorage.removeItem(`${STORAGE_KEY}_MAP_${i}`)
+        }
     }
 
     private saveState() {
@@ -1735,11 +1749,18 @@ class App {
         var state: AppSaveState = {
             rng: this.rng.save(),
             floor: this.floor,
-            player: this.map.player.thing.save(),
         }
 
         const jsonState = JSON.stringify(state)
         localStorage.setItem(STORAGE_KEY, jsonState)
+
+        this.saveMap()
+    }
+
+    private saveMap() {
+        const state = this.map.save()
+        const jsonState = JSON.stringify(state)
+        localStorage.setItem(`${STORAGE_KEY}_MAP_${this.floor}`, jsonState)
     }
 
     private handleExit(dir: rl.ExitDirection) {
@@ -1768,11 +1789,29 @@ class App {
         this.imageMap = imageMap
         this.updateVisibility()
     }
+
+    static async load(renderer: gfx.Renderer): Promise<App | null> {
+        const json = localStorage.getItem(STORAGE_KEY)
+        if (!json) {
+            return null
+        }
+
+        const state = JSON.parse(json) as AppSaveState
+        const rng = new rand.SFC32RNG(...state.rng)
+
+        const map = loadMap(state.floor)
+        if (!map) {
+            throw new Error("Failed to load map!")
+        }
+
+        const [texture, imageMap] = await loadImages(renderer, map)
+        const app = new App(rng, renderer, state.floor, map, texture, imageMap)
+        return app
+    }
 }
 
 interface AppSaveState {
     readonly rng: [number, number, number, number]
-    readonly player: rl.PlayerSaveState
     readonly floor: number
 }
 
@@ -1789,14 +1828,15 @@ async function loadImages(renderer: gfx.Renderer, map: maps.Map): Promise<[gfx.T
     return [texture, imageMap]
 }
 
-function loadState(): AppSaveState | null {
-    const json = localStorage.getItem(STORAGE_KEY)
+function loadMap(floor: number): maps.Map | null {
+    const json = localStorage.getItem(`${STORAGE_KEY}_MAP_${floor}`)
     if (!json) {
         return null
     }
 
-    const state = JSON.parse(json) as AppSaveState
-    return state
+    const state = JSON.parse(json) as maps.MapSaveState
+    const map = maps.Map.load(things.db, state)
+    return map
 }
 
 async function init() {
