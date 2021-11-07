@@ -660,8 +660,9 @@ class ShopDialog {
 
         this.player.remove(item)
         this.player.inventory.splice(invIdx, 1)
-        this.player.gold += Math.floor(item.value / 2)
-        console.log(`You sold ${item.name}.`)
+        const sellValue = Math.floor(item.value / 2)
+        this.player.gold += sellValue
+        output.info(`You sold ${item.name} for ${sellValue} gold.`)
         this.refresh()
     }
 
@@ -918,14 +919,14 @@ class App {
             clearState()
         }
 
-        // failed to load app - create a new one
-        // const state = null as AppSaveState | null
+        // no valid save state, create app and generate dungeon
+        console.log("New State")
         const seed = rand.xmur3(new Date().toString())
         const rng = new rand.SFC32RNG(seed(), seed(), seed(), seed())
-
-        // load current dungeon map, or generate one
         const player = things.player.clone()
-        const map = await gen.generateDungeonLevel(rng, things.db, player, 1, rl.ExitDirection.Down)
+        const map = gen.generateDungeonLevel(rng, things.db, 1)
+        console.log("Exits", map.exits)
+        placePlayerAtExit(map, player, rl.ExitDirection.Up)
         const [texture, imageMap] = await loadImages(renderer, map)
         const app = new App(rng, renderer, 1, map, texture, imageMap)
         return app
@@ -1290,12 +1291,6 @@ class App {
             return true
         }
 
-        if (inp.pressed(" ")) {
-            player.actionReserve += player.action
-            player.action = 0
-            return true
-        }
-
         return false
     }
 
@@ -1325,7 +1320,6 @@ class App {
         // first, try melee
         if (clickMonster) {
             const dist = geo.calcManhattenDist(playerPosition, mxy)
-            console.log("dist:", dist)
             if (dist <= (player.meleeWeapon?.range ?? 0)) {
                 this.processPlayerMeleeAttack(clickMonster)
                 return true
@@ -1380,6 +1374,14 @@ class App {
             return true
         }
 
+        if (inp.pressed(" ")) {
+            output.info("Pass")
+            const player = this.map.player.thing
+            player.actionReserve += player.action
+            player.action = 0
+            return true
+        }
+
         return false
     }
 
@@ -1418,12 +1420,17 @@ class App {
             this.map.fixtures.delete(fixture)
             player.action -= 1
             return
-        } else if (fixture instanceof rl.Exit) {
-            await this.handleExit(fixture.direction)
-            return
         } else if (fixture && !fixture.passable) {
             output.info(`Can't move that way, blocked by ${fixture.name}`)
             return false
+        }
+
+        const exit = map.exitAt(newPosition)
+        if (exit) {
+            player.action -= 1
+            map.player.position = newPosition
+            await this.handleExit(exit.direction)
+            return
         }
 
         map.player.position = newPosition
@@ -1579,6 +1586,7 @@ class App {
         const map = this.map
         const tiles = map.tiles.within(viewportAABB)
         const fixtures = map.fixtures.within(viewportAABB)
+        const exits = map.exits.within(viewportAABB)
         const containers = map.containers.within(viewportAABB)
         const monsters = map.monsters.within(viewportAABB)
 
@@ -1588,6 +1596,10 @@ class App {
 
         for (const fixture of fixtures) {
             this.drawThing(offset, fixture)
+        }
+
+        for (const exit of exits) {
+            this.drawThing(offset, exit)
         }
 
         for (const container of containers) {
@@ -1721,7 +1733,6 @@ class App {
             case "ESCAPE":
                 this.targetCommand = TargetCommand.None
                 this.cursorPosition = undefined
-                console.log("ESCAPE")
                 break
 
             case "L":
@@ -1759,11 +1770,16 @@ class App {
         localStorage.setItem(`${STORAGE_KEY}_MAP_${this.floor}`, jsonState)
     }
 
-    private handleExit(dir: rl.ExitDirection) {
+    private async handleExit(dir: rl.ExitDirection) {
         if (dir == rl.ExitDirection.Up && this.floor == 1) {
             this.shopDialog.show()
             return
         }
+
+        // remove player from floor, save floor
+        const player = this.map.player.thing
+        this.map.players.delete(player)
+        this.saveMap()
 
         switch (dir) {
             case rl.ExitDirection.Up:
@@ -1772,14 +1788,11 @@ class App {
             case rl.ExitDirection.Down:
                 this.floor += 1
                 break
-
         }
 
-        this.generateMap(dir)
-    }
-
-    private async generateMap(dir: rl.ExitDirection) {
-        this.map = await gen.generateDungeonLevel(this.rng, things.db, this.map.player.thing, this.floor, dir)
+        this.map = loadMap(this.floor) ?? gen.generateDungeonLevel(this.rng, things.db, this.floor)
+        const placeDir = dir === rl.ExitDirection.Up ? rl.ExitDirection.Down : rl.ExitDirection.Up
+        placePlayerAtExit(this.map, player, placeDir)
         const [texture, imageMap] = await loadImages(this.renderer, this.map)
         this.texture = texture
         this.imageMap = imageMap
@@ -1847,6 +1860,21 @@ function clearState(): void {
     for (const k of keys) {
         localStorage.removeItem(k)
     }
+}
+
+function placePlayerAtExit(map: maps.Map, player: rl.Player, dir: rl.ExitDirection) {
+    const exit = iter.find(map.exits, x => x.thing.direction == dir)
+    if (!exit) {
+        throw new Error("Failed to place player, no suitable exit was found")
+    }
+
+    // // find an empty cell near the exit
+    // const playerPosition = iter.find(maps.visitNeighbors(exit.position, map.width, map.height), x => map.isPassable(x))
+    // if (!playerPosition) {
+    //     throw new Error("Failed to place player, no passable tile near exit")
+    // }
+
+    map.players.set(exit.position, player)
 }
 
 async function init() {

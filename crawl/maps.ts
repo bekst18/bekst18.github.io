@@ -319,6 +319,10 @@ export class Map {
         return this.fixtures.at(xy)
     }
 
+    exitAt(xy: geo.Point): rl.Exit | undefined {
+        return this.exits.at(xy)
+    }
+
     containerAt(xy: geo.Point): rl.Container | undefined {
         return this.containers.at(xy)
     }
@@ -349,6 +353,12 @@ export class Map {
         if (tile) {
             yield tile
         }
+
+        const exit = this.exitAt(xy)
+        if (exit) {
+            yield exit
+        }
+
 
         const container = this.containerAt(xy)
         if (container) {
@@ -656,7 +666,7 @@ export function findPath(map: Map, start: geo.Point, goal: geo.Point): Array<geo
     return new Array<geo.Point>();
 }
 
-function* visitNeighbors(pt: geo.Point, width: number, height: number): Iterable<geo.Point> {
+export function* visitNeighbors(pt: geo.Point, width: number, height: number): Iterable<geo.Point> {
     if (pt.x < 0 || pt.y < 0 || pt.x >= width || pt.y >= height) {
         throw new Error("pt is out of bounds")
     }
