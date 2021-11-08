@@ -794,11 +794,7 @@ function getSortedItemsPage(items: Iterable<rl.Item>, pageIndex: number, pageSiz
     return page
 }
 
-function canSee(map: maps.Map, eye: geo.Point, target: geo.Point, lightRadius: number): boolean {
-    if (geo.calcManhattenDist(eye, target) > lightRadius) {
-        return false
-    }
-
+function hasLineOfSight(map: maps.Map, eye: geo.Point, target: geo.Point): boolean {
     for (const pt of march(eye, target)) {
         // ignore start point
         if (pt.equal(eye)) {
@@ -920,13 +916,13 @@ class App {
         }
 
         // no valid save state, create app and generate dungeon
-        console.log("New State")
         const seed = rand.xmur3(new Date().toString())
         const rng = new rand.SFC32RNG(seed(), seed(), seed(), seed())
         const player = things.player.clone()
+        
         const map = gen.generateDungeonLevel(rng, things.db, 1)
-        console.log("Exits", map.exits)
         placePlayerAtExit(map, player, rl.ExitDirection.Up)
+        
         const [texture, imageMap] = await loadImages(renderer, map)
         const app = new App(rng, renderer, 1, map, texture, imageMap)
         return app
@@ -1171,14 +1167,14 @@ class App {
         // aggro state
         const map = this.map
         let { position, thing: monster } = placedMonster
-
-        const lightRadius = this.calcLightRadius()
-        if (monster.state !== rl.MonsterState.aggro && canSee(map, position, map.player.position, lightRadius)) {
+        const los = hasLineOfSight(map, position, map.player.position)
+        
+        if (monster.state !== rl.MonsterState.aggro && los) {
             monster.action = 0
             monster.state = rl.MonsterState.aggro
         }
 
-        if (monster.state === rl.MonsterState.aggro && !canSee(map, position, map.player.position, lightRadius)) {
+        if (monster.state === rl.MonsterState.aggro && !los) {
             monster.action = 0
             monster.state = rl.MonsterState.idle
         }
@@ -1515,8 +1511,7 @@ class App {
         const cxy = new geo.Point(this.inp.mouseX, this.inp.mouseY)
         const mxy = this.canvasToMapPoint(cxy)
 
-        const lightRadius = this.calcLightRadius()
-        if (!canSee(this.map, this.map.player.position, mxy, lightRadius)) {
+        if (!hasLineOfSight(this.map, this.map.player.position, mxy)) {
             output.error(`Can't see!`)
             return true
         }

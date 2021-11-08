@@ -91,8 +91,7 @@ function generateMapRooms(
 
     map.exits.set(stairsUpPosition, stairsUp)
 
-    // const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
-    const lastRoom = rooms.find(x => x.depth == 1)!
+    const lastRoom = rooms.reduce((x, y) => x.depth > y.depth ? x : y)
     const stairsDown = tileset.stairsDown.clone()
     const stairsDownPosition = iter.find(
         visitInteriorCoords(cells, lastRoom.interiorPt),
@@ -245,7 +244,7 @@ function tryPlaceTreasure(rng: rand.RNG, items: rl.WeightedList<rl.Item>, cells:
             chest.items.add(item.clone())
         }
 
-        map.containers.set(pt, chest.clone())
+        map.containers.set(pt, chest)
         return true
     }
 
@@ -644,7 +643,7 @@ function createMonsterList(db: rl.ThingDB, floor: number): rl.WeightedList<rl.Mo
             continue
         }
 
-        if (monster.level > floor + 1) {
+        if (monster.level > floor) {
             continue
         }
 

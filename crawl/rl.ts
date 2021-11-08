@@ -1,6 +1,7 @@
 /**
  * rogue-like library
  */
+import * as iter from "../shared/iter.js"
 import * as rand from "../shared/rand.js"
 import * as gfx from "./gfx.js"
 
@@ -789,7 +790,9 @@ export class Container extends Fixture {
     }
 
     clone(): Container {
-        return new Container(this)
+        return new Container(Object.assign({
+            items: new Set(iter.map(this.items, x=>x.clone()))
+        }, super.clone()))
     }
 }
 
