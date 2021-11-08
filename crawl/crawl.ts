@@ -127,15 +127,11 @@ class InventoryDialog extends Dialog {
         this.closeButton.addEventListener("click", () => this.hide())
 
         this.nextPageButton.addEventListener("click", () => {
-            this.pageIndex++
-            this.pageIndex = Math.min(this.pageIndex, Math.ceil(this.player.inventory.length / this.pageSize))
-            this.refresh()
+            this.nextPage()
         })
 
         this.prevPageButton.addEventListener("click", () => {
-            this.pageIndex--
-            this.pageIndex = Math.max(this.pageIndex, 0)
-            this.refresh()
+            this.prevPage()
         })
 
         this.elem.addEventListener("keydown", ev => {
@@ -164,15 +160,19 @@ class InventoryDialog extends Dialog {
             }
 
             if (key === "ARROWDOWN" || key === "S") {
-                ++this.selectedIndex
-                this.selectedIndex = Math.min(this.selectedIndex, 8)
-                this.refresh()
+                this.nextItem()
             }
 
             if (key === "ARROWUP" || key === "W") {
-                --this.selectedIndex
-                this.selectedIndex = Math.max(this.selectedIndex, -1)
-                this.refresh()
+                this.prevItem()
+            }
+
+            if (key === "PAGEDOWN" || key === "N") {
+                this.nextPage()
+            }
+
+            if (key === "PAGEUP" || key === "P") {
+                this.prevPage()
             }
 
             if (key === "ESCAPE") {
@@ -210,6 +210,30 @@ class InventoryDialog extends Dialog {
                 this.select(row as HTMLTableRowElement)
             }
         })
+    }
+
+    nextPage() {
+        this.pageIndex++
+        this.pageIndex = Math.min(this.pageIndex, Math.ceil(this.player.inventory.length / this.pageSize) - 1)
+        this.refresh()
+    }
+
+    prevPage() {
+        this.pageIndex--
+        this.pageIndex = Math.max(this.pageIndex, 0)
+        this.refresh()
+    }
+
+    nextItem() {
+        ++this.selectedIndex
+        this.selectedIndex = Math.min(this.selectedIndex, this.pageSize)
+        this.refresh()
+    }
+
+    prevItem() {
+        --this.selectedIndex
+        this.selectedIndex = Math.max(this.selectedIndex, -1)
+        this.refresh()
     }
 
     show() {
@@ -355,7 +379,7 @@ class ContainerDialog {
             this.take(idx)
         })
 
-        elem.addEventListener("keypress", (ev) => {
+        elem.addEventListener("keypress", ev => {
             const key = ev.key.toUpperCase()
             if (key === "C") {
                 this.hide()
@@ -370,6 +394,17 @@ class ContainerDialog {
                 this.take(index - 1)
             }
         })
+
+        elem.addEventListener("keydown", ev => {
+            const key = ev.key.toUpperCase()
+            if (key === "ESCAPE") {
+                this.hide()
+            }
+
+            if (key === "ENTER") {
+                this.takeAll()
+            }
+        });
     }
 
     show(map: maps.Map, container: rl.Container) {
@@ -381,7 +416,7 @@ class ContainerDialog {
     }
 
     hide() {
-        if (this.map && this.container && this.container.items.size == 0) {
+        if (this.map && this.container && this.container.items.length === 0) {
             this.map.containers.delete(this.container)
         }
 
@@ -419,16 +454,12 @@ class ContainerDialog {
             return
         }
 
-        const item = getSortedItems(this.container.items)[index]
-        if (!item) {
-            return
-        }
-
-        this.container.items.delete(item)
+        const item = this.container.items[index]
+        this.container.items.splice(index, 1)
         this.player.inventory.push(item)
 
         // hide if this was the last item
-        if (this.container.items.size == 0) {
+        if (this.container.items.length == 0) {
             this.hide()
         } else {
             this.refresh()
@@ -440,11 +471,8 @@ class ContainerDialog {
             return
         }
 
-        for (const item of this.container.items) {
-            this.container.items.delete(item)
-            this.player.inventory.push(item)
-        }
-
+        this.player.inventory.push(...this.container.items)
+        this.container.items.splice(0, this.container.items.length)
         this.hide()
     }
 }
@@ -919,10 +947,10 @@ class App {
         const seed = rand.xmur3(new Date().toString())
         const rng = new rand.SFC32RNG(seed(), seed(), seed(), seed())
         const player = things.player.clone()
-        
+
         const map = gen.generateDungeonLevel(rng, things.db, 1)
         placePlayerAtExit(map, player, rl.ExitDirection.Up)
-        
+
         const [texture, imageMap] = await loadImages(renderer, map)
         const app = new App(rng, renderer, 1, map, texture, imageMap)
         return app
@@ -1169,7 +1197,7 @@ class App {
         const map = this.map
         let { position, thing: monster } = placedMonster
         const los = hasLineOfSight(map, position, map.player.position)
-        
+
         if (monster.state !== rl.MonsterState.aggro && los) {
             monster.action = 0
             monster.state = rl.MonsterState.aggro

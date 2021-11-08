@@ -53,7 +53,7 @@ export interface ThingSaveState {
     readonly data: DataSaveState
 }
 
-export type DataSaveState = null | PlayerSaveState | LightSourceSaveState | MonsterSaveState
+export type DataSaveState = null | PlayerSaveState | LightSourceSaveState | MonsterSaveState | ContainerSaveState
 
 export interface PlayerSaveState {
     readonly kind: "Player"
@@ -78,6 +78,11 @@ export interface PlayerSaveState {
 export interface LightSourceSaveState {
     readonly kind: "LightSource"
     readonly duration: number
+}
+
+export interface ContainerSaveState {
+    readonly kind: "Container"
+    readonly items: ThingSaveState[]
 }
 
 export class Dice {
@@ -784,21 +789,43 @@ export interface ContainerOptions {
     name: string
     image: string
     color?: gfx.Color
-    items?: Set<Item>
+    items?: Item[]
 }
 
 export class Container extends Fixture {
-    readonly items: Set<Item>
+    items: Item[]
 
     constructor(options: ContainerOptions) {
         super(Object.assign({ passable: false, transparent: true }, options))
-        this.items = new Set<Item>([...options.items ?? []])
+        this.items = [...options.items ?? []]
     }
 
     clone(): Container {
         return new Container(Object.assign({
-            items: new Set(iter.map(this.items, x => x.clone()))
+            items: [...iter.map(this.items, x => x.clone())]
         }, super.clone()))
+    }
+
+    save(): ThingSaveState {
+        return {
+            id: this.id,
+            data: {
+                kind: "Container",
+                items: this.items.map(i => i.save()),
+            }
+        }
+    }
+
+    load(db: ThingDB, state: ContainerSaveState) {
+        this.items = state.items.map(itemState => {
+            const item = db.load(itemState)
+
+            if (!(item instanceof Item)) {
+                throw new Error("non-item in container, load failed.")
+            }
+
+            return item
+        })
     }
 }
 
@@ -890,7 +917,7 @@ export class ThingDB {
                 }
 
                 thing.load(this, state.data)
-                break;
+                break
 
             case "LightSource":
                 if (!(thing instanceof LightSource)) {
@@ -898,7 +925,15 @@ export class ThingDB {
                 }
 
                 thing.load(state.data)
-                break;
+                break
+
+            case "Container":
+                if (!(thing instanceof Container)) {
+                    throw new Error("Invalid thing - expected container.")
+                }
+
+                thing.load(this, state.data)
+                break
         }
 
         return thing

@@ -50,8 +50,8 @@ interface Room {
 }
 
 export function generateDungeonLevel(rng: rand.SFC32RNG, db: rl.ThingDB, floor: number): maps.Map {
-    let minDim = 24;
-    let maxDim = 32 + floor * 4;
+    let minDim = 32;
+    let maxDim = 48 + floor * 4;
     let dimDice = new rl.Dice(minDim, maxDim)
     let width = dimDice.roll(rng)
     let height = dimDice.roll(rng)
@@ -203,8 +203,8 @@ function tryPlaceMonster(rng: rand.RNG, monsters: rl.WeightedList<rl.Monster>, c
 
 function placeItems(rng: rand.RNG, items: rl.WeightedList<rl.Item>, cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
-    const treasureChance = .2
-
+    // const treasureChance = .3
+    const treasureChance = 1
     for (const room of rooms) {
         if (room.depth <= 0) {
             continue
@@ -217,7 +217,6 @@ function placeItems(rng: rand.RNG, items: rl.WeightedList<rl.Item>, cells: CellG
         tryPlaceTreasure(rng, items, cells, room, map)
     }
 }
-
 
 function tryPlaceTreasure(rng: rand.RNG, items: rl.WeightedList<rl.Item>, cells: CellGrid, room: Room, map: maps.Map): boolean {
     // attempt to place treasure
@@ -234,19 +233,14 @@ function tryPlaceTreasure(rng: rand.RNG, items: rl.WeightedList<rl.Item>, cells:
 
         // choose loot
         const item = items.select(rng)
-        chest.items.add(item.clone())
+        chest.items.push(item.clone())
 
         // extra loot
         let extraLootChance = .5
         while (rand.chance(rng, extraLootChance)) {
             extraLootChance *= .5
             const item = items.select(rng)
-            chest.items.add(item.clone())
-        }
-
-        console.log(chest)
-        if (chest.items.size === 0) {
-            alert("EMPTY CHEST!")
+            chest.items.push(item.clone())
         }
 
         map.containers.set(pt, chest)
