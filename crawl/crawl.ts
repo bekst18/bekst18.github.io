@@ -1303,6 +1303,7 @@ class App {
         }
 
         if (this.handleTargetCommandClick()) {
+            console.log("TARGET COMMAND!")
             return true
         }
 
@@ -1311,7 +1312,10 @@ class App {
         const { position: playerPosition, thing: player } = this.map.player
 
         const clickFixture = map.fixtureAt(mxy)
-        if (clickFixture) {
+        if (clickFixture && clickFixture instanceof rl.Door) {
+            this.handleOpen(clickFixture)
+            return true
+        } else if (clickFixture) {
             output.info(`You see ${clickFixture.name}`)
             return true
         }
@@ -1320,12 +1324,15 @@ class App {
         // first, try melee
         if (clickMonster) {
             const dist = geo.calcManhattenDist(playerPosition, mxy)
-            if (dist <= (player.meleeWeapon?.range ?? 0)) {
+            const meleeWeapon = player.meleeWeapon ?? things.fists
+            const rangedWeapon = player.rangedWeapon ?? things.fists
+
+            if (dist <= meleeWeapon.range) {
                 this.processPlayerMeleeAttack(clickMonster)
                 return true
             }
 
-            if (dist <= (player.rangedWeapon?.range ?? 0)) {
+            if (dist <= rangedWeapon.range) {
                 this.processPlayerRangedAttack(clickMonster)
                 return true
             }
@@ -1385,6 +1392,12 @@ class App {
         return false
     }
 
+    private handleOpen(door: rl.Fixture) {
+        output.info(`${door.name} opened`)
+        this.map.fixtures.delete(door)
+        this.map.player.thing.action -= 1
+    }
+
     private async handleMove(dir: Direction) {
         // clear cursor on movement
         this.cursorPosition = undefined
@@ -1416,10 +1429,8 @@ class App {
 
         const fixture = map.fixtureAt(newPosition)
         if (fixture instanceof rl.Door) {
-            output.info(`${fixture.name} opened`)
-            this.map.fixtures.delete(fixture)
-            player.action -= 1
-            return
+            this.handleOpen(fixture)
+            return true
         } else if (fixture && !fixture.passable) {
             output.info(`Can't move that way, blocked by ${fixture.name}`)
             return false
