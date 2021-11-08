@@ -203,8 +203,7 @@ function tryPlaceMonster(rng: rand.RNG, monsters: rl.WeightedList<rl.Monster>, c
 
 function placeItems(rng: rand.RNG, items: rl.WeightedList<rl.Item>, cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
-    // const treasureChance = .3
-    const treasureChance = 1
+    const treasureChance = .35
     for (const room of rooms) {
         if (room.depth <= 0) {
             continue
