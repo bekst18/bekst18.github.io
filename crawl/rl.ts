@@ -665,6 +665,12 @@ export class Player extends Thing implements Creature {
             this.ring = null
         }
 
+        if (state.lightSource >= 0) {
+            this.equip(this.inventory[state.lightSource])
+        } else {
+            this.lightSource = null
+        }
+
         this.gold = state.gold
     }
 }
@@ -791,7 +797,7 @@ export class Container extends Fixture {
 
     clone(): Container {
         return new Container(Object.assign({
-            items: new Set(iter.map(this.items, x=>x.clone()))
+            items: new Set(iter.map(this.items, x => x.clone()))
         }, super.clone()))
     }
 }

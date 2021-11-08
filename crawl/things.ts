@@ -254,7 +254,7 @@ export const skeleton = db.insert(new rl.Monster({
     maxHealth: 5,
     image: "./assets/skeleton.png",
     experience: 2,
-    level: 1,
+    level: 2,
     agility: 0,
     defense: 1,
     attacks: [

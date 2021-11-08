@@ -244,6 +244,11 @@ function tryPlaceTreasure(rng: rand.RNG, items: rl.WeightedList<rl.Item>, cells:
             chest.items.add(item.clone())
         }
 
+        console.log(chest)
+        if (chest.items.size === 0) {
+            alert("EMPTY CHEST!")
+        }
+
         map.containers.set(pt, chest)
         return true
     }

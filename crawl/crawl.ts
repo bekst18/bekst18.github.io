@@ -1026,6 +1026,7 @@ class App {
             player.lightSource.duration -= 1
             if (player.lightSource.duration === 0) {
                 output.warning(`Your ${player.lightSource.name} has been extinguished!`)
+                player.delete(player.lightSource)
             }
         }
 
