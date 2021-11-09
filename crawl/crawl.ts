@@ -537,17 +537,22 @@ class LevelDialog extends Dialog {
 
     private levelStrenth() {
         this.player.baseStrength++
-        this.hide()
+        this.levelUp()
     }
 
     private levelIntelligence() {
         this.player.baseIntelligence++
-        this.hide()
+        this.levelUp()
     }
 
     private levelAgility() {
         this.player.baseAgility++
+        this.levelUp()
+    }
+
+    private levelUp() {
         this.hide()
+        this.player.baseMaxHealth += 3 + this.player.strength
     }
 }
 
@@ -584,7 +589,7 @@ class ShopDialog {
 
         const elem = this.dialog.elem
 
-        dom.delegate(elem, "click", ".shop-item-row", (ev) => {
+        dom.delegate(elem, "click", ".item-row", (ev) => {
             const btn = ev.target as HTMLButtonElement
             const row = btn.closest(".item-row") as HTMLTableRowElement
             const idx = dom.getElementIndex(row)
@@ -1595,15 +1600,6 @@ class App {
         return aabb
     }
 
-    private calcLightRadius(): number {
-        const viewportLightRadius = Math.max(Math.ceil(this.canvas.width / this.tileSize), Math.ceil(this.canvas.height / this.tileSize))
-        if (this.map.lighting === maps.Lighting.Ambient) {
-            return viewportLightRadius
-        }
-
-        return Math.min(viewportLightRadius, this.map.player.thing.lightRadius)
-    }
-
     private drawFrame() {
         // center the grid around the playerd
         const viewportAABB = this.calcMapViewport()
@@ -1741,6 +1737,11 @@ class App {
                 if (wasHidden) {
                     this.inventoryDialog.show()
                 }
+            }
+                break
+
+            case "L": {
+                this.levelDialog.show()
             }
                 break
 

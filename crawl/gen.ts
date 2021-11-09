@@ -51,7 +51,7 @@ interface Room {
 
 export function generateDungeonLevel(rng: rand.SFC32RNG, db: rl.ThingDB, floor: number): maps.Map {
     let minDim = 32;
-    let maxDim = 48 + floor * 4;
+    let maxDim = 32 + floor * 4;
     let dimDice = new rl.Dice(minDim, maxDim)
     let width = dimDice.roll(rng)
     let height = dimDice.roll(rng)
@@ -203,7 +203,7 @@ function tryPlaceMonster(rng: rand.RNG, monsters: rl.WeightedList<rl.Monster>, c
 
 function placeItems(rng: rand.RNG, items: rl.WeightedList<rl.Item>, cells: CellGrid, rooms: Room[], map: maps.Map) {
     // iterate over rooms, decide whether to place a monster in each room
-    const treasureChance = .35
+    const treasureChance = .25
     for (const room of rooms) {
         if (room.depth <= 0) {
             continue
