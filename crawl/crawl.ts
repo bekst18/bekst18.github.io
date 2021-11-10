@@ -9,6 +9,7 @@ import * as output from "./output.js"
 import * as things from "./things.js"
 import * as maps from "./maps.js"
 import * as rand from "../shared/rand.js"
+import * as math from "../shared/math.js"
 
 const STORAGE_KEY = "crawl_storage"
 
@@ -17,6 +18,69 @@ const enum Direction {
     South,
     East,
     West
+}
+
+class Animation {
+    private _position: geo.Point
+    private _done: boolean
+
+    constructor(
+        private readonly startPosition: geo.Point,
+        private readonly endPosition: geo.Point,
+        private readonly startTime: DOMHighResTimeStamp,
+        private readonly duration: DOMHighResTimeStamp) {
+        this._position = startPosition
+        this._done = false
+    }
+
+    update(time: DOMHighResTimeStamp) {
+        const t = math.clamp(math.unlerp(this.startTime, this.startTime + this.duration, time), 0, 1)
+        this._position = geo.lerp(this.startPosition, this.endPosition, t)
+        this._done = t >= 1
+    }
+
+    get position(): geo.Point {
+        return this._position
+    }
+
+    get done(): boolean {
+        return this._done
+    }
+}
+
+class Animations {
+    private readonly animations = new Map<rl.Thing, Animation>()
+    private readonly time: DOMHighResTimeStamp = 0
+
+    insert(th: rl.Thing, startPosition: geo.Point, endPosition: geo.Point, duration: DOMHighResTimeStamp) {
+        this.animations.set(th, new Animation(startPosition, endPosition, this.time, duration))
+    }
+
+    update(time: DOMHighResTimeStamp) {
+        for (const anim of this.animations.values()) {
+            anim.update(time)
+        }
+
+        this.time = time
+    }
+
+    position(th: rl.Thing): geo.Point | undefined {
+        const anim = this.animations.get(th)
+        return anim?.position
+    }
+
+    *processDone(): Generator<[rl.Thing, Animation]> {
+        for (const [th, anim] of this.animations) {
+            yield [th, anim]
+            if (anim.done) {
+                this.animations.delete(th)
+            }
+        }
+    }
+
+    get size(): number {
+        return this.animations.size
+    }
 }
 
 function directionVector(dir: Direction): geo.Point {
@@ -914,6 +978,7 @@ class App {
     private readonly defeatDialog = new DefeatDialog(this.canvas)
     private readonly levelDialog: LevelDialog
     private readonly shopDialog: ShopDialog
+    private readonly animations = new Animations()
     private zoom = 1
     private targetCommand: TargetCommand = TargetCommand.None
     private cursorPosition?: geo.Point
@@ -966,7 +1031,7 @@ class App {
 
         output.write("Your adventure begins")
         this.handleResize()
-        requestAnimationFrame(() => this.tick())
+        requestAnimationFrame(time => this.tick(time))
 
         document.addEventListener("keydown", (ev) => this.handleKeyDown(ev))
 
@@ -988,23 +1053,36 @@ class App {
         })
     }
 
-
-    private tick() {
+    private tick(time: DOMHighResTimeStamp) {
         this.handleResize()
+        this.animations.update(time)
 
-        const nextCreature = this.getNextCreature()
-        if (nextCreature?.thing instanceof rl.Player) {
-            this.handleInput()
-        } else if (nextCreature?.thing instanceof rl.Monster) {
-            this.tickMonster(nextCreature.position, nextCreature.thing)
-        } else {
-            this.tickRound()
+        for (const [th, anim] of this.animations.processDone()) {
+            if (th instanceof rl.Player) {
+                this.map.players.set(anim.position, th)
+                th.action -= 1
+            }
+
+            if (th instanceof rl.Monster) {
+                this.map.monsters.set(anim.position, th)
+                th.action -= 1
+            }
         }
 
-        this.updateVisibility()
-        this.drawFrame()
+        if (this.animations.size === 0) {
+            const nextCreature = this.getNextCreature()
+            if (nextCreature?.thing instanceof rl.Player) {
+                this.handleInput()
+            } else if (nextCreature?.thing instanceof rl.Monster) {
+                this.tickMonster(nextCreature.position, nextCreature.thing)
+            } else {
+                this.tickRound()
+            }
+            this.updateVisibility()
+        }
 
-        requestAnimationFrame(() => this.tick())
+        this.drawFrame()
+        requestAnimationFrame(time => this.tick(time))
     }
 
     private getNextMonster(): maps.Placed<rl.Monster> | null {
@@ -1241,8 +1319,7 @@ class App {
 
         const position = path[0]
         if (map.isPassable(position)) {
-            monster.action -= 1
-            this.map.monsters.set(position, monster)
+            this.animations.insert(monster, monsterPosition, position, 125)
         } else {
             monster.action = 0
         }
@@ -1333,7 +1410,6 @@ class App {
         }
 
         if (this.handleTargetCommandClick()) {
-            console.log("TARGET COMMAND!")
             return true
         }
 
@@ -1391,22 +1467,22 @@ class App {
     private handlePlayerKeyboardMovement(): boolean {
         let inp = this.inp
 
-        if (inp.pressed("w") || inp.pressed("W") || inp.pressed("ArrowUp")) {
+        if (inp.held("w") || inp.held("W") || inp.held("ArrowUp")) {
             this.handleMove(Direction.North)
             return true
         }
 
-        if (inp.pressed("s") || inp.pressed("S") || inp.pressed("ArrowDown")) {
+        if (inp.held("s") || inp.held("S") || inp.held("ArrowDown")) {
             this.handleMove(Direction.South)
             return true
         }
 
-        if (inp.pressed("a") || inp.pressed("A") || inp.pressed("ArrowLeft")) {
+        if (inp.held("a") || inp.held("A") || inp.held("ArrowLeft")) {
             this.handleMove(Direction.West)
             return true
         }
 
-        if (inp.pressed("d") || inp.pressed("D") || inp.pressed("ArrowRight")) {
+        if (inp.held("d") || inp.held("D") || inp.held("ArrowRight")) {
             this.handleMove(Direction.East)
             return true
         }
@@ -1474,8 +1550,11 @@ class App {
             return
         }
 
-        map.player.position = newPosition
-        player.action -= 1
+        this.animations.insert(player, playerPosition, newPosition, 125)
+
+        // TODO: not yet! animation must complete!
+        // map.player.position = newPosition
+        // player.action -= 1
 
         return
     }
@@ -1665,7 +1744,7 @@ class App {
             color.a = .25
         }
 
-        this.drawImage(offset, position, thing.image, color)
+        this.drawImage(offset, this.animations.position(thing) ?? position, thing.image, color)
     }
 
     private drawCursor(offset: geo.Point) {

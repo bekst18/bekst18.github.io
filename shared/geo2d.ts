@@ -2,6 +2,7 @@
  * 1st attempt at a simple 2d geometry library
  */
 import * as array from "../shared/array.js"
+import * as math from "../shared/math.js"
 
 export interface PointOptions {
     x: number,
@@ -359,4 +360,16 @@ export class AABBTree<T> {
  */
 export function calcManhattenDist(a: Point, b: Point): number {
     return Math.abs(b.x - a.x) + Math.abs(b.y - a.y)
+}
+
+/**
+ * linearly interpolate between 2 points
+ * @param a first point
+ * @param b second point
+ * @param t number between 0 and 1
+ */
+export function lerp(a: Point, b: Point, t: number): Point {
+    const x = math.lerp(a.x, b.x, t)
+    const y = math.lerp(a.y, b.y, t)
+    return new Point(x, y)
 }
