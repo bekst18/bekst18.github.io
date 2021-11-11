@@ -306,6 +306,12 @@ class InventoryDialog extends Dialog {
             const aeq = this.player.isEquipped(a)
             const beq = this.player.isEquipped(b)
 
+            return aeq && !beq ? -1 : 1
+
+            // return a.name <= b.name ? -1 : 1
+            // const aeq = this.player.isEquipped(a)
+            // const beq = this.player.isEquipped(b)
+
             if (aeq === beq) {
                 return a.name <= b.name ? -1 : 1
             }
@@ -1419,7 +1425,7 @@ class App {
             return true
         }
 
-        return false
+        return true
     }
 
     private handleClick(): boolean {
