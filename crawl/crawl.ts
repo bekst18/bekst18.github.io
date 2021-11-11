@@ -50,7 +50,7 @@ class Animation {
 
 class Animations {
     private readonly animations = new Map<rl.Thing, Animation>()
-    private readonly time: DOMHighResTimeStamp = 0
+    private time: DOMHighResTimeStamp = 0
 
     insert(th: rl.Thing, startPosition: geo.Point, endPosition: geo.Point, duration: DOMHighResTimeStamp) {
         this.animations.set(th, new Animation(startPosition, endPosition, this.time, duration))
@@ -301,6 +301,18 @@ class InventoryDialog extends Dialog {
     }
 
     show() {
+        // sort inventory
+        this.player.inventory.sort((a, b) => {
+            const aeq = this.player.isEquipped(a)
+            const beq = this.player.isEquipped(b)
+
+            if (aeq === beq) {
+                return a.name <= b.name ? -1 : 1
+            }
+
+            return (aeq ? 1 : 2) - (beq ? 1 : 2)
+        })
+
         this.refresh()
         super.show()
     }
@@ -336,7 +348,8 @@ class InventoryDialog extends Dialog {
             const equipButton = dom.bySelector(tr, ".inventory-equip-button") as HTMLButtonElement
             const removeButton = dom.bySelector(tr, ".inventory-remove-button") as HTMLButtonElement
             const useButton = dom.bySelector(tr, ".inventory-use-button") as HTMLButtonElement
-            const name = item instanceof rl.LightSource ? `${item.name} (${item.duration})` : item.name
+            const equipped = this.player.isEquipped(item)
+            const name = item instanceof rl.LightSource ? `${equipped ? "* " : ""}${item.name} (${item.duration})` : `${equipped ? "* " : ""}${item.name}`
 
             itemIndexTd.textContent = (i + 1).toString()
             itemNameTd.textContent = name
@@ -344,11 +357,11 @@ class InventoryDialog extends Dialog {
             if (!(item instanceof rl.Usable)) {
                 useButton.remove()
             }
-            if (!rl.isEquippable(item) || this.player.isEquipped(item)) {
+            if (!rl.isEquippable(item) || equipped) {
                 equipButton.remove()
             }
 
-            if (!this.player.isEquipped(item)) {
+            if (!equipped) {
                 removeButton.remove()
             }
 
@@ -444,15 +457,6 @@ class ContainerDialog {
         })
 
         elem.addEventListener("keypress", ev => {
-            const key = ev.key.toUpperCase()
-            if (key === "C") {
-                this.hide()
-            }
-
-            if (key === "A") {
-                this.takeAll()
-            }
-
             const index = parseInt(ev.key)
             if (index && index > 0 && index <= 9) {
                 this.take(index - 1)
@@ -966,6 +970,8 @@ enum TargetCommand {
 }
 
 class App {
+    private static readonly cursorAnimationDuration = 125
+    private static readonly moveAnimationDuration = 250
     private readonly canvas = dom.byId("canvas") as HTMLCanvasElement
     private readonly attackButton = dom.byId("attackButton") as HTMLButtonElement
     private readonly shootButton = dom.byId("shootButton") as HTMLButtonElement
@@ -979,9 +985,11 @@ class App {
     private readonly levelDialog: LevelDialog
     private readonly shopDialog: ShopDialog
     private readonly animations = new Animations()
+    private cursorAnimation?: Animation
     private zoom = 1
     private targetCommand: TargetCommand = TargetCommand.None
     private cursorPosition?: geo.Point
+    private time: DOMHighResTimeStamp = 0
 
     private constructor(
         private readonly rng: rand.SFC32RNG,
@@ -1054,8 +1062,10 @@ class App {
     }
 
     private tick(time: DOMHighResTimeStamp) {
+        this.time = time
         this.handleResize()
         this.animations.update(time)
+        this.cursorAnimation?.update(time)
 
         for (const [th, anim] of this.animations.processDone()) {
             if (th instanceof rl.Player) {
@@ -1069,7 +1079,12 @@ class App {
             }
         }
 
-        if (this.animations.size === 0) {
+        if (this.cursorAnimation?.done) {
+            this.cursorPosition = this.cursorAnimation.position
+            this.cursorAnimation = undefined
+        }
+
+        if (this.animations.size === 0 && !this.cursorAnimation) {
             const nextCreature = this.getNextCreature()
             if (nextCreature?.thing instanceof rl.Player) {
                 this.handleInput()
@@ -1319,7 +1334,7 @@ class App {
 
         const position = path[0]
         if (map.isPassable(position)) {
-            this.animations.insert(monster, monsterPosition, position, 125)
+            this.animations.insert(monster, monsterPosition, position, App.moveAnimationDuration)
         } else {
             monster.action = 0
         }
@@ -1363,6 +1378,12 @@ class App {
             return
         }
 
+        // mouse/touch movement
+        if (this.handlePlayerMouseMovement()) {
+            inp.flush()
+            return
+        }
+
         inp.flush()
     }
 
@@ -1378,23 +1399,23 @@ class App {
             this.cursorPosition = playerPosition.clone()
         }
 
-        if (inp.pressed("w") || inp.pressed("W") || inp.pressed("ArrowUp")) {
-            this.cursorPosition.y -= 1
+        if (inp.held("w") || inp.held("W") || inp.held("ArrowUp")) {
+            this.handleCursorMove(Direction.North)
             return true
         }
 
-        if (inp.pressed("s") || inp.pressed("S") || inp.pressed("ArrowDown")) {
-            this.cursorPosition.y += 1
+        if (inp.held("s") || inp.held("S") || inp.held("ArrowDown")) {
+            this.handleCursorMove(Direction.South)
             return true
         }
 
-        if (inp.pressed("a") || inp.pressed("A") || inp.pressed("ArrowLeft")) {
-            this.cursorPosition.x -= 1
+        if (inp.held("a") || inp.held("A") || inp.held("ArrowLeft")) {
+            this.handleCursorMove(Direction.West)
             return true
         }
 
-        if (inp.pressed("d") || inp.pressed("D") || inp.pressed("ArrowRight")) {
-            this.cursorPosition.x += 1
+        if (inp.held("d") || inp.held("D") || inp.held("ArrowRight")) {
+            this.handleCursorMove(Direction.East)
             return true
         }
 
@@ -1447,25 +1468,15 @@ class App {
             return true
         }
 
-        const dxy = mxy.subPoint(playerPosition)
-        const sgn = dxy.sign()
-        const abs = dxy.abs()
-
-        if (abs.x > 0 && abs.x >= abs.y) {
-            this.handleMove(sgn.x > 0 ? Direction.East : Direction.West)
-            return true
-        }
-
-        if (abs.y > 0 && abs.y > abs.x) {
-            this.handleMove(sgn.y > 0 ? Direction.South : Direction.North)
-            return true
-        }
-
         return false
     }
 
     private handlePlayerKeyboardMovement(): boolean {
         let inp = this.inp
+
+        if (this.handlePlayerKeyboardRunInto()) {
+            return true
+        }
 
         if (inp.held("w") || inp.held("W") || inp.held("ArrowUp")) {
             this.handleMove(Direction.North)
@@ -1487,11 +1498,62 @@ class App {
             return true
         }
 
+        return false
+    }
+
+    private handlePlayerKeyboardRunInto(): boolean {
+        let inp = this.inp
+
+        if (inp.pressed("w") || inp.pressed("W") || inp.pressed("ArrowUp")) {
+            this.handleRunInto(Direction.North)
+            return true
+        }
+
+        if (inp.pressed("s") || inp.pressed("S") || inp.pressed("ArrowDown")) {
+            this.handleRunInto(Direction.South)
+            return true
+        }
+
+        if (inp.pressed("a") || inp.pressed("A") || inp.pressed("ArrowLeft")) {
+            this.handleRunInto(Direction.West)
+            return true
+        }
+
+        if (inp.pressed("d") || inp.pressed("D") || inp.pressed("ArrowRight")) {
+            this.handleRunInto(Direction.East)
+            return true
+        }
+
         if (inp.pressed(" ")) {
             output.info("Pass")
             const player = this.map.player.thing
             player.actionReserve += player.action
             player.action = 0
+            return true
+        }
+
+        return false
+    }
+
+    private handlePlayerMouseMovement(): boolean {
+        const inp = this.inp
+        if (!inp.mouseLeftHeld) {
+            return false
+        }
+
+        const playerPosition = this.map.player.position
+        const mxy = this.canvasToMapPoint(new geo.Point(inp.mouseX, inp.mouseY))
+        const dxy = mxy.subPoint(playerPosition)
+        const sgn = dxy.sign()
+        const abs = dxy.abs()
+
+        if (abs.x > 0 && abs.x >= abs.y) {
+            this.handleMove(sgn.x > 0 ? Direction.East : Direction.West)
+            return true
+        }
+
+        if (abs.y > 0 && abs.y > abs.x) {
+            this.handleMove(sgn.y > 0 ? Direction.South : Direction.North)
             return true
         }
 
@@ -1504,7 +1566,7 @@ class App {
         this.map.player.thing.action -= 1
     }
 
-    private async handleMove(dir: Direction) {
+    private handleMove(dir: Direction) {
         // clear cursor on movement
         this.cursorPosition = undefined
         const { position: playerPosition, thing: player } = this.map.player
@@ -1514,48 +1576,66 @@ class App {
             return
         }
 
-        const map = this.map
-        const tile = map.tileAt(newPosition)
-        if (tile && !tile.passable) {
-            output.info(`Blocked by ${tile.name}`)
+        if (!this.map.isPassable(newPosition)) {
             return
         }
 
-        const monster = map.monsterAt(newPosition)
+        this.animations.insert(player, playerPosition, newPosition, App.moveAnimationDuration)
+    }
+
+    private handleRunInto(dir: Direction) {
+        // clear cursor on movement
+        this.cursorPosition = undefined
+        const { position: playerPosition, thing: player } = this.map.player
+
+        let targetPosition = playerPosition.addPoint(directionVector(dir))
+        if (!this.map.inBounds(targetPosition)) {
+            return
+        }
+
+        const map = this.map
+        const monster = map.monsterAt(targetPosition)
         if (monster) {
             this.processPlayerMeleeAttack(monster)
             return
         }
 
-        const container = map.containerAt(newPosition)
+        const container = map.containerAt(targetPosition)
         if (container) {
             this.containerDialog.show(map, container)
             return
         }
 
-        const fixture = map.fixtureAt(newPosition)
+        const fixture = map.fixtureAt(targetPosition)
         if (fixture instanceof rl.Door) {
             this.handleOpen(fixture)
-            return true
+            return
         } else if (fixture && !fixture.passable) {
             output.info(`Can't move that way, blocked by ${fixture.name}`)
-            return false
-        }
-
-        const exit = map.exitAt(newPosition)
-        if (exit) {
-            player.action -= 1
-            map.player.position = newPosition
-            await this.handleExit(exit.direction)
             return
         }
 
-        this.animations.insert(player, playerPosition, newPosition, 125)
+        const exit = map.exitAt(targetPosition)
+        if (exit) {
+            player.action -= 1
+            map.player.position = targetPosition
+            this.handleExit(exit.direction)
+            return
+        }
+    }
 
-        // TODO: not yet! animation must complete!
-        // map.player.position = newPosition
-        // player.action -= 1
+    private handleCursorMove(dir: Direction) {
+        if (!this.cursorPosition) {
+            return
+        }
 
+        // clear cursor on movement
+        let newPosition = this.cursorPosition.addPoint(directionVector(dir))
+        if (!this.map.inBounds(newPosition)) {
+            return
+        }
+
+        this.cursorAnimation = new Animation(this.cursorPosition, newPosition, this.time, App.cursorAnimationDuration)
         return
     }
 
@@ -1752,7 +1832,8 @@ class App {
             return
         }
 
-        this.drawImage(offset, this.cursorPosition, "./assets/cursor.png", gfx.Color.red)
+        const position = this.cursorAnimation?.position ?? this.cursorPosition
+        this.drawImage(offset, position, "./assets/cursor.png", gfx.Color.red)
     }
 
     private drawImage(offset: geo.Point, position: geo.Point, image: string, color: gfx.Color = gfx.Color.white) {
