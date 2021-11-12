@@ -306,12 +306,6 @@ class InventoryDialog extends Dialog {
             const aeq = this.player.isEquipped(a)
             const beq = this.player.isEquipped(b)
 
-            return aeq && !beq ? -1 : 1
-
-            // return a.name <= b.name ? -1 : 1
-            // const aeq = this.player.isEquipped(a)
-            // const beq = this.player.isEquipped(b)
-
             if (aeq === beq) {
                 return a.name <= b.name ? -1 : 1
             }
@@ -342,7 +336,7 @@ class InventoryDialog extends Dialog {
 
         this.infoDiv.textContent = `Page ${this.pageIndex + 1} of ${pageCount}`
 
-        const items = getSortedItemsPage(this.player.inventory, this.pageIndex, this.pageSize)
+        const items = iter.page(this.player.inventory, this.pageIndex, this.pageSize)
         this.selectedIndex = Math.min(this.selectedIndex, items.length - 1)
 
         for (let i = 0; i < items.length; ++i) {
@@ -395,7 +389,7 @@ class InventoryDialog extends Dialog {
 
     private use(index: number) {
         const i = this.pageIndex * this.pageSize + index
-        const item = getSortedItems(this.player.inventory)[i]
+        const item = this.player.inventory[i]
         if (!(item instanceof rl.Usable)) {
             return
         }
@@ -406,14 +400,14 @@ class InventoryDialog extends Dialog {
 
     private drop(index: number) {
         const i = this.pageIndex * this.pageSize + index
-        const item = getSortedItems(this.player.inventory)[i]
+        const item = this.player.inventory[i]
         dropItem(this.player, item)
         this.refresh()
     }
 
     private equip(index: number) {
         const i = this.pageIndex * this.pageSize + index
-        const item = getSortedItems(this.player.inventory)[i]
+        const item = this.player.inventory[i]
         if (!rl.isEquippable(item)) {
             return
         }
@@ -424,7 +418,7 @@ class InventoryDialog extends Dialog {
 
     private remove(index: number) {
         const i = this.pageIndex * this.pageSize + index
-        const item = getSortedItems(this.player.inventory)[i]
+        const item = this.player.inventory[i]
         if (!rl.isEquippable(item)) {
             return
         }
@@ -891,14 +885,6 @@ class ShopDialog {
 function getSortedItems(items: Iterable<rl.Item>): rl.Item[] {
     const sortedItems = iter.orderBy(items, i => i.name)
     return sortedItems
-}
-
-function getSortedItemsPage(items: Iterable<rl.Item>, pageIndex: number, pageSize: number): rl.Item[] {
-    const startIndex = pageIndex * pageSize
-    const endIndex = startIndex + pageSize
-    const sortedItems = getSortedItems(items)
-    const page = sortedItems.slice(startIndex, endIndex)
-    return page
 }
 
 function hasLineOfSight(map: maps.Map, eye: geo.Point, target: geo.Point): boolean {

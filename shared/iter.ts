@@ -432,3 +432,18 @@ export function first<T>(as: Iterable<T>): T {
 
     throw new Error("Sequence contained no elements.")
 }
+
+/**
+ * 
+ * @param data data to extract a page of
+ * @param pageIndex index of page
+ * @param pageSize size of page
+ * @returns a page of the specified data
+ */
+export function page<T>(data: Iterable<T>, pageIndex: number, pageSize: number): T[] {
+    const a = [...data]
+    const startIndex = pageIndex * pageSize
+    const endIndex = startIndex + pageSize
+    const page = a.slice(startIndex, endIndex)
+    return page
+}
