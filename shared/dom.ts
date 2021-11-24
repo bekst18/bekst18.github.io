@@ -69,7 +69,6 @@ export function delegate(elem: EventSource, type: string, selector: string, list
     })
 }
 
-
 export function removeAllChildren(elem: HTMLElement) {
     while (elem.firstChild) {
         elem.removeChild(elem.firstChild)
