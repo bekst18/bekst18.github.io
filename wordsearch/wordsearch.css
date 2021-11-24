@@ -38,16 +38,23 @@ h1 {
     cursor: pointer;
 }
 
-#letterTable {
+#gridCanvas {
+    display: block;
     border: 2px solid lightblue;
     border-radius: 1em;
-    padding: .5em;
     margin-top: .5em;
     margin-left: auto;
     margin-right: auto;
-    page-break-inside: avoid;
+    margin-bottom: .5em;
+    padding: 4px;
 }
 
 #letterTable td {
     text-align: center;
+    padding: .125em;
+    margin: 0;
+}
+
+#letterTable td.selected {
+    background-color: cadetblue;
 }
