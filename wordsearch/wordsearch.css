@@ -52,6 +52,7 @@ h1 {
     margin-right: auto;
     margin-bottom: .5em;
     padding: 4px;
+    touch-action: none;
 }
 
 #success {

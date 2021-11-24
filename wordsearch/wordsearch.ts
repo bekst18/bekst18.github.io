@@ -145,7 +145,6 @@ function main() {
         words = wordSearch.words;
         grid = wordSearch.grid;
         placements = wordSearch.placements;
-        console.log(placements);
         selections.splice(0, selections.length);
 
         settingsDiv.hidden = true;
@@ -193,10 +192,10 @@ function main() {
         target.remove();
     });
 
-    canvas.addEventListener("pointerdown", onCanvasMouseDown);
-    canvas.addEventListener("pointerup", onCanvasMouseUp);
-    canvas.addEventListener("pointermove", onCanvasMouseMouse);
-    canvas.addEventListener("pointerleave", onCanvasMouseLeave);
+    canvas.addEventListener("pointerdown", onCanvasPointerDown, false);
+    canvas.addEventListener("pointerup", onCanvasPointerUp, false);
+    canvas.addEventListener("pointermove", onCanvasPointerMove, false);
+    canvas.addEventListener("pointerleave", onCanvasPointerLeave, false);
 
     function getSettings(): Settings {
         const minRows = parseInt(minRowsInput.value) || 0;
@@ -254,12 +253,12 @@ function main() {
         }
     }
 
-    function onCanvasMouseDown(ev: MouseEvent) {
+    function onCanvasPointerDown(ev: PointerEvent) {
         const xy = { x: ev.offsetX, y: ev.offsetY };
         selectStartCoords = canvasToGridCoords(ctx!, xy);
     }
 
-    function onCanvasMouseUp(ev: MouseEvent) {
+    function onCanvasPointerUp(ev: PointerEvent) {
         if (!selectStartCoords) {
             return;
         }
@@ -268,7 +267,6 @@ function main() {
         const xy = { x: ev.offsetX, y: ev.offsetY };
         const start = selectStartCoords;
         const end = canvasToGridCoords(ctx!, xy);
-        console.log(start, end, placements);
         const idx = placements.findIndex(x =>
             (coordsEqual(x.start, start) && coordsEqual(x.end, end))
             || (coordsEqual(x.start, end!) && coordsEqual(x.end, start)));
@@ -297,11 +295,11 @@ function main() {
         dragEnd();
     }
 
-    function onCanvasMouseLeave() {
+    function onCanvasPointerLeave() {
         dragEnd();
     }
 
-    function onCanvasMouseMouse(ev: MouseEvent) {
+    function onCanvasPointerMove(ev: PointerEvent) {
         if (!selectStartCoords) {
             return;
         }
@@ -576,8 +574,8 @@ function paint(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, grid: L
     const cellSize = letterSize + padding * 2;
     canvas.width = cellSize * grid.cols;
     canvas.height = cellSize * grid.rows;
-    canvas.style.width = `${canvas.width}px`;
-    canvas.style.height = `${canvas.height}px`;
+    // canvas.style.width = `${canvas.width}px`;
+    // canvas.style.height = `${canvas.height}px`;
 
     ctx.font = font;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -661,7 +659,6 @@ function getDir(ij0: Coords, ij1: Coords): Coords | null {
     const di = ij1.i - ij0.i;
     const dj = ij1.j - ij0.j;
 
-    console.log(di, dj);
     if (di === 0 && dj === 0) {
         return null;
     }
