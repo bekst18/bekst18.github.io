@@ -1,6 +1,5 @@
 "use strict";
 import * as dom from "../shared/dom.js";
-import * as iter from "../shared/iter.js";
 import * as rand from "../shared/rand.js";
 import * as array from "../shared/array.js";
 
@@ -24,10 +23,17 @@ interface Coords {
     j: number,
 }
 
-interface Placement {
-    position: Coords
-    direction: Coords
+interface Point {
+    x: number,
+    y: number
 }
+
+interface Selection {
+    start: Coords
+    end: Coords
+}
+
+const padding = 4;
 
 class LetterGrid {
     letters: string[]
@@ -52,6 +58,12 @@ class LetterGrid {
         return row * this.cols + col;
     }
 
+    hier(idx: number): Coords {
+        const i = Math.floor(idx / this.cols);
+        const j = idx % this.cols;
+        return { i, j };
+    }
+
     get(row: number, col: number): string {
         return this.getf(this.flat(row, col));
     }
@@ -59,6 +71,12 @@ class LetterGrid {
     set(row: number, col: number, ch: string) {
         this.setf(this.flat(row, col), ch);
     }
+}
+
+interface WordSearch {
+    words: Set<string>
+    grid: LetterGrid
+    placements: Selection[]
 }
 
 function main() {
@@ -78,18 +96,18 @@ function main() {
     const reverseCheckbox = dom.byId("reverse") as HTMLInputElement;
     const settingsDiv = dom.byId("settings") as HTMLDivElement;
     const resultsDiv = dom.byId("results") as HTMLDivElement;
+    const successDiv = dom.byId("success") as HTMLDivElement;
     const settingsKey = "wordSearchSettings";
-    const gridCanvas = dom.byId("gridCanvas") as HTMLCanvasElement;
-    let grid = new LetterGrid(0, 0);
-
-    const ctx = gridCanvas.getContext("2d");
-    if (!ctx) {
-        throw new Error("No canvas support");
-    }
-
     const seed = rand.xmur3(new Date().toString());
     const rng = new rand.SFC32RNG(seed(), seed(), seed(), seed());
-    let drag = false;
+    const canvas = dom.byId("gridCanvas") as HTMLCanvasElement;
+    const ctx = getContext2D(canvas);
+    const resultsWordList = dom.byId("resultsWordList") as HTMLDivElement;
+    const selections = new Array<Selection>();
+    let words = new Set<string>();
+    let grid = new LetterGrid(0, 0);
+    let placements = new Array<Selection>();
+    let selectStartCoords: Coords | null = null;
 
     loadSettings();
 
@@ -118,21 +136,25 @@ function main() {
 
     generateButton.addEventListener("click", _ => {
         const settings = getSettings();
-        let maybeGrid = generateWordSearch(rng, settings);
-        if (!maybeGrid) {
+        let wordSearch = generateWordSearch(rng, settings);
+        if (!wordSearch) {
             return;
         }
 
-        grid = maybeGrid
+        successDiv.hidden = true;
+        words = wordSearch.words;
+        grid = wordSearch.grid;
+        placements = wordSearch.placements;
+        console.log(placements);
+        selections.splice(0, selections.length);
+
         settingsDiv.hidden = true;
         resultsDiv.hidden = false;
-        paint(gridCanvas, ctx, grid)
+        paint(canvas, ctx, grid, selections);
 
-        // TODO - fill in output word lsit
-        const wordList = dom.byId("resultsWordList") as HTMLDivElement;
-        dom.removeAllChildren(wordList);
+        dom.removeAllChildren(resultsWordList);
         for (const word of settings.words) {
-            addWord(wordList, word);
+            addWord(resultsWordList, word);
         }
     });
 
@@ -164,17 +186,17 @@ function main() {
             return;
         }
 
-        if (!target.matches(".word")) {
+        if (!target.matches("#settingsWordList .word")) {
             return;
         }
 
         target.remove();
     });
 
-    // letterTable.addEventListener("mousedown", onLetterTableMouseDown);
-    // letterTable.addEventListener("mouseup", onLetterTableMouseUp);
-    // letterTable.addEventListener("mouseover", onLetterTableMouseOver);
-    // letterTable.addEventListener("mouseleave", onLetterTableMouseLeave);
+    canvas.addEventListener("mousedown", onCanvasMouseDown);
+    canvas.addEventListener("mouseup", onCanvasMouseUp);
+    canvas.addEventListener("mousemove", onCanvasMouseMouse);
+    canvas.addEventListener("mouseleave", onCanvasMouseLeave);
 
     function getSettings(): Settings {
         const minRows = parseInt(minRowsInput.value) || 0;
@@ -208,10 +230,14 @@ function main() {
 
         if (settings.minRows) {
             minRowsInput.value = settings.minRows.toString();
+        } else {
+            minRowsInput.value = "";
         }
 
         if (settings.minCols) {
             minColsInput.value = settings.minCols.toString();
+        } else {
+            minColsInput.value = "";
         }
 
         horizontalCheckbox.checked = settings.horizontal;
@@ -228,46 +254,67 @@ function main() {
         }
     }
 
-    // function onLetterTableMouseDown(ev: MouseEvent) {
-    //     drag = true;
-    // }
+    function onCanvasMouseDown(ev: MouseEvent) {
+        const xy = { x: ev.offsetX, y: ev.offsetY };
+        selectStartCoords = canvasToGridCoords(ctx!, xy);
+    }
 
-    // function onLetterTableMouseUp(ev: MouseEvent) {
-    //     onDragEnd();
-    // }
+    function onCanvasMouseUp(ev: MouseEvent) {
+        if (!selectStartCoords) {
+            return;
+        }
 
-    // function onLetterTableMouseLeave(ev: MouseEvent) {
-    //     onDragEnd();
-    // }
+        // check for word selection
+        const xy = { x: ev.offsetX, y: ev.offsetY };
+        const start = selectStartCoords;
+        const end = canvasToGridCoords(ctx!, xy);
+        console.log(start, end, placements);
+        const idx = placements.findIndex(x =>
+            (coordsEqual(x.start, start) && coordsEqual(x.end, end))
+            || (coordsEqual(x.start, end!) && coordsEqual(x.end, start)));
 
-    // function onLetterTableMouseOver(ev: MouseEvent) {
-    //     const td = ev.target as HTMLTableCellElement;
-    //     if (!td) {
-    //         return;
-    //     }
+        if (idx === -1) {
+            dragEnd();
+            return;
+        }
 
-    //     if (!drag) {
-    //         return;
-    //     }
+        const selection = { start, end };
+        const word = extractSelection(grid, selection)
+        placements.splice(idx, 1);
 
-    //     if (!td.matches("td")) {
-    //         return;
-    //     }
+        const wordDiv = findWordElem(resultsWordList, word);
+        wordDiv?.classList?.add("found");
+        selections.push(selection);
+        words.delete(word);
 
-    //     const col = dom.getElementIndex(td);
-    //     const row = dom.getElementIndex(td.closest("tr")!);
-    //     console.log(row, col);
+        // check for completion
+        if (words.size === 0) {
+            // remove all unselected letters
+            removeUnselectedLetters(grid, selections);
+            successDiv.hidden = false;
+        }
 
-    //     td.classList.add("selected");
-    // }
+        dragEnd();
+    }
 
-    // function onDragEnd() {
-    //     drag = false;
-    //     const cells = Array.from(letterTable.querySelectorAll("tbody td.selected"));
-    //     for (const cell of cells) {
-    //         cell.classList.remove("selected");
-    //     }
-    // }
+    function onCanvasMouseLeave() {
+        dragEnd();
+    }
+
+    function onCanvasMouseMouse(ev: MouseEvent) {
+        if (!selectStartCoords) {
+            return;
+        }
+
+        const xy = { x: ev.offsetX, y: ev.offsetY };
+        const coords = canvasToGridCoords(ctx!, xy);
+        paint(canvas, ctx!, grid, selections, { start: selectStartCoords!, end: coords });
+    }
+
+    function dragEnd() {
+        selectStartCoords = null;
+        paint(canvas, ctx!, grid, selections, null);
+    }
 }
 
 function addWord(wordList: HTMLDivElement, word: string) {
@@ -289,6 +336,19 @@ function addWord(wordList: HTMLDivElement, word: string) {
     }
 }
 
+function findWordElem(wordList: HTMLDivElement, word: string): HTMLDivElement | null {
+    word = word.trim().toUpperCase();
+
+    const elems = Array.from(wordList.querySelectorAll<HTMLDivElement>(".word"));
+    for (const elem of elems) {
+        if (elem.textContent === word) {
+            return elem;
+        }
+    }
+
+    return null;
+}
+
 function getWords(wordList: HTMLDivElement): Set<string> {
     const words = Array.from(wordList.querySelectorAll(".word"))
         .map(div => div?.textContent?.toUpperCase() ?? "")
@@ -297,7 +357,7 @@ function getWords(wordList: HTMLDivElement): Set<string> {
     return new Set(words);
 }
 
-function generateWordSearch(rng: rand.RNG, settings: Settings): LetterGrid | null {
+function generateWordSearch(rng: rand.RNG, settings: Settings): WordSearch | null {
     const { words: wordsArray, minRows, minCols, horizontal, vertical, diagonal, reverse } = settings;
     const words = new Set(wordsArray);
     const errorMessage = dom.byId("errorMessage") as HTMLDivElement;
@@ -313,9 +373,14 @@ function generateWordSearch(rng: rand.RNG, settings: Settings): LetterGrid | nul
     const maxRetries = 128;
     for (let i = 0; i < maxRetries; ++i) {
         const grid = new LetterGrid(minRows + i, minCols + i);
-        if (placeWords(rng, grid, words, horizontal, vertical, diagonal, reverse)) {
+        const placements = placeWords(rng, grid, words, horizontal, vertical, diagonal, reverse);
+        if (placements) {
             fillRandomCharacters(rng, grid, words);
-            return grid;
+            return {
+                words,
+                grid,
+                placements
+            };
         }
     }
 
@@ -323,10 +388,27 @@ function generateWordSearch(rng: rand.RNG, settings: Settings): LetterGrid | nul
     return null;
 }
 
-function placeWords(rng: rand.RNG, grid: LetterGrid, words: Set<string>, horizontal: boolean, vertical: boolean, diagonal: boolean, reverse: boolean) {
+function placeWords(
+    rng: rand.RNG,
+    grid: LetterGrid,
+    words: Set<string>,
+    horizontal: boolean,
+    vertical: boolean,
+    diagonal: boolean,
+    reverse: boolean): Selection[] | null {
     const dirs = getDirs(horizontal, vertical, diagonal, reverse);
-    const success = iter.all(words, word => tryPlaceWord(rng, grid, dirs, word));
-    return success;
+    const placements = new Array<Selection>();
+
+    for (const word of words) {
+        const placement = tryPlaceWord(rng, grid, dirs, word);
+        if (!placement) {
+            return null;
+        }
+
+        placements.push(placement);
+    }
+
+    return placements;
 }
 
 function getDirs(horizontal: boolean, vertical: boolean, diagonal: boolean, reverse: boolean): Coords[] {
@@ -361,17 +443,17 @@ function getDirs(horizontal: boolean, vertical: boolean, diagonal: boolean, reve
     return dirs;
 }
 
-function tryPlaceWord(rng: rand.RNG, grid: LetterGrid, dirs: Coords[], word: string) {
+function tryPlaceWord(rng: rand.RNG, grid: LetterGrid, dirs: Coords[], word: string): Selection | null {
     const placement = tryFindWordPlacement(rng, grid, dirs, word);
     if (!placement) {
-        return false;
+        return null;
     }
 
     placeWord(grid, word, placement);
-    return true;
+    return placement;
 }
 
-function tryFindWordPlacement(rng: rand.RNG, grid: LetterGrid, directions: Coords[], word: string): Placement | null {
+function tryFindWordPlacement(rng: rand.RNG, grid: LetterGrid, directions: Coords[], word: string): Selection | null {
     const maxDim = Math.max(grid.rows, grid.cols);
     if (word.length > maxDim) {
         return null
@@ -385,14 +467,19 @@ function tryFindWordPlacement(rng: rand.RNG, grid: LetterGrid, directions: Coord
         }
     }
 
-    const direction = rand.choose(rng, directions);
+    const dir = rand.choose(rng, directions);
     rand.shuffle(rng, gridCoords);
 
-    for (const position of gridCoords) {
-        if (isValidWordPlacement(grid, word, position, direction)) {
+    for (const start of gridCoords) {
+        if (isValidWordPlacement(grid, word, start, dir)) {
+            const end = {
+                i: start.i + dir.i * (word.length - 1),
+                j: start.j + dir.j * (word.length - 1),
+            };
+
             return {
-                position,
-                direction,
+                start,
+                end,
             };
         }
     }
@@ -400,26 +487,28 @@ function tryFindWordPlacement(rng: rand.RNG, grid: LetterGrid, directions: Coord
     return null;
 }
 
-function isValidWordPlacement(grid: LetterGrid, word: string, position: Coords, direction: Coords) {
-    const { i: i0, j: j0 } = position;
-    if (i0 < 0 || j0 < 0) {
+function isValidWordPlacement(grid: LetterGrid, word: string, start: Coords, dir: Coords): boolean {
+    if (start.i < 0 || start.j < 0) {
         return false
     }
 
-    const extentI = word.length * direction.i;
-    if (i0 + extentI > grid.rows || i0 + extentI < 0) {
+    if (start.i >= grid.rows || start.j >= grid.rows) {
         return false;
     }
 
-    const extentJ = word.length * direction.j;
-    if (j0 + extentJ > grid.cols || j0 + extentJ < 0) {
-        return false;
-    }
-
+    const { i: i0, j: j0 } = start;
     const letters = word.split("");
     const success = letters.every((ch, idx) => {
-        const i = i0 + direction.i * idx;
-        const j = j0 + direction.j * idx;
+        const i = i0 + dir.i * idx;
+        const j = j0 + dir.j * idx;
+
+        if (i < 0 || i >= grid.rows) {
+            return false;
+        }
+
+        if (j < 0 || j >= grid.cols) {
+            return false;
+        }
 
         if (grid.get(i, j) === ch) {
             return true;
@@ -434,8 +523,8 @@ function isValidWordPlacement(grid: LetterGrid, word: string, position: Coords, 
 
     // exception: full overlap (i.e. prefix overlapping longer word) should not be considered valid
     if (letters.every((ch, idx) => {
-        const i = i0 + direction.i * idx;
-        const j = j0 + direction.j * idx;
+        const i = i0 + dir.i * idx;
+        const j = j0 + dir.j * idx;
         return grid.get(i, j) === ch
     })) {
         return false
@@ -444,13 +533,18 @@ function isValidWordPlacement(grid: LetterGrid, word: string, position: Coords, 
     return success;
 }
 
-function placeWord(grid: LetterGrid, word: string, placement: Placement) {
-    const { position: { i: i0, j: j0 }, direction } = placement;
-    const letters = word.split("");
+function placeWord(grid: LetterGrid, word: string, placement: Selection) {
+    const { start, end } = placement;
+    const { i: i0, j: j0 } = start;
+    const dir = getDir(start, end);
+    if (!dir) {
+        throw new Error(`Invalid placement dir ${start} - ${end}`);
+    }
 
+    const letters = word.split("");
     letters.forEach((ch, idx) => {
-        const i = i0 + direction.i * idx;
-        const j = j0 + direction.j * idx;
+        const i = i0 + dir.i * idx;
+        const j = j0 + dir.j * idx;
         grid.set(i, j, ch);
     });
 }
@@ -459,8 +553,9 @@ function fillRandomCharacters(rng: rand.RNG, grid: LetterGrid, words: Set<string
     // generate character list from words
 
     // get a flat list of all letters in all words
-    const chars = new Array<string>();
-    words.forEach(w => w.split("").forEach(ch => chars.push(ch)));
+    const charsSet = new Set<string>(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"]);
+    words.forEach(w => w.split("").forEach(ch => charsSet.add(ch)));
+    const chars = [...charsSet];
 
     for (let i = 0; i < grid.rows; ++i) {
         for (let j = 0; j < grid.cols; ++j) {
@@ -474,10 +569,9 @@ function fillRandomCharacters(rng: rand.RNG, grid: LetterGrid, words: Set<string
     }
 }
 
-function paint(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, grid: LetterGrid) {
+function paint(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, grid: LetterGrid, selections: Selection[], selection: Selection | null = null) {
     const font = "24px monospace";
     ctx.font = font;
-    const padding = 4;
     const letterSize = ctx.measureText("M").width;
     const cellSize = letterSize + padding * 2;
     canvas.width = cellSize * grid.cols;
@@ -496,6 +590,150 @@ function paint(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, grid: L
             ctx.fillText(grid.get(i, j), x, y);
         }
     }
+
+    if (selection) {
+        const xy0 = gridToCanvasCoords(ctx, selection.start);
+        const xy1 = gridToCanvasCoords(ctx, selection.end);
+        const x0 = xy0.x + cellSize / 2;
+        const y0 = xy0.y + cellSize / 2;
+        const x1 = xy1.x + cellSize / 2;
+        const y1 = xy1.y + cellSize / 2;
+
+        // do grid coords represent a straight line?
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+    }
+
+    for (const selection of selections) {
+        const xy0 = gridToCanvasCoords(ctx, selection.start);
+        const xy1 = gridToCanvasCoords(ctx, selection.end);
+        const x0 = xy0.x + cellSize / 2;
+        const y0 = xy0.y + cellSize / 2;
+        const x1 = xy1.x + cellSize / 2;
+        const y1 = xy1.y + cellSize / 2;
+
+        // do grid coords represent a straight line?
+        ctx.strokeStyle = "rgba(0, 255, 0, 0.5)";
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(x0, y0);
+        ctx.lineTo(x1, y1);
+        ctx.stroke();
+    }
+}
+
+function canvasToGridCoords(ctx: CanvasRenderingContext2D, xy: Point): Coords {
+    const letterSize = ctx.measureText("M").width;
+    const cellSize = letterSize + padding * 2;
+    const { x, y } = xy;
+    const i = Math.floor((y - padding) / cellSize);
+    const j = Math.floor((x - padding) / cellSize);
+    return { i, j };
+}
+
+function gridToCanvasCoords(ctx: CanvasRenderingContext2D, ij: Coords): Point {
+    const letterSize = ctx.measureText("M").width;
+    const cellSize = letterSize + padding * 2;
+    const { i, j } = ij;
+    const x = j * cellSize;
+    const y = i * cellSize;
+    return { x, y };
+}
+
+function getContext2D(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+        throw new Error("No canvas support");
+    }
+
+    return ctx;
+}
+
+function coordsEqual(a: Coords, b: Coords): boolean {
+    return a.i == b.i && a.j == b.j;
+}
+
+function getDir(ij0: Coords, ij1: Coords): Coords | null {
+    const di = ij1.i - ij0.i;
+    const dj = ij1.j - ij0.j;
+
+    console.log(di, dj);
+    if (di === 0 && dj === 0) {
+        return null;
+    }
+
+    if (di !== 0 && dj !== 0 && Math.abs(di) !== Math.abs(dj)) {
+        return null;
+    }
+
+    return { i: Math.sign(di), j: Math.sign(dj) };
+}
+
+function removeUnselectedLetters(grid: LetterGrid, selections: Selection[]) {
+    for (let i = 0; i < grid.rows; ++i) {
+        for (let j = 0; j < grid.cols; ++j) {
+            const coords = { i, j };
+            if (selections.some(x => selectionContains(x, coords))) {
+                continue;
+            }
+
+            grid.set(i, j, " ");
+        }
+    }
+}
+
+function selectionContains(selection: Selection, ij: Coords): boolean {
+    const dir = getDir(selection.start, selection.end);
+    if (!dir) {
+        return false;
+    }
+
+    const { start, end } = selection;
+    let { i, j } = start;
+    while (i >= 0 && j >= 0) {
+        if (i == ij.i && j == ij.j) {
+            return true;
+        }
+
+        if (i === end.i && j === end.j) {
+            break;
+        }
+
+        i += dir.i;
+        j += dir.j;
+    }
+
+    return false;
+}
+
+function extractSelection(grid: LetterGrid, selection: Selection): string {
+    // check direction - if ij0 to ij1 is not horizontal, vertical, or diagonal, no match possible
+    const { start, end } = selection;
+    const dir = getDir(start, end);
+    if (!dir) {
+        throw new Error(`Invalid selection direction ${start} - ${end}`)
+    }
+
+    // extract selected word
+    let { i, j } = selection.start;
+    let s = "";
+
+    while (i >= 0 && i < grid.rows && j >= 0 && j < grid.cols) {
+        s += grid.get(i, j);
+
+        if (i === end.i && j === end.j) {
+            break;
+        }
+
+        i += dir.i;
+        j += dir.j;
+    }
+
+    return s;
 }
 
 main()

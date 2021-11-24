@@ -38,6 +38,11 @@ h1 {
     cursor: pointer;
 }
 
+.word.found {
+    text-decoration: line-through;
+    font-weight: lighter;
+}
+
 #gridCanvas {
     display: block;
     border: 2px solid lightblue;
@@ -49,12 +54,9 @@ h1 {
     padding: 4px;
 }
 
-#letterTable td {
+#success {
+    font-size: 1.5em;
+    color: green;
+    font-weight: bold;
     text-align: center;
-    padding: .125em;
-    margin: 0;
-}
-
-#letterTable td.selected {
-    background-color: cadetblue;
 }

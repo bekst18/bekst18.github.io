@@ -12,7 +12,7 @@ export function tryf<T>(f: () => T): T | Error {
             return x
         }
 
-        return Error(x.toString())
+        return Error(`${x}`)
     }
 }
 
