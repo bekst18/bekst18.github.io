@@ -193,10 +193,10 @@ function main() {
         target.remove();
     });
 
-    canvas.addEventListener("mousedown", onCanvasMouseDown);
-    canvas.addEventListener("mouseup", onCanvasMouseUp);
-    canvas.addEventListener("mousemove", onCanvasMouseMouse);
-    canvas.addEventListener("mouseleave", onCanvasMouseLeave);
+    canvas.addEventListener("pointerdown", onCanvasMouseDown);
+    canvas.addEventListener("pointerup", onCanvasMouseUp);
+    canvas.addEventListener("pointermove", onCanvasMouseMouse);
+    canvas.addEventListener("pointerleave", onCanvasMouseLeave);
 
     function getSettings(): Settings {
         const minRows = parseInt(minRowsInput.value) || 0;
