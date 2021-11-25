@@ -3,14 +3,11 @@ import * as dom from "../shared/dom.js";
 import * as rand from "../shared/rand.js";
 import * as array from "../shared/array.js";
 
-interface Settings {
-    minRows: number
-    minCols: number
-    horizontal: boolean
-    vertical: boolean
-    diagonal: boolean
-    reverse: boolean
-    words: string[],
+interface WordSearchOptions {
+    horizontal?: boolean,
+    vertical?: boolean,
+    diagonal?: boolean,
+    reverse?: boolean,
 }
 
 /**
@@ -28,18 +25,28 @@ interface Point {
     y: number
 }
 
-interface Selection {
+interface CoordsRange {
     start: Coords
     end: Coords
 }
 
 const padding = 4;
 
+interface LetterGridState {
+    rows: number,
+    cols: number,
+    letters: string[],
+}
+
 class LetterGrid {
     letters: string[]
 
-    constructor(readonly rows: number, readonly cols: number) {
-        this.letters = array.generate(rows * cols, _ => "");
+    constructor(readonly rows: number, readonly cols: number, letters?: string[]) {
+        if (letters && letters.length !== rows * cols) {
+            throw new Error("Invalid letters array length.");
+        }
+
+        this.letters = letters ?? array.generate(rows * cols, _ => "");
     }
 
     getf(idx: number): string {
@@ -71,12 +78,39 @@ class LetterGrid {
     set(row: number, col: number, ch: string) {
         this.setf(this.flat(row, col), ch);
     }
+
+    toJSON(): LetterGridState {
+        const data: LetterGridState = {
+            rows: this.rows,
+            cols: this.cols,
+            letters: this.letters,
+        };
+
+        return data;
+    }
 }
 
 interface WordSearch {
-    words: Set<string>
     grid: LetterGrid
-    placements: Selection[]
+    placements: CoordsRange[]
+}
+
+enum Activity {
+    Settings,
+    Results,
+}
+
+interface State {
+    horizontal: boolean
+    vertical: boolean
+    diagonal: boolean
+    reverse: boolean
+    words: string[],
+    remainingWords: string[],
+    grid: LetterGridState
+    placements: CoordsRange[]
+    found: CoordsRange[]
+    activity: Activity
 }
 
 function main() {
@@ -84,12 +118,8 @@ function main() {
     const settingsWordList = dom.byId("settingsWordList") as HTMLDivElement;
     const addWordButton = dom.byId("addWord") as HTMLButtonElement;
     const generateButton = dom.byId("generateButton") as HTMLButtonElement;
-    const saveSettingsButton = dom.byId("saveSettings") as HTMLButtonElement;
-    const loadSettingsButton = dom.byId("loadSettings") as HTMLButtonElement;
     const returnToSettingsButton = dom.byId("returnToSettings") as HTMLButtonElement;
     const resetButton = dom.byId("resetButton") as HTMLButtonElement;
-    const minRowsInput = dom.byId("minRows") as HTMLInputElement;
-    const minColsInput = dom.byId("minCols") as HTMLInputElement;
     const horizontalCheckbox = dom.byId("horizontal") as HTMLInputElement;
     const verticalCheckbox = dom.byId("vertical") as HTMLInputElement;
     const diagonalCheckbox = dom.byId("diagonal") as HTMLInputElement;
@@ -97,31 +127,27 @@ function main() {
     const settingsDiv = dom.byId("settings") as HTMLDivElement;
     const resultsDiv = dom.byId("results") as HTMLDivElement;
     const successDiv = dom.byId("success") as HTMLDivElement;
-    const settingsKey = "wordSearchSettings";
+    const stateKey = "wordSearchState";
     const seed = rand.xmur3(new Date().toString());
     const rng = new rand.SFC32RNG(seed(), seed(), seed(), seed());
     const canvas = dom.byId("gridCanvas") as HTMLCanvasElement;
     const ctx = getContext2D(canvas);
     const resultsWordList = dom.byId("resultsWordList") as HTMLDivElement;
-    const selections = new Array<Selection>();
+    let found = new Array<CoordsRange>();
     let words = new Set<string>();
+    let remainingWords = new Set<string>();
     let grid = new LetterGrid(0, 0);
-    let placements = new Array<Selection>();
+    let placements = new Array<CoordsRange>();
     let selectStartCoords: Coords | null = null;
 
-    loadSettings();
+    loadState();
 
     wordInput.addEventListener("keydown", (evt) => {
         if (evt.key !== "Enter") {
             return;
         }
 
-        if (!wordInput.value) {
-            return;
-        }
-
-        addWord(settingsWordList, wordInput.value);
-        wordInput.value = "";
+        addSettingsWord();
     });
 
     addWordButton.addEventListener("click", _ => {
@@ -129,54 +155,49 @@ function main() {
             return;
         }
 
-        addWord(settingsWordList, wordInput.value);
-        wordInput.value = "";
+        addSettingsWord()
         wordInput.focus();
     });
 
+    horizontalCheckbox.addEventListener("change", saveState);
+    verticalCheckbox.addEventListener("change", saveState);
+    diagonalCheckbox.addEventListener("change", saveState);
+    reverseCheckbox.addEventListener("change", saveState);
+
     generateButton.addEventListener("click", _ => {
-        const settings = getSettings();
-        let wordSearch = generateWordSearch(rng, settings);
+        const options = getWordSearchOptions();
+        let wordSearch = generateWordSearch(rng, words, options);
         if (!wordSearch) {
             return;
         }
 
+        remainingWords = new Set(words);
         successDiv.hidden = true;
-        words = wordSearch.words;
         grid = wordSearch.grid;
         placements = wordSearch.placements;
-        selections.splice(0, selections.length);
+        found.splice(0, found.length);
 
         settingsDiv.hidden = true;
         resultsDiv.hidden = false;
-        paint(canvas, ctx, grid, selections);
+        saveState();
 
-        dom.removeAllChildren(resultsWordList);
-        for (const word of settings.words) {
-            addWord(resultsWordList, word);
-        }
+        paint(canvas, ctx, grid, found);
+        refreshWordList(resultsWordList, words, remainingWords);
     });
-
-    saveSettingsButton.addEventListener("click", _ => {
-        const settings = getSettings();
-        localStorage.setItem(settingsKey, JSON.stringify(settings));
-    });
-
-    loadSettingsButton.addEventListener("click", loadSettings);
 
     resetButton.addEventListener("click", _ => {
-        minRowsInput.value = "";
-        minColsInput.value = "";
-
         var wordDivs = Array.from(settingsWordList.querySelectorAll("#settingsWordList .word"));
         for (const div of wordDivs) {
             div.remove();
         }
+
+
     });
 
     returnToSettingsButton.addEventListener("click", _ => {
         settingsDiv.hidden = false;
         resultsDiv.hidden = true;
+        saveState();
     });
 
     document.addEventListener("click", evt => {
@@ -197,59 +218,29 @@ function main() {
     canvas.addEventListener("pointermove", onCanvasPointerMove, false);
     canvas.addEventListener("pointerleave", onCanvasPointerLeave, false);
 
-    function getSettings(): Settings {
-        const minRows = parseInt(minRowsInput.value) || 0;
-        const minCols = parseInt(minColsInput.value) || 0;
-        const words = [...getWords(settingsWordList)];
+    function addSettingsWord() {
+        if (!wordInput.value) {
+            return;
+        }
+
+        const word = wordInput.value.trim().toUpperCase();
+        words.add(word);
+        refreshWordList(settingsWordList, words, words);
+        wordInput.value = "";
+        saveState();
+    }
+
+    function getWordSearchOptions(): WordSearchOptions {
         const horizontal = horizontalCheckbox.checked;
         const vertical = verticalCheckbox.checked;
         const diagonal = diagonalCheckbox.checked;
         const reverse = reverseCheckbox.checked;
 
         return {
-            minRows: minRows,
-            minCols: minCols,
-            words: words,
-            horizontal: horizontal,
-            vertical: vertical,
-            diagonal: diagonal,
-            reverse: reverse,
-        }
-    }
-
-    function loadSettings() {
-        const json = localStorage.getItem(settingsKey);
-        if (!json) {
-            console.log("No stored settings found");
-            return;
-        }
-
-        const settings = JSON.parse(json) as Settings;
-        dom.removeAllChildren(settingsWordList);
-
-        if (settings.minRows) {
-            minRowsInput.value = settings.minRows.toString();
-        } else {
-            minRowsInput.value = "";
-        }
-
-        if (settings.minCols) {
-            minColsInput.value = settings.minCols.toString();
-        } else {
-            minColsInput.value = "";
-        }
-
-        horizontalCheckbox.checked = settings.horizontal;
-        verticalCheckbox.checked = settings.vertical;
-        diagonalCheckbox.checked = settings.diagonal;
-        reverseCheckbox.checked = settings.reverse;
-
-        if (!settings.words) {
-            return;
-        }
-
-        for (const word of settings.words) {
-            addWord(settingsWordList, word);
+            horizontal,
+            vertical,
+            diagonal,
+            reverse,
         }
     }
 
@@ -282,16 +273,17 @@ function main() {
 
         const wordDiv = findWordElem(resultsWordList, word);
         wordDiv?.classList?.add("found");
-        selections.push(selection);
-        words.delete(word);
+        found.push(selection);
+        remainingWords.delete(word);
 
         // check for completion
-        if (words.size === 0) {
+        if (remainingWords.size === 0) {
             // remove all unselected letters
-            removeUnselectedLetters(grid, selections);
+            removeUnselectedLetters(grid, found);
             successDiv.hidden = false;
         }
 
+        saveState();
         dragEnd();
     }
 
@@ -306,31 +298,73 @@ function main() {
 
         const xy = { x: ev.offsetX, y: ev.offsetY };
         const coords = canvasToGridCoords(ctx!, xy);
-        paint(canvas, ctx!, grid, selections, { start: selectStartCoords!, end: coords });
+        paint(canvas, ctx!, grid, found, { start: selectStartCoords!, end: coords });
     }
 
     function dragEnd() {
         selectStartCoords = null;
-        paint(canvas, ctx!, grid, selections, null);
+        paint(canvas, ctx!, grid, found, null);
     }
-}
 
-function addWord(wordList: HTMLDivElement, word: string) {
-    word = word.trim().toUpperCase();
+    function saveState() {
+        const horizontal = horizontalCheckbox.checked;
+        const vertical = verticalCheckbox.checked;
+        const diagonal = diagonalCheckbox.checked;
+        const reverse = reverseCheckbox.checked;
+        const activity = settingsDiv.hidden ? Activity.Results : Activity.Settings;
 
-    const words = getWords(wordList);
-    words.add(word);
+        const state: State = {
+            horizontal,
+            vertical,
+            diagonal,
+            reverse,
+            words: [...words],
+            remainingWords: [...remainingWords],
+            grid: grid.toJSON(),
+            placements,
+            found,
+            activity,
+        };
 
-    const list = [...words];
-    list.sort();
+        localStorage.setItem(stateKey, JSON.stringify(state));
+    }
 
-    dom.removeAllChildren(wordList);
-    for (const word of list) {
-        const wordDiv = document.createElement("div");
-        wordDiv.classList.add("word");
-        const wordText = document.createTextNode(word);
-        wordDiv.appendChild(wordText)
-        wordList.appendChild(wordDiv);
+    function loadState() {
+        const json = localStorage.getItem(stateKey);
+        if (!json) {
+            console.log("No state found.");
+            return;
+        }
+
+        const state: State = JSON.parse(json);
+        console.log(state);
+
+        dom.removeAllChildren(settingsWordList);
+
+        horizontalCheckbox.checked = state.horizontal;
+        verticalCheckbox.checked = state.vertical;
+        diagonalCheckbox.checked = state.diagonal;
+        reverseCheckbox.checked = state.reverse;
+
+        words = new Set(state.words);
+        remainingWords = new Set(state.remainingWords);
+        refreshWordList(settingsWordList, words, words);
+        refreshWordList(resultsWordList, words, remainingWords);
+
+        successDiv.hidden = remainingWords.size !== 0;
+        grid = new LetterGrid(state.grid.rows, state.grid.cols, state.grid.letters);
+        placements = state.placements;
+        found = state.found;
+
+        if (state.activity === Activity.Settings) {
+            settingsDiv.hidden = false;
+            resultsDiv.hidden = true;
+        } else {
+            settingsDiv.hidden = true;
+            resultsDiv.hidden = false;
+        }
+
+        paint(canvas, ctx, grid, found);
     }
 }
 
@@ -347,19 +381,18 @@ function findWordElem(wordList: HTMLDivElement, word: string): HTMLDivElement | 
     return null;
 }
 
-function getWords(wordList: HTMLDivElement): Set<string> {
-    const words = Array.from(wordList.querySelectorAll(".word"))
-        .map(div => div?.textContent?.toUpperCase() ?? "")
-        .sort((x, y) => y.length - x.length);
-
-    return new Set(words);
-}
-
-function generateWordSearch(rng: rand.RNG, settings: Settings): WordSearch | null {
-    const { words: wordsArray, minRows, minCols, horizontal, vertical, diagonal, reverse } = settings;
-    const words = new Set(wordsArray);
+function generateWordSearch(rng: rand.RNG, words: Set<string>, options: WordSearchOptions): WordSearch | null {
+    const horizontal = options.horizontal ?? true;
+    const vertical = options.vertical ?? true;
+    const diagonal = options.diagonal ?? true;
+    const reverse = options.reverse ?? true;
     const errorMessage = dom.byId("errorMessage") as HTMLDivElement;
     errorMessage.textContent = "";
+
+    if (words.size == 0) {
+        errorMessage.textContent = "At least one word must be added to the word list.";
+        return null;
+    }
 
     // validation
     // must check at least one of the directional checkboxes
@@ -368,22 +401,21 @@ function generateWordSearch(rng: rand.RNG, settings: Settings): WordSearch | nul
         return null;
     }
 
-    const maxRetries = 128;
-    for (let i = 0; i < maxRetries; ++i) {
-        const grid = new LetterGrid(minRows + i, minCols + i);
+    // keep increasing grid size until words can be placed
+    let size = 3;
+    while (true) {
+        const grid = new LetterGrid(size, size);
         const placements = placeWords(rng, grid, words, horizontal, vertical, diagonal, reverse);
         if (placements) {
             fillRandomCharacters(rng, grid, words);
             return {
-                words,
                 grid,
                 placements
             };
         }
-    }
 
-    errorMessage.textContent = "Failed to generate word search - please modify word list and/or grid size and try again";
-    return null;
+        ++size;
+    }
 }
 
 function placeWords(
@@ -393,9 +425,9 @@ function placeWords(
     horizontal: boolean,
     vertical: boolean,
     diagonal: boolean,
-    reverse: boolean): Selection[] | null {
+    reverse: boolean): CoordsRange[] | null {
     const dirs = getDirs(horizontal, vertical, diagonal, reverse);
-    const placements = new Array<Selection>();
+    const placements = new Array<CoordsRange>();
 
     for (const word of words) {
         const placement = tryPlaceWord(rng, grid, dirs, word);
@@ -441,7 +473,7 @@ function getDirs(horizontal: boolean, vertical: boolean, diagonal: boolean, reve
     return dirs;
 }
 
-function tryPlaceWord(rng: rand.RNG, grid: LetterGrid, dirs: Coords[], word: string): Selection | null {
+function tryPlaceWord(rng: rand.RNG, grid: LetterGrid, dirs: Coords[], word: string): CoordsRange | null {
     const placement = tryFindWordPlacement(rng, grid, dirs, word);
     if (!placement) {
         return null;
@@ -451,7 +483,7 @@ function tryPlaceWord(rng: rand.RNG, grid: LetterGrid, dirs: Coords[], word: str
     return placement;
 }
 
-function tryFindWordPlacement(rng: rand.RNG, grid: LetterGrid, directions: Coords[], word: string): Selection | null {
+function tryFindWordPlacement(rng: rand.RNG, grid: LetterGrid, directions: Coords[], word: string): CoordsRange | null {
     const maxDim = Math.max(grid.rows, grid.cols);
     if (word.length > maxDim) {
         return null
@@ -531,7 +563,7 @@ function isValidWordPlacement(grid: LetterGrid, word: string, start: Coords, dir
     return success;
 }
 
-function placeWord(grid: LetterGrid, word: string, placement: Selection) {
+function placeWord(grid: LetterGrid, word: string, placement: CoordsRange) {
     const { start, end } = placement;
     const { i: i0, j: j0 } = start;
     const dir = getDir(start, end);
@@ -567,7 +599,7 @@ function fillRandomCharacters(rng: rand.RNG, grid: LetterGrid, words: Set<string
     }
 }
 
-function paint(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, grid: LetterGrid, selections: Selection[], selection: Selection | null = null) {
+function paint(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, grid: LetterGrid, found: CoordsRange[], selection: CoordsRange | null = null) {
     const font = "24px monospace";
     ctx.font = font;
     const letterSize = ctx.measureText("M").width;
@@ -606,7 +638,7 @@ function paint(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, grid: L
         ctx.stroke();
     }
 
-    for (const selection of selections) {
+    for (const selection of found) {
         const xy0 = gridToCanvasCoords(ctx, selection.start);
         const xy1 = gridToCanvasCoords(ctx, selection.end);
         const x0 = xy0.x + cellSize / 2;
@@ -670,7 +702,7 @@ function getDir(ij0: Coords, ij1: Coords): Coords | null {
     return { i: Math.sign(di), j: Math.sign(dj) };
 }
 
-function removeUnselectedLetters(grid: LetterGrid, selections: Selection[]) {
+function removeUnselectedLetters(grid: LetterGrid, selections: CoordsRange[]) {
     for (let i = 0; i < grid.rows; ++i) {
         for (let j = 0; j < grid.cols; ++j) {
             const coords = { i, j };
@@ -683,7 +715,7 @@ function removeUnselectedLetters(grid: LetterGrid, selections: Selection[]) {
     }
 }
 
-function selectionContains(selection: Selection, ij: Coords): boolean {
+function selectionContains(selection: CoordsRange, ij: Coords): boolean {
     const dir = getDir(selection.start, selection.end);
     if (!dir) {
         return false;
@@ -707,7 +739,7 @@ function selectionContains(selection: Selection, ij: Coords): boolean {
     return false;
 }
 
-function extractSelection(grid: LetterGrid, selection: Selection): string {
+function extractSelection(grid: LetterGrid, selection: CoordsRange): string {
     // check direction - if ij0 to ij1 is not horizontal, vertical, or diagonal, no match possible
     const { start, end } = selection;
     const dir = getDir(start, end);
@@ -731,6 +763,25 @@ function extractSelection(grid: LetterGrid, selection: Selection): string {
     }
 
     return s;
+}
+
+function refreshWordList(div: HTMLDivElement, words: Set<string>, remainingWords: Set<string>) {
+    const list = [...words];
+    list.sort();
+
+    dom.removeAllChildren(div);
+    for (const word of list) {
+        const wordDiv = document.createElement("div");
+        wordDiv.classList.add("word");
+
+        if (!remainingWords.has(word)) {
+            wordDiv.classList.add("found");
+        }
+
+        const wordText = document.createTextNode(word);
+        wordDiv.appendChild(wordText)
+        div.appendChild(wordDiv);
+    }
 }
 
 main()
