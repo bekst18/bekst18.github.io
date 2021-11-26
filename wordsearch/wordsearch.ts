@@ -186,12 +186,9 @@ function main() {
     });
 
     resetButton.addEventListener("click", _ => {
-        var wordDivs = Array.from(settingsWordList.querySelectorAll("#settingsWordList .word"));
-        for (const div of wordDivs) {
-            div.remove();
-        }
-
-
+        words.clear();
+        refreshWordList(settingsWordList, words, words);
+        saveState();
     });
 
     returnToSettingsButton.addEventListener("click", _ => {
@@ -210,7 +207,10 @@ function main() {
             return;
         }
 
-        target.remove();
+        const word = target.textContent ?? "";
+        words.delete(word);
+        refreshWordList(settingsWordList, words, words);
+        saveState();
     });
 
     canvas.addEventListener("pointerdown", onCanvasPointerDown, false);
