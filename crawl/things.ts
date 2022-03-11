@@ -380,6 +380,33 @@ export const ghost = db.insert(new rl.Monster({
     gold: 2,
 }))
 
+export const zombie = db.insert(new rl.Monster({
+    id: "zombie",
+    name: "Zombie",
+    maxHealth: 5,
+    image: "./assets/zombie.png",
+    level: 2,
+    experience: 1,
+    agility: 1,
+    defense: 1,
+    attacks: [
+        new rl.Attack({
+            attack: 1,
+            damage: new rl.Dice(1, 2),
+            action: 1,
+            verb: "gropes"
+        }),
+        new rl.Attack({
+            attack: 1,
+            damage: new rl.Dice(2, 3),
+            action: 1,
+            range: 1,
+            verb: "bites"
+        })
+    ],
+    gold: 1,
+}))
+
 export const fists = db.insert(new rl.MeleeWeapon({
     id: "fists",
     name: "Fists",
