@@ -360,7 +360,7 @@ export const ghost = db.insert(new rl.Monster({
     image: "./assets/ghost.png",
     level: 2,
     experience: 1,
-    agility: 4,
+    agility: 3,
     defense: 1,
     attacks: [
         new rl.Attack({
