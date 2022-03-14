@@ -116,7 +116,6 @@ export const sconce = db.insert(new rl.Fixture({
     lightRadius: 3,
 }))
 
-
 export const brazier = db.insert(new rl.Fixture({
     id: "brazier",
     name: "Lit Brazier",
@@ -402,6 +401,34 @@ export const zombie = db.insert(new rl.Monster({
             action: 1,
             range: 1,
             verb: "bites"
+        })
+    ],
+    gold: 1,
+}))
+
+export const witch = db.insert(new rl.Monster({
+    id: "witch",
+    name: "Witch",
+    maxHealth: 5,
+    image: "./assets/witch.png",
+    level: 5,
+    experience: 3,
+    agility: 10,
+    defense: 10,
+    attacks: [
+        new rl.Attack({
+            attack: 5,
+            damage: new rl.Dice(2, 6),
+            action: 1,
+            range: 3,
+            verb: "throws poison potion at"
+        }),
+        new rl.Attack({
+            attack: 1,
+            damage: new rl.Dice(5, 8),
+            action: 1,
+            range: 3,
+            verb: "tosses fire potion onto"
         })
     ],
     gold: 1,
