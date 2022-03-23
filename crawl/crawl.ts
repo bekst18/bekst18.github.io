@@ -1892,10 +1892,10 @@ class App {
             }
                 break
 
-            case "L": {
-                this.levelDialog.show()
-            }
-                break
+            // case "L": {
+            //     this.levelDialog.show()
+            // }
+            //     break
 
             case "Z": {
                 const wasHidden = this.statsDialog.hidden
@@ -1908,6 +1908,7 @@ class App {
 
             case "L":
                 this.targetCommand = TargetCommand.Look
+                this.cursorPosition = undefined
                 break
 
             case "ENTER":
@@ -1921,10 +1922,6 @@ class App {
             case "ESCAPE":
                 this.targetCommand = TargetCommand.None
                 this.cursorPosition = undefined
-                break
-
-            case "L":
-                this.targetCommand = TargetCommand.Look
                 break
 
             case "=":
