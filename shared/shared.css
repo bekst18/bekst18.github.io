@@ -131,6 +131,10 @@ h1 {
     text-align: center;
 }
 
+.text-center {
+    text-align: center;
+}
+
 @media print {
     .no-print {
         display: none;

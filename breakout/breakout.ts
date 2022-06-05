@@ -34,7 +34,7 @@ interface LevelData {
 const levels = new Array<LevelData>(
     // level 1
     {
-        ballSpeed: .2,
+        ballSpeed: .15,
         ballRadius: 1.25,
         paddleWidth: 6,
         brickRows: 3,
@@ -44,7 +44,7 @@ const levels = new Array<LevelData>(
     },
     // level 2
     {
-        ballSpeed: .3,
+        ballSpeed: .15,
         ballRadius: 1,
         paddleWidth: 6,
         brickRows: 3,
@@ -220,6 +220,7 @@ enum GameState {
 // step 2 - draw a clip space triangle
 // step 3 - draw a world space triangle
 class App {
+    private readonly rng = createRNG();
     private readonly canvas = dom.byId("canvas") as HTMLCanvasElement
     private readonly levelSpan = dom.byId("level") as HTMLDivElement
     private readonly ballsRemainingSpan = dom.byId("ballsRemaining") as HTMLDivElement
@@ -401,7 +402,7 @@ class App {
 
     private launchBall() {
         // choose random upward launch direction
-        const rot = geo.Mat3.rotationZ(rand.float(-Math.PI / 4, Math.PI / 4))
+        const rot = geo.Mat3.rotationZ(rand.float(this.rng, -Math.PI / 4, Math.PI / 4))
         const v = rot.transform(new geo.Vec3(0, 1, 0)).normalize()
         this.ball.velocity = v.mulX(this.levelData.ballSpeed)
         this.state = GameState.Play
@@ -603,7 +604,7 @@ class App {
                         position: position,
                         batch: new gfx.Batch({
                             worldMatrix: geo.Mat4.translation(position),
-                            diffuseColor: rand.choose(brickColors),
+                            diffuseColor: rand.choose(this.rng, brickColors),
                             roughness: .8,
                             vao: this.renderer.createMesh(ixm),
                             numIndices: ixm.indices.length,
@@ -657,7 +658,7 @@ class App {
     }
 
     private playImpactSound(): void {
-        const sound = rand.choose(this.impactSounds)
+        const sound = rand.choose(this.rng, this.impactSounds)
         const src = this.ac.createBufferSource()
         src.buffer = sound
         src.connect(this.ac.destination)
@@ -754,6 +755,12 @@ class App {
 
         return worldRay
     }
+}
+
+function createRNG(): rand.RNG  {
+    const seed = rand.xmur3(new Date().toString())
+    const rng = new rand.SFC32RNG(seed(), seed(), seed(), seed())
+    return rng
 }
 
 const app = new App()

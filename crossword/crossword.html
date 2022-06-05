@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width">
+    <title>Crossword Puzzle Maker</title>
+    <link rel="stylesheet" type="text/css" href="crossword.css">
+</head>
+
+<body>
+    <div id="createUi" class="m-auto">
+        <h1>Crossword Puzzle Maker</h1>
+        <p class="text-info">Enter hints and answers below and click the <strong>Create Crossword Puzzle</strong> button to generate the crossword
+            puzzle.</p>
+        <ol id="hintAnswers"></ol>
+        <form id="hintAnswerForm" class="my-3">
+            <div class="hint-answer flex-x-no-wrap">
+                <label class="mr-2">
+                    Hint
+                    <input id="hint" name="hint" type="text"></input>
+                </label>
+                <label class="mr-2">
+                    Answer
+                    <input id="answer" name="answer" type="text"></input>
+                </label>                
+            </div>
+            <button id="addHintAnswer" type="submit" class="button-primary my-2">Add Hint/Answer</button>
+        </form>
+        <button id="createButton" type="button" class="button-primary my-2">Create Crossword Puzzle!</button>
+        <button id="clearButton" type="button">Clear</button>
+        <template id="hintAnswerTemplate">
+            <li class="hint-answer-li">
+                <span class="hint"></span>/<span class="answer"></span>
+                &nbsp;
+                <button type="button" class="delete-button" name="delete" value="delete">DESTROY</button>
+            </li>
+        </template>
+        <br/>
+        <a href="/" class="text-center">Return to Home Page</a>
+    </div>
+    <div id="printUi" class="m-auto" hidden="true">
+        <h1 id="printTitle"></h1>
+        <div id="printContent"></div>
+        <button id="returnToTemplate" type="button" class="no-print">Return To Template</button>
+    </div>
+    <script type="module" src="crossword.js"></script>
+</body>
+
+</html>

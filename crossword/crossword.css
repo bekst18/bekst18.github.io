@@ -1,0 +1,70 @@
+@import "../shared/shared.css";
+html, body {
+    height: 100%;
+}
+
+#createUi {
+    max-width: 512px;
+    padding: 1em;
+    display: flex;
+    flex-flow: column nowrap;
+    height: 100%;
+}
+
+#createForm {
+    flex: 1 1;
+    display: flex;
+    flex-flow: column nowrap;
+    height: 100%;
+}
+
+#template {
+    flex: 1 1;
+}
+
+#printUi {
+    max-width: 7.5in;
+}
+
+#printUi h1 {
+    margin-top: .25in;
+}
+
+#printContent {
+    font-size: large;
+    line-height: 2em;
+    margin-top: .25in;
+    margin-bottom: .25in;
+}
+
+.placeholder-text {
+    text-transform: uppercase;
+    white-space: pre;
+    color: gray;
+    display: inline-block;
+    font-size: small;
+    position: relative;
+    top: 1em;
+    margin-bottom: .25em;
+    text-decoration: overline;
+}
+
+#placeholderHelper {
+    position: absolute;
+    z-index: 1;
+}
+
+.answer {
+    font-weight: bold;
+}
+
+.hint-answer-li {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: center;
+}
+
+.hint-answer-li .delete-button {
+    width: auto;
+    color: red;
+}
