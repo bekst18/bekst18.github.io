@@ -10,9 +10,10 @@
 <body>
     <div id="createUi" class="m-auto">
         <h1>Crossword Puzzle Maker</h1>
-        <p class="text-info">Enter hints and answers below and click the <strong>Create Crossword Puzzle</strong> button to generate the crossword
+        <p class="text-info">Enter hints and answers below and click the <strong>Create Crossword Puzzle</strong> button
+            to generate the crossword
             puzzle.</p>
-        <ol id="hintAnswers"></ol>
+        <ul id="hintAnswers"></ul>
         <form id="hintAnswerForm" class="my-3">
             <div class="hint-answer flex-x-no-wrap">
                 <label class="mr-2">
@@ -22,7 +23,7 @@
                 <label class="mr-2">
                     Answer
                     <input id="answer" name="answer" type="text"></input>
-                </label>                
+                </label>
             </div>
             <button id="addHintAnswer" type="submit" class="button-primary my-2">Add Hint/Answer</button>
         </form>
@@ -30,18 +31,29 @@
         <button id="clearButton" type="button">Clear</button>
         <template id="hintAnswerTemplate">
             <li class="hint-answer-li">
-                <span class="hint"></span>/<span class="answer"></span>
-                &nbsp;
-                <button type="button" class="delete-button" name="delete" value="delete">DESTROY</button>
+                <div><span class="hint"></span>/<span class="answer"></span></div>
+                <button type="button" class="delete-button" name="delete" value="delete">Remove</button>
             </li>
         </template>
-        <br/>
+        <br />
         <a href="/" class="text-center">Return to Home Page</a>
     </div>
-    <div id="printUi" class="m-auto" hidden="true">
-        <h1 id="printTitle"></h1>
-        <div id="printContent"></div>
-        <button id="returnToTemplate" type="button" class="no-print">Return To Template</button>
+    <div id="playUi" hidden="true">
+        <canvas id="puzzleCanvas"></canvas>
+        <div id="puzzleHints">
+            <div>
+                <h3 class="text-center">Across</h3>
+                <ul id="puzzleHintsAcross"></ul>
+            </div>
+            <div>
+                <h3 class="text-center">Down</h3>
+                <ul id="puzzleHintsDown"></ul>
+            </div>
+        </div>
+        <button id="returnToCreate" type="button" class="no-print">Return To Puzzle Creation</button>
+        <template id="puzzleHintTemplate">
+            <li class="puzzle-hint-li"></li>
+        </template>
     </div>
     <script type="module" src="crossword.js"></script>
 </body>
