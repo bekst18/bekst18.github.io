@@ -21,8 +21,8 @@
                     <input id="hint" name="hint" type="text"></input>
                 </label>
                 <label class="mr-2">
-                    Answer
-                    <input id="answer" name="answer" type="text"></input>
+                    Answer (letters only!)
+                    <input id="answer" name="answer" type="text" pattern="[A-Za-z]+"></input>
                 </label>
             </div>
             <button id="addHintAnswer" type="submit" class="button-primary my-2">Add Hint/Answer</button>
@@ -39,7 +39,7 @@
         <a href="/" class="text-center">Return to Home Page</a>
     </div>
     <div id="playUi" hidden="true">
-        <canvas id="puzzleCanvas"></canvas>
+        <canvas id="puzzleCanvas" tabindex="1"></canvas>
         <div id="puzzleHints">
             <div>
                 <h3 class="text-center">Across</h3>
