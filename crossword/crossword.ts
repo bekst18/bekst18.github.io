@@ -340,16 +340,36 @@ function main() {
             return;
         }
 
+        const solvedAtCell = entriesAtCell.some(x => x.solved);
         if (!evt.key) {
             return;
         }
 
-        // handle arrow keys
-        const v = getArrowKeyVector(evt.key);
+        // handle control/arrow keys
+        if (evt.key === "Delete" && !solvedAtCell) {
+            puzzle.grid.set(puzzle.cursorCoords, "");
+            evt.preventDefault();
+            drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
+            return;
+        }
+
+        const v = getControlKeyVector(puzzle.cursorDir, evt.key, evt.shiftKey);
         if (v.x !== 0 || v.y !== 0) {
             const coords = puzzle.cursorCoords.addPoint(v);
-            if (anyEntriesAtCell(puzzle.entries, coords)) {
+            const entriesAtNewCell = findEntriesAtCell(puzzle.entries, coords);
+            const solvedAtNewCell = entriesAtCell.some(x => x.solved);
+            evt.preventDefault();
+
+            if (evt.key === " " && !solvedAtCell) {
+                puzzle.grid.set(puzzle.cursorCoords, "");
+            }
+
+            if (entriesAtNewCell.length > 0) {
                 puzzle.cursorCoords = coords;
+                if (evt.key === "Backspace" && !solvedAtNewCell) {
+                    puzzle.grid.set(puzzle.cursorCoords, "");
+                }
+
                 drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
                 return;
             }
@@ -389,7 +409,7 @@ function main() {
 
         // advance cursor
         if (anySolved) {
-            const entry = puzzle.entries.find(x => !x.solved);
+            const entry = nextUnsolvedEntry(puzzle.entries, entriesAtCell[0]);
             if (entry) {
                 puzzle.cursorCoords = entry.pos;
                 puzzle.cursorDir = entry.dir;
@@ -821,7 +841,7 @@ function entrySolved(entry: Entry, grid: LetterMap): boolean {
     return true;
 }
 
-function getArrowKeyVector(key: string): geo.Point {
+function getControlKeyVector(cursorDir: Direction, key: string, shift: boolean): geo.Point {
     if (key === "ArrowLeft") {
         return new geo.Point(-1, 0);
     } else if (key === "ArrowDown") {
@@ -830,8 +850,32 @@ function getArrowKeyVector(key: string): geo.Point {
         return new geo.Point(1, 0);
     } else if (key === "ArrowUp") {
         return new geo.Point(0, -1);
+    } else if (key === "Backspace") {
+        return new geo.Point(-1, 0);
+    } else if (key === "Tab" && !shift) {
+        return getDirectionVector(cursorDir);
+    } else if (key === "Tab" && shift) {
+        return getDirectionVector(cursorDir).neg();
+    } else if (key === " ") {
+        return getDirectionVector(cursorDir);
     }
+
     return new geo.Point(0, 0);
+}
+
+function nextUnsolvedEntry(entries: Entry[], entry: Entry): Entry | undefined {
+    const offset = entries.indexOf(entry);
+    if (offset < 0) {
+        return;
+    }
+
+    for (let i = 1; i < entries.length; ++i) {
+        const idx = (offset + i) % entries.length;
+        const entry = entries[idx];
+        if (!entry.solved) {
+            return entry;
+        }
+    }
 }
 
 main()
