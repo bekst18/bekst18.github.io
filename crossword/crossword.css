@@ -105,3 +105,11 @@ body {
     cursor: default;
     color: green;
 }
+
+#playInput {
+    position: fixed;
+    left: 0px;
+    top: 0px;
+    width: 0px;
+    opacity: 0;
+}

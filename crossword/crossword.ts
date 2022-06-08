@@ -162,6 +162,7 @@ function main() {
     const createButton = dom.byId("createButton") as HTMLButtonElement;
     const clearButton = dom.byId("clearButton") as HTMLButtonElement;
     const returnToCreate = dom.byId("returnToCreate") as HTMLLinkElement;
+    const playInput = dom.byId("playInput") as HTMLInputElement;
     const seed = rand.xmur3(new Date().toString());
     const rng = new rand.SFC32RNG(seed(), seed(), seed(), seed());
     hintAnswerForm.addEventListener("submit", addHintAnswer);
@@ -171,7 +172,8 @@ function main() {
     puzzleCanvas.addEventListener("pointermove", onPuzzlePointerMove);
     puzzleCanvas.addEventListener("pointerdown", onPuzzlePointerDown);
     puzzleCanvas.addEventListener("pointerout", onPuzzlePointerOut);
-    puzzleCanvas.addEventListener("keydown", onPuzzleKeydown);
+    playInput.addEventListener("keydown", onPlayInputKeydown);
+    playInput.addEventListener("input", onPlayInputInput);
 
     dom.delegate(hintAnswerList, "click", ".delete-button", deleteHintAnswer);
     dom.delegate(puzzleHintAcrossList, "click", ".puzzle-hint-li", onPuzzleHintClick);
@@ -342,7 +344,7 @@ function main() {
         puzzleCanvas.height = puzzleCanvas.clientHeight;
         updatePuzzleHintList();
         window.scrollTo({ left: 0, top: 0 });
-        puzzleCanvas.focus();
+        playInput.focus({preventScroll: true});
 
         if (puzzle.entries.length > 0 && !puzzle.cursorCoords) {
             puzzle.cursorCoords = puzzle.entries[0].pos;
@@ -356,6 +358,16 @@ function main() {
     function create() {
         playUi.hidden = true;
         createUi.hidden = false;
+
+        puzzle = <Puzzle>{
+            entries: new Array<Entry>(),
+            hoverCoords: null,
+            cursorCoords: null,
+            cursorDir: Direction.Across,
+            grid: new LetterMap(0, 0),
+            print: false,
+        };
+
         save();
     }
 
@@ -390,6 +402,7 @@ function main() {
     }
 
     function onPuzzlePointerDown(evt: PointerEvent) {
+        evt.preventDefault();
         const xy = canvasCoordsToCellCoords(new geo.Point(evt.offsetX, evt.offsetY));
         const pdir = perp(puzzle.cursorDir);
         const entriesAtCell = findEntriesAtCell(puzzle.entries, xy);
@@ -410,6 +423,7 @@ function main() {
         }
 
         puzzle.cursorCoords = xy;
+        playInput.focus({preventScroll: true});
         save();
         drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
     }
@@ -419,101 +433,54 @@ function main() {
         drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
     }
 
-    function onPuzzleKeydown(evt: KeyboardEvent) {
+    function onPlayInputKeydown(evt: KeyboardEvent) {
         if (!puzzle.cursorCoords) {
             return;
         }
 
-        const entriesAtCell = findEntriesAtCell(puzzle.entries, puzzle.cursorCoords);
-        if (entriesAtCell.length === 0) {
-            return;
-        }
-
-        const solvedAtCell = entriesAtCell.some(x => x.solved);
         if (!evt.key) {
             return;
         }
 
-        // handle control/arrow keys
+        const keys = new Set(["Tab", "Delete", "RightArrow", "UpArrow", "LeftArrow", "DownArrow", "Backspace"]);
+        if (!keys.has(evt.key)) {
+            return;
+        }
+
+        // DELETE - delete current char
+        const entriesAtCell = findEntriesAtCell(puzzle.entries, puzzle.cursorCoords);
+        const solvedAtCell = entriesAtCell.some(x => x.solved);
+
         if (evt.key === "Delete" && !solvedAtCell) {
             puzzle.grid.set(puzzle.cursorCoords, "");
-            evt.preventDefault();
-            save();
-            drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
-            return;
         }
 
-        const v = getControlKeyVector(puzzle.cursorDir, evt.key, evt.shiftKey);
+        if (evt.key === "Tab" && !evt.shiftKey) {
+            advanceCursor();
+        }
+
+        if (evt.key === "Tab" && evt.shiftKey) {
+            backupCursor();
+        }
+
+        const v = getArrowKeyVector(evt.key);
         if (v.x !== 0 || v.y !== 0) {
             const coords = puzzle.cursorCoords.addPoint(v);
-            const entriesAtNewCell = findEntriesAtCell(puzzle.entries, coords);
-            const solvedAtNewCell = entriesAtCell.some(x => x.solved);
-            evt.preventDefault();
+            if (anyEntriesAtCell(puzzle.entries, coords)) {
+                puzzle.cursorCoords = coords;
+                adjustCursor();
+            }
+        }
 
-            if (evt.key === " " && !solvedAtCell) {
+        if (evt.key === "Backspace") {
+            backupCursor();
+            if (!findEntriesAtCell(puzzle.entries, puzzle.cursorCoords).some(x => x.solved)) {
                 puzzle.grid.set(puzzle.cursorCoords, "");
             }
-
-            if (entriesAtNewCell.length > 0) {
-                puzzle.cursorCoords = coords;
-                if (evt.key === "Backspace" && !solvedAtNewCell) {
-                    puzzle.grid.set(puzzle.cursorCoords, "");
-                }
-
-                save();
-                drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
-                return;
-            }
         }
 
-        if (evt.key.length > 1) {
-            return;
-        }
-
-        if (evt.key.length !== 1 || !evt.key.match(/[a-z]/i)) {
-            return;
-        }
-
-        const letter = evt.key.toUpperCase();
-
-        if (entriesAtCell.some(x => x.solved) && letter !== puzzle.grid.get(puzzle.cursorCoords)) {
-            return;
-        }
-
-
-        puzzle.grid.set(puzzle.cursorCoords, letter);
-
-        // check for complete word
-        let anySolved = false;
-        for (const entry of entriesAtCell) {
-            const solved = entrySolved(entry, puzzle.grid);
-            if (!entry.solved && solved) {
-                entry.solved = true;
-                anySolved = true;
-            }
-        }
-
-        // check for done
-        if (puzzle.entries.every(e => e.solved)) {
-            onPuzzleSolved();
-        }
-
-        // advance cursor
-        if (anySolved) {
-            const entry = nextUnsolvedEntry(puzzle.entries, entriesAtCell[0]);
-            if (entry) {
-                puzzle.cursorCoords = entry.pos;
-                puzzle.cursorDir = entry.dir;
-            }
-        } else {
-            const advancedCursor = puzzle.cursorCoords.addPoint(getDirectionVector(puzzle.cursorDir));
-            if (findEntriesAtCell(puzzle.entries, advancedCursor).length > 0) {
-                puzzle.cursorCoords = puzzle.cursorCoords.addPoint(getDirectionVector(puzzle.cursorDir));
-            }
-        }
-
+        evt.preventDefault();
         drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
-        updatePuzzleHintList();
         save();
     }
 
@@ -531,7 +498,7 @@ function main() {
         puzzle.cursorDir = entry.dir;
         drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
         save();
-        puzzleCanvas.focus();
+        playInput.focus({preventScroll: true});
     }
 
     function onPuzzleSolved() {
@@ -546,6 +513,129 @@ function main() {
     function onAfterPrint() {
         puzzle.print = false;
         drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
+    }
+
+    function onPlayInputInput(e: Event) {
+        const evt = e as InputEvent;
+        playInput.value = "";
+
+        if (!evt.data) {
+            return;
+        }
+
+        if (!puzzle.cursorCoords) {
+            return;
+        }
+
+        const entriesAtCell = findEntriesAtCell(puzzle.entries, puzzle.cursorCoords);
+        if (entriesAtCell.length === 0) {
+            return;
+        }
+
+        const letter = evt.data.toUpperCase();
+        if (letter.length > 1 || !(letter.match(/[A-Z]/))) {
+            return;
+        }
+
+        if (entriesAtCell.some(x => x.solved) && letter !== puzzle.grid.get(puzzle.cursorCoords)) {
+            return;
+        }
+
+        puzzle.grid.set(puzzle.cursorCoords, letter);
+
+        // check for complete word
+        for (const entry of entriesAtCell) {
+            entry.solved = entrySolved(entry, puzzle.grid);
+        }
+
+        // check for done
+        if (puzzle.entries.every(e => e.solved)) {
+            onPuzzleSolved();
+        }
+
+        advanceCursor();
+        drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
+        updatePuzzleHintList();
+        save();
+    }
+
+    function advanceCursor() {
+        if (!puzzle.cursorCoords) {
+            return;
+        }
+
+        const advancedCursor = puzzle.cursorCoords.addPoint(getDirectionVector(puzzle.cursorDir));
+        if (anyEntriesAtCell(puzzle.entries, advancedCursor)) {
+            puzzle.cursorCoords = advancedCursor;
+            adjustCursor();
+            return;
+        }
+
+        const cursorEntry = findCursorEntry();
+        if (!cursorEntry) {
+            puzzle.cursorCoords = null;
+            return;
+        }
+
+        const entry = nextEntry(puzzle.entries, cursorEntry);
+        if (!entry) {
+            adjustCursor();
+            return;
+        }
+
+        puzzle.cursorCoords = entry.pos;
+        puzzle.cursorDir = entry.dir;
+    }
+
+    function backupCursor() {
+        if (!puzzle.cursorCoords) {
+            return;
+        }
+
+        const backedCursor = puzzle.cursorCoords.addPoint(getDirectionVector(puzzle.cursorDir).neg());
+        if (anyEntriesAtCell(puzzle.entries, backedCursor)) {
+            puzzle.cursorCoords = backedCursor;
+            adjustCursor();
+            return;
+        }
+
+        const cursorEntry = findCursorEntry();
+        if (!cursorEntry) {
+            puzzle.cursorCoords = null;
+            return;
+        }
+
+        const entry = prevEntry(puzzle.entries, cursorEntry);
+        if (!entry) {
+            adjustCursor();
+            return;
+        }
+
+        puzzle.cursorCoords = entry.pos.addPoint(getDirectionVector(entry.dir).mulScalar(entry.answer.length - 1));
+        puzzle.cursorDir = entry.dir;
+    }
+
+    function adjustCursor() {
+        if (!puzzle.cursorCoords) {
+            return;
+        }
+
+        const entries = findEntriesAtCell(puzzle.entries, puzzle.cursorCoords);
+        if (entries.length === 0) {
+            puzzle.cursorCoords = null;
+        }
+
+        if (!entries.some(e => e.dir === puzzle.cursorDir)) {
+            puzzle.cursorDir = perp(puzzle.cursorDir);
+        }
+    }
+
+    function findCursorEntry(): Entry | undefined {
+        if (!puzzle.cursorCoords) {
+            return;
+        }
+
+        return findEntriesAtCell(puzzle.entries, puzzle.cursorCoords).find(x => x.dir === puzzle.cursorDir);
     }
 }
 
@@ -640,9 +730,7 @@ function calcScore(entries: Entry[]): number {
 
 function placeInitialEntry(rng: rand.RNG, ha: HintAnswer): Entry {
     const { hint, answer } = ha;
-
     const dir = rndDir(rng);
-    // const dir = Direction.Across;
     const pos = new geo.Point(0, 0);
 
     return {
@@ -944,7 +1032,7 @@ function entrySolved(entry: Entry, grid: LetterMap): boolean {
     return true;
 }
 
-function getControlKeyVector(cursorDir: Direction, key: string, shift: boolean): geo.Point {
+function getArrowKeyVector(key: string): geo.Point {
     if (key === "ArrowLeft") {
         return new geo.Point(-1, 0);
     } else if (key === "ArrowDown") {
@@ -953,32 +1041,33 @@ function getControlKeyVector(cursorDir: Direction, key: string, shift: boolean):
         return new geo.Point(1, 0);
     } else if (key === "ArrowUp") {
         return new geo.Point(0, -1);
-    } else if (key === "Backspace") {
-        return new geo.Point(-1, 0);
-    } else if (key === "Tab" && !shift) {
-        return getDirectionVector(cursorDir);
-    } else if (key === "Tab" && shift) {
-        return getDirectionVector(cursorDir).neg();
-    } else if (key === " ") {
-        return getDirectionVector(cursorDir);
     }
 
     return new geo.Point(0, 0);
 }
 
-function nextUnsolvedEntry(entries: Entry[], entry: Entry): Entry | undefined {
+function nextEntry(entries: Entry[], entry: Entry): Entry | undefined {
     const offset = entries.indexOf(entry);
     if (offset < 0) {
         return;
     }
 
-    for (let i = 1; i < entries.length; ++i) {
-        const idx = (offset + i) % entries.length;
-        const entry = entries[idx];
-        if (!entry.solved) {
-            return entry;
-        }
+    const index = (offset + 1) % entries.length;
+    return entries[index];
+}
+
+function prevEntry(entries: Entry[], entry: Entry): Entry | undefined {
+    const offset = entries.indexOf(entry);
+    if (offset < 0) {
+        return;
     }
+
+    let index = (offset - 1);
+    if (index < 0) {
+        index = entries.length - 1;
+    }
+
+    return entries[index];
 }
 
 main()
