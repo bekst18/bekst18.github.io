@@ -103,6 +103,7 @@ interface Puzzle {
     cursorCoords: geo.Point | null,
     cursorDir: Direction,
     grid: LetterMap,
+    print: boolean,
 }
 
 enum Mode {
@@ -125,6 +126,7 @@ function main() {
         cursorCoords: null,
         cursorDir: Direction.Across,
         grid: new LetterMap(0, 0),
+        print: false,
     };
 
     const createUi = dom.byId("createUi") as HTMLDivElement;
@@ -161,6 +163,8 @@ function main() {
     dom.delegate(hintAnswerList, "click", ".delete-button", deleteHintAnswer);
     dom.delegate(puzzleHintAcrossList, "click", ".puzzle-hint-li", onPuzzleHintClick);
     dom.delegate(puzzleHintDownList, "click", ".puzzle-hint-li", onPuzzleHintClick);
+    window.addEventListener("beforeprint", onBeforePrint);
+    window.addEventListener("afterprint", onAfterPrint);
 
     load();
 
@@ -443,6 +447,16 @@ function main() {
 
     function onPuzzleSolved() {
         alert("YOU SOLVED THE PUZZLE! BRAVO!");
+    }
+
+    function onBeforePrint() {
+        puzzle.print = true;
+        drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
+    }
+
+    function onAfterPrint() {
+        puzzle.print = false;
+        drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
     }
 }
 
@@ -766,7 +780,7 @@ function drawPuzzle(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, pu
     }
 
     // draw red where hovering
-    if (puzzle.hoverCoords) {
+    if (puzzle.hoverCoords && !puzzle.print) {
         ctx.save();
         ctx.lineWidth = 3;
         ctx.strokeStyle = "red";
@@ -775,7 +789,7 @@ function drawPuzzle(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, pu
     }
 
     // draw cursor
-    if (puzzle.cursorCoords) {
+    if (puzzle.cursorCoords && !puzzle.print) {
         ctx.save();
 
         const canvasCoords = cellCoordsToCanvasCoords(puzzle.cursorCoords);
