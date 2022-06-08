@@ -89,6 +89,7 @@ class LetterMap {
 }
 
 interface Puzzle {
+    title: string,
     entries: Entry[],
     hoverCoords: geo.Point | null,
     cursorCoords: geo.Point | null,
@@ -115,6 +116,7 @@ interface AppSaveState {
 }
 
 interface PuzzleSaveState {
+    title: string,
     entries: EntrySaveState[],
     cursorCoords: [number, number] | null,
     cursorDir: string,
@@ -135,6 +137,7 @@ function main() {
     let hintAnswers = new Array<HintAnswer>();
 
     let puzzle = <Puzzle>{
+        title: "",
         entries: new Array<Entry>(),
         hoverCoords: null,
         cursorCoords: null,
@@ -145,28 +148,30 @@ function main() {
 
     const createUi = dom.byId("createUi") as HTMLDivElement;
     const playUi = dom.byId("playUi") as HTMLDivElement;
+    const puzzleTitle = dom.byId("puzzleTitle") as HTMLHeadingElement;
     const puzzleCanvas = dom.byId("puzzleCanvas") as HTMLCanvasElement;
     const puzzleContext = puzzleCanvas.getContext("2d") as CanvasRenderingContext2D;
     if (!puzzleContext) {
         throw new Error("Canvas element not supported")
     }
 
+    const titleInput = dom.byId("title") as HTMLInputElement;
     const hintAnswerForm = dom.byId("hintAnswerForm") as HTMLFormElement;
     const hintInput = dom.byId("hint") as HTMLInputElement;
     const answerInput = dom.byId("answer") as HTMLInputElement;
     const hintAnswerTemplate = dom.byId("hintAnswerTemplate") as HTMLTemplateElement;
-    const hintAnswerList = dom.byId("hintAnswers") as HTMLOListElement;
+    const hintAnswerTable = dom.byId("hintAnswers") as HTMLTableElement;
     const puzzleHintTemplate = dom.byId("puzzleHintTemplate") as HTMLTemplateElement;
     const puzzleHintAcrossList = dom.byId("puzzleHintsAcross") as HTMLOListElement;
     const puzzleHintDownList = dom.byId("puzzleHintsDown") as HTMLOListElement;
-    const createButton = dom.byId("createButton") as HTMLButtonElement;
+    const createForm = dom.byId("createForm") as HTMLButtonElement;
     const clearButton = dom.byId("clearButton") as HTMLButtonElement;
     const returnToCreate = dom.byId("returnToCreate") as HTMLLinkElement;
     const playInput = dom.byId("playInput") as HTMLInputElement;
     const seed = rand.xmur3(new Date().toString());
     const rng = new rand.SFC32RNG(seed(), seed(), seed(), seed());
     hintAnswerForm.addEventListener("submit", addHintAnswer);
-    createButton.addEventListener("click", () => generate());
+    createForm.addEventListener("submit", generate);
     clearButton.addEventListener("click", clear);
     returnToCreate.addEventListener("click", create);
     puzzleCanvas.addEventListener("pointermove", onPuzzlePointerMove);
@@ -175,7 +180,7 @@ function main() {
     playInput.addEventListener("keydown", onPlayInputKeydown);
     playInput.addEventListener("input", onPlayInputInput);
 
-    dom.delegate(hintAnswerList, "click", ".delete-button", deleteHintAnswer);
+    dom.delegate(hintAnswerTable, "click", ".delete-button", deleteHintAnswer);
     dom.delegate(puzzleHintAcrossList, "click", ".puzzle-hint-li", onPuzzleHintClick);
     dom.delegate(puzzleHintDownList, "click", ".puzzle-hint-li", onPuzzleHintClick);
     window.addEventListener("beforeprint", onBeforePrint);
@@ -203,18 +208,20 @@ function main() {
     }
 
     function updateHintAnswerList() {
-        dom.removeAllChildren(hintAnswerList);
+        dom.removeAllChildren(hintAnswerTable);
         for (const hintAnswer of hintAnswers) {
             const fragment = hintAnswerTemplate.content.cloneNode(true) as DocumentFragment;
             const hintSpan = dom.bySelector(fragment, ".hint");
             const answerSpan = dom.bySelector(fragment, ".answer");
             hintSpan.textContent = hintAnswer.hint;
             answerSpan.textContent = hintAnswer.answer;
-            hintAnswerList.appendChild(fragment);
+            hintAnswerTable.appendChild(fragment);
         }
     }
 
     function clear() {
+        puzzle.title = "";
+        titleInput.textContent = "(Unknown)";
         hintAnswers = [];
         updateHintAnswerList();
         save();
@@ -222,13 +229,13 @@ function main() {
 
     function deleteHintAnswer(e: Event) {
         const target = e.target as HTMLElement;
-        const li = target.closest(".hint-answer-li") as HTMLLIElement;
-        const parent = li.parentElement;
+        const tr = target.closest(".hint-answer-tr") as HTMLTableRowElement;
+        const parent = tr.parentElement;
         if (!parent) {
             return;
         }
 
-        const index = Array.from(parent.children).indexOf(li);
+        const index = Array.from(parent.children).indexOf(tr);
         hintAnswers.splice(index, 1);
         save();
         updateHintAnswerList();
@@ -243,6 +250,7 @@ function main() {
         const app = loadApp(JSON.parse(jsonData) as AppSaveState);
         hintAnswers = app.hintAnswers;
         puzzle = app.puzzle;
+        titleInput.value = puzzle.title ?? "";
         updateHintAnswerList();
 
         if (app.mode === Mode.Create) {
@@ -274,6 +282,7 @@ function main() {
 
     function savePuzzle(puzzle: Puzzle): PuzzleSaveState {
         return <PuzzleSaveState>{
+            title: puzzle.title,
             entries: puzzle.entries.map(saveEntry),
             cursorCoords: puzzle.cursorCoords?.save(),
             cursorDir: Direction[puzzle.cursorDir],
@@ -302,6 +311,7 @@ function main() {
 
     function loadPuzzle(state: PuzzleSaveState): Puzzle {
         return <Puzzle>{
+            title: state.title,
             entries: state.entries.map(loadEntry),
             hoverCoords: null,
             cursorCoords: state.cursorCoords ? geo.Point.load(state.cursorCoords) : null,
@@ -322,7 +332,9 @@ function main() {
         };
     }
 
-    function generate() {
+    function generate(e: Event) {
+        e.preventDefault();
+        puzzle.title = titleInput.value;
         puzzle.entries = [];
         puzzle.entries = generatePuzzle(rng, hintAnswers);
         if (puzzle.entries.length === 0) {
@@ -340,8 +352,7 @@ function main() {
     function play() {
         createUi.hidden = true;
         playUi.hidden = false;
-        puzzleCanvas.width = puzzleCanvas.clientWidth;
-        puzzleCanvas.height = puzzleCanvas.clientHeight;
+        puzzleTitle.textContent = puzzle.title;
         updatePuzzleHintList();
         window.scrollTo({ left: 0, top: 0 });
         playInput.focus({preventScroll: true});

@@ -10,36 +10,41 @@
 <body>
     <div id="createUi" class="m-auto">
         <h1>Crossword Puzzle Maker</h1>
-        <p class="text-info">Enter hints and answers below and click the <strong>Create Crossword Puzzle</strong> button
+        <p class="text-info">Enter title, hints, and answers below and click the <strong>Create Crossword
+                Puzzle</strong> button
             to generate the crossword
             puzzle.</p>
-        <ul id="hintAnswers"></ul>
-        <form id="hintAnswerForm" class="my-3">
+        <input id="title" class="mb-2" type="text" maxlength="128" required="true" placeholder="Title" title="Title" required form="createForm">
+        <table id="hintAnswers"></table>
+        <form id="hintAnswerForm" class="my-2">
             <div class="hint-answer flex-x-no-wrap">
                 <label class="mr-2">
                     Hint
-                    <input id="hint" name="hint" type="text"></input>
+                    <input id="hint" name="hint" type="text" required></input>
                 </label>
                 <label class="mr-2">
                     Answer (letters only!)
-                    <input id="answer" name="answer" type="text" pattern="[A-Za-z]+"></input>
+                    <input id="answer" name="answer" type="text" pattern="[A-Za-z]+" required></input>
                 </label>
             </div>
-            <button id="addHintAnswer" type="submit" class="button-primary my-2">Add Hint/Answer</button>
+            <button id="addHintAnswer" type="submit" class="button-primary mt-2">Add Hint/Answer</button>
         </form>
-        <button id="createButton" type="button" class="button-primary my-2">Create Crossword Puzzle!</button>
+        <form id="createForm"></form>
+        <button id="createButton" type="submit" class="button-primary" form="createForm">Create Crossword Puzzle!</button>
         <button id="clearButton" type="button">Clear</button>
         <template id="hintAnswerTemplate">
-            <li class="hint-answer-li">
-                <div><span class="hint"></span>/<span class="answer"></span></div>
-                <button type="button" class="delete-button" name="delete" value="delete">Remove</button>
-            </li>
+            <tr class="hint-answer-tr">
+                <td class="hint"></td>
+                <td class="answer"></td>
+                <td><button type="button" class="delete-button" name="delete" value="delete">Remove</button></td>
+            </tr>
         </template>
         <br />
         <a href="/" class="text-center">Return to Home Page</a>
     </div>
     <div id="playUi" hidden="true">
         <input id="playInput" type="text" />
+        <h1 id="puzzleTitle">(Unknown)</h1>
         <canvas id="puzzleCanvas"></canvas>
         <div id="puzzleHints">
             <div>

@@ -75,15 +75,7 @@ body {
     font-weight: bold;
 }
 
-.hint-answer-li {
-    display: flex;
-    flex-flow: row nowrap;
-    justify-content: space-between;
-    padding: 4px;
-}
-
-.hint-answer-li .delete-button {
-    width: auto;
+.hint-answer-tr .delete-button {
     color: red;
 }
 
@@ -112,4 +104,20 @@ body {
     top: 0px;
     width: 0px;
     opacity: 0;
+}
+
+#hintAnswers {
+    border-collapse: collapse;
+}
+
+#hintAnswers td {
+    padding: 4px;
+}
+
+#hintAnswers tr:nth-child(odd){
+    background-color: lightblue;
+}
+
+#hintAnswers tr td {
+    border: solid 1px gray;
 }
