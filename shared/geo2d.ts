@@ -84,12 +84,20 @@ export class Point {
         return new Point(this.x, this.y)
     }
 
+    save(): [number, number] {
+        return [this.x, this.y];
+    }
+
     static inf() {
         return new Point(Infinity, Infinity)
     }
 
     static negInf() {
         return new Point(-Infinity, -Infinity)
+    }
+
+    static load(a: [number, number]): Point {
+        return new Point(a[0], a[1]);
     }
 }
 

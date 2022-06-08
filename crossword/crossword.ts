@@ -6,7 +6,7 @@ const STORAGE_KEY = "crossword_storage";
 const CELL_INTERIOR_SIZE = 24;
 const CELL_PADDING = 4;
 const CELL_SIZE = CELL_INTERIOR_SIZE + CELL_PADDING * 2;
-const MAX_GENS = 1000;
+const MAX_GENS = 10000;
 
 interface HintAnswer {
     hint: string,
@@ -25,6 +25,12 @@ interface Entry {
     pos: geo.Point,
     dir: Direction,
     solved: boolean,
+}
+
+interface LetterMapSaveState {
+    rows: number,
+    cols: number,
+    data: [number, string][],
 }
 
 class LetterMap {
@@ -54,36 +60,12 @@ class LetterMap {
         return [...this.data.keys()].map(k => this.hier(k));
     }
 
-    private flat(xy: geo.Point): number {
-        return xy.y * this.cols + xy.x
-    }
-
-    private hier(n: number): geo.Point {
-        const y = Math.floor(n / this.cols);
-        const x = n - y * this.cols;
-        return new geo.Point(x, y);
-    }
-}
-
-class PointSet {
-    private data: Set<number>;
-
-    constructor(public rows: number, public cols: number) {
-        this.data = new Set<number>();
-    }
-
-    has(xy: geo.Point): boolean {
-        const id = this.flat(xy);
-        return this.data.has(id);
-    }
-
-    add(xy: geo.Point) {
-        const id = this.flat(xy);
-        this.data.add(id);
-    }
-
-    keys(): geo.Point[] {
-        return [...this.data].map(k => this.hier(k));
+    save(): LetterMapSaveState {
+        return <LetterMapSaveState>{
+            rows: this.rows,
+            cols: this.cols,
+            data: [...this.data],
+        };
     }
 
     private flat(xy: geo.Point): number {
@@ -94,6 +76,15 @@ class PointSet {
         const y = Math.floor(n / this.cols);
         const x = n - y * this.cols;
         return new geo.Point(x, y);
+    }
+
+    static load(state: LetterMapSaveState): LetterMap {
+        const map = new LetterMap(state.rows, state.cols);
+        for (const [k, v] of state.data) {
+            map.set(map.hier(k), v);
+        }
+
+        return map;
     }
 }
 
@@ -108,19 +99,42 @@ interface Puzzle {
 
 enum Mode {
     Create,
-    Play
+    Play,
 }
 
-interface AppState {
+interface App {
     mode: Mode,
     hintAnswers: HintAnswer[],
     puzzle: Puzzle,
 }
 
+interface AppSaveState {
+    mode: string,
+    hintAnswers: HintAnswer[],
+    puzzle: PuzzleSaveState,
+}
+
+interface PuzzleSaveState {
+    entries: EntrySaveState[],
+    cursorCoords: [number, number] | null,
+    cursorDir: string,
+    grid: LetterMapSaveState,
+}
+
+interface EntrySaveState {
+    num: number,
+    hint: string,
+    answer: string,
+    pos: [number, number],
+    dir: string,
+    solved: boolean,
+}
+
+
 function main() {
     let hintAnswers = new Array<HintAnswer>();
 
-    const puzzle = <Puzzle>{
+    let puzzle = <Puzzle>{
         entries: new Array<Entry>(),
         hoverCoords: null,
         cursorCoords: null,
@@ -148,9 +162,8 @@ function main() {
     const createButton = dom.byId("createButton") as HTMLButtonElement;
     const clearButton = dom.byId("clearButton") as HTMLButtonElement;
     const returnToCreate = dom.byId("returnToCreate") as HTMLLinkElement;
-    // const seed = rand.xmur3(new Date().toString());
-    // const rng = new rand.SFC32RNG(seed(), seed(), seed(), seed());
-    const rng = new rand.SFC32RNG(1, 2, 3, 4);
+    const seed = rand.xmur3(new Date().toString());
+    const rng = new rand.SFC32RNG(seed(), seed(), seed(), seed());
     hintAnswerForm.addEventListener("submit", addHintAnswer);
     createButton.addEventListener("click", () => generate());
     clearButton.addEventListener("click", clear);
@@ -225,17 +238,86 @@ function main() {
             return;
         }
 
-        hintAnswers = JSON.parse(jsonData) as [HintAnswer];
+        const app = loadApp(JSON.parse(jsonData) as AppSaveState);
+        hintAnswers = app.hintAnswers;
+        puzzle = app.puzzle;
         updateHintAnswerList();
 
-        if (hintAnswers.length > 0) {
-            generate();
+        if (app.mode === Mode.Create) {
+            create();
+        } else {
+            play();
         }
     }
 
     function save() {
-        const jsonData = JSON.stringify(hintAnswers);
+        const mode = playUi.hidden ? Mode.Create : Mode.Play;
+        const state = saveApp({
+            hintAnswers,
+            mode,
+            puzzle,
+        });
+
+        const jsonData = JSON.stringify(state);
         localStorage.setItem(STORAGE_KEY, jsonData);
+    }
+
+    function saveApp(app: App): AppSaveState {
+        return <AppSaveState>{
+            mode: Mode[app.mode],
+            hintAnswers: app.hintAnswers,
+            puzzle: savePuzzle(app.puzzle),
+        };
+    }
+
+    function savePuzzle(puzzle: Puzzle): PuzzleSaveState {
+        return <PuzzleSaveState>{
+            entries: puzzle.entries.map(saveEntry),
+            cursorCoords: puzzle.cursorCoords?.save(),
+            cursorDir: Direction[puzzle.cursorDir],
+            grid: puzzle.grid.save(),
+        };
+    }
+
+    function saveEntry(entry: Entry): EntrySaveState {
+        return <EntrySaveState>{
+            num: entry.num,
+            hint: entry.hint,
+            answer: entry.answer,
+            pos: entry.pos.save(),
+            dir: Direction[entry.dir],
+            solved: entry.solved,
+        };
+    }
+
+    function loadApp(state: AppSaveState): App {
+        return <App>{
+            mode: Mode[state.mode as keyof typeof Mode],
+            hintAnswers: state.hintAnswers,
+            puzzle: loadPuzzle(state.puzzle),
+        };
+    }
+
+    function loadPuzzle(state: PuzzleSaveState): Puzzle {
+        return <Puzzle>{
+            entries: state.entries.map(loadEntry),
+            hoverCoords: null,
+            cursorCoords: state.cursorCoords ? geo.Point.load(state.cursorCoords) : null,
+            cursorDir: Direction[state.cursorDir as keyof typeof Direction],
+            grid: LetterMap.load(state.grid),
+            print: false,
+        };
+    }
+
+    function loadEntry(state: EntrySaveState): Entry {
+        return <Entry>{
+            num: state.num,
+            hint: state.hint,
+            answer: state.answer,
+            pos: geo.Point.load(state.pos),
+            dir: Direction[state.dir as keyof typeof Direction],
+            solved: state.solved,
+        };
     }
 
     function generate() {
@@ -262,17 +344,19 @@ function main() {
         window.scrollTo({ left: 0, top: 0 });
         puzzleCanvas.focus();
 
-        if (puzzle.entries.length > 0) {
+        if (puzzle.entries.length > 0 && !puzzle.cursorCoords) {
             puzzle.cursorCoords = puzzle.entries[0].pos;
             puzzle.cursorDir = puzzle.entries[0].dir;
         }
 
+        save();
         drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
     }
 
     function create() {
         playUi.hidden = true;
         createUi.hidden = false;
+        save();
     }
 
     function updatePuzzleHintList() {
@@ -326,6 +410,7 @@ function main() {
         }
 
         puzzle.cursorCoords = xy;
+        save();
         drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
     }
 
@@ -353,6 +438,7 @@ function main() {
         if (evt.key === "Delete" && !solvedAtCell) {
             puzzle.grid.set(puzzle.cursorCoords, "");
             evt.preventDefault();
+            save();
             drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
             return;
         }
@@ -374,6 +460,7 @@ function main() {
                     puzzle.grid.set(puzzle.cursorCoords, "");
                 }
 
+                save();
                 drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
                 return;
             }
@@ -427,6 +514,7 @@ function main() {
 
         drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
         updatePuzzleHintList();
+        save();
     }
 
     function onPuzzleHintClick(e: Event) {
@@ -442,6 +530,7 @@ function main() {
         puzzle.cursorCoords = entry.pos;
         puzzle.cursorDir = entry.dir;
         drawPuzzle(puzzleCanvas, puzzleContext, puzzle);
+        save();
         puzzleCanvas.focus();
     }
 
