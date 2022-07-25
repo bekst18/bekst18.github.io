@@ -54,7 +54,7 @@ const levels = new Array<LevelData>(
     },
     // level 3
     {
-        ballSpeed: .35,
+        ballSpeed: .2,
         ballRadius: .75,
         paddleWidth: 6,
         brickRows: 3,
@@ -64,7 +64,7 @@ const levels = new Array<LevelData>(
     },
     // level 4
     {
-        ballSpeed: .4,
+        ballSpeed: .25,
         ballRadius: .6,
         paddleWidth: 5,
         brickRows: 3,
@@ -74,7 +74,7 @@ const levels = new Array<LevelData>(
     },
     // level 5
     {
-        ballSpeed: .45,
+        ballSpeed: .3,
         ballRadius: .55,
         paddleWidth: 4,
         brickRows: 3,
@@ -84,7 +84,7 @@ const levels = new Array<LevelData>(
     },
     // level 6
     {
-        ballSpeed: .5,
+        ballSpeed: .35,
         ballRadius: .5,
         paddleWidth: 4,
         brickRows: 4,
@@ -94,7 +94,7 @@ const levels = new Array<LevelData>(
     },
     // level 7
     {
-        ballSpeed: .6,
+        ballSpeed: .35,
         ballRadius: .4,
         paddleWidth: 3.5,
         brickRows: 4,
@@ -104,7 +104,7 @@ const levels = new Array<LevelData>(
     },
     // level 8
     {
-        ballSpeed: .65,
+        ballSpeed: .4,
         ballRadius: .35,
         paddleWidth: 3,
         brickRows: 5,
@@ -114,7 +114,7 @@ const levels = new Array<LevelData>(
     },
     // level 9
     {
-        ballSpeed: .7,
+        ballSpeed: .45,
         ballRadius: .3,
         paddleWidth: 2,
         brickRows: 6,
@@ -122,9 +122,9 @@ const levels = new Array<LevelData>(
         borderColor: new geo.Vec4(0, 1, 1, 1),
         floorColor: new geo.Vec4(.35, .15, .25, 1)
     },
-    // level 9
+    // level 10
     {
-        ballSpeed: .8,
+        ballSpeed: .5,
         ballRadius: .2,
         paddleWidth: 1,
         brickRows: 8,
@@ -234,7 +234,7 @@ class App {
     private readonly ac = new AudioContext()
     private impactSounds = new Array<AudioBuffer>()
     private ballsRemaining = 3
-    private level = 1
+    private level = 9
     private state = GameState.Launch
     private continue = () => { }
 
