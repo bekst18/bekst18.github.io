@@ -3,7 +3,6 @@ document.addEventListener("DOMContentLoaded", init);
 function init() {
     const addImg = document.getElementById("addImage");
     const questionSrc = addImg.src;
-    alert(questionSrc);
     const fileUpload = document.getElementById("fileUpload");
     const elementList = document.getElementById("elementList");
     const recipeList = document.getElementById("recipeList");
