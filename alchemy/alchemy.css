@@ -1,0 +1,205 @@
+.element-img {
+    height: 50px;
+    width: 50px;
+    margin: 8px;
+}
+
+.element-drag-container {
+    height: 50px;
+    width: 50px;
+    border: 2px dashed darkgray;
+    margin: 8px;
+}
+
+.element-drag-container .element-img {
+    margin: 0;
+}
+
+html {
+    width: 100%;
+    height: 100%;
+}
+
+body {
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+}
+
+#viewport {
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+}
+
+#createUi {
+    display: flex;
+    flex-flow: row nowrap;
+    padding: 0;
+    margin: 0;
+    height: 100%;
+}
+
+#newElementForm {
+    margin: 8px;
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: center;
+}
+
+#trash {
+    display: flex;
+    flex: 1;
+    border: 2px dashed gray;
+    width: 100%;
+}
+
+#elementList {
+    padding: 8px;
+    margin: 0;
+    background-color: bisque;
+    box-sizing: border-box;
+    border-left: solid 1px gray;
+    flex: 1 1;
+    min-height: 100%;
+    overflow: auto;
+    display: flex;
+    flex-flow: column wrap;
+}
+
+#recipeList {
+    padding: 8px;
+    margin: 0;
+    list-style: none;
+    background-color: antiquewhite;
+    box-sizing: border-box;
+    border-left: solid 1px gray;
+    flex: 1;
+    min-height: 100%;
+    overflow: auto;
+    align-items: center;
+    justify-content: center;
+}
+
+#recipeList .recipe {
+    font-size: 16px;
+}
+
+.form-row {
+    flex: 1 1;
+}
+
+.element {
+    display: flex;
+    flex-flow: column nowrap;
+    margin: 4px;
+    align-items: center;
+    box-sizing: border-box;
+    ;
+}
+
+#left {
+    display: flex;
+    flex-flow: column nowrap;
+    align-items: center;
+    box-sizing: border-box;
+    border-right: solid 1px gray;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+button {
+    background-color: lightblue;
+    font-weight: bold;
+    padding: 6px;
+    font-size: 16px;
+    margin: 4px;
+}
+
+#left input[type="text"] {
+    font-size: 16px;
+    padding: 6px;
+}
+
+h1 {
+    font-size: 16px;
+    margin: 8px;
+    text-align: center;
+}
+
+.recipe {
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: center;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+#newRecipeForm {
+    margin: 8px;
+    display: flex;
+    flex-flow: row nowrap;
+    align-items: center;
+    justify-content: center;
+}
+
+#playButton,
+#createButton {
+    width: 75%;
+    margin: 8px;
+}
+
+#startElements {
+    display: flex;
+    flex-flow: row wrap;
+    min-height: 66px;
+    border: 1px dashed black;
+    margin: 8px;
+    min-width: 90%;
+    font-size: 16px;
+}
+
+#playUi {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    box-sizing: border-box;
+    flex-flow: row nowrap;
+    justify-content: stretch;
+    align-items: center;
+}
+
+#lab {
+    box-sizing: border-box;
+    flex: 1 1;
+    display: flex;
+    flex-flow: column nowrap;
+    min-height: 100%;
+    border-right: 1px solid gray;
+    align-items: center;
+}
+
+#workbench {
+    box-sizing: border-box;
+    flex: 1 1;
+    border: 2px dashed gray;
+    width: 100%;
+}
+
+#discoveredElements {
+    box-sizing: border-box;
+    flex: 1 1;
+    display: flex;
+    flex-flow: column wrap;
+    background-color: bisque;
+    border-left: 1px solid gray;
+    min-height: 100%;
+    height: 100%;
+    overflow: auto;
+}
+
+#addImage, button {
+    cursor: pointer;
+}

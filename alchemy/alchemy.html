@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width">
+    <title>Alchemy Maker</title>
+    <link rel="stylesheet" type="text/css" href="alchemy.css">
+</head>
+
+<body>
+    <div id="viewport">
+        <div id="createUi">
+            <div id="left">
+                <h1>New Element</h1>
+                <form id="newElementForm" name="newElementForm">
+                    <label for="fileUpload">
+                        <img id="addImage" src="question.png" class="element-img" title="Element Image">
+                    </label>
+                    <div class="form-row">
+                        <input id="fileUpload" name="elementImage" type="file" accept="image/*" style="display: none;"
+                            required="">
+                        <input id="elementName" type="text" name="elementName" required="">
+                        <button id="addElement" type="submit" name="addElement">+Elem</button>
+                    </div>
+                </form>
+                <h1>New Recipe</h1>
+                <form id="newRecipeForm" name="newRecipeForm">
+                    <div id="newRecipeElem1Div" class="element">
+                        <img id="newRecipeElem1Img" class="element-drag-container" alt=""> <span id="newRecipeElem1Name"
+                            class="element-name">?</span>
+                    </div>
+                    <div id="newRecipeElem2Div" class="element">
+                        <img id="newRecipeElem2Img" class="element-drag-container" alt=""> <span id="newRecipeElem2Name"
+                            class="element-name">?</span>
+                    </div>=
+                    <div id="newRecipeResultDiv" class="element">
+                        <img id="newRecipeResultImg" class="element-drag-container" alt=""> <span
+                            id="newRecipeResultName" class="element-name">?</span>
+                    </div><button id="addRecipe" type="submit" name="addRecipe">+Recipe</button>
+                </form>
+                <h1>Starting Elements</h1>
+                <ul id="startElements"></ul>
+                <div id="trash">
+                    <h1>Trash</h1>
+                </div>
+                <button type="button" id="playButton" name="play">Play</button>
+                <button id="clearAll">Clear All</button>
+            </div>
+            <div id="elementList"></div>
+            <div id="recipeList"></div>
+        </div>
+        <div id="playUi" hidden="">
+            <div id="lab">
+                <h1>Laboratory</h1>
+                <div id="workbench"></div><button type="button" id="createButton" name="play">Create Elements and
+                    Recipes</button>
+            </div>
+            <div id="discoveredElements"></div>
+        </div>
+    </div>
+    <canvas width="50" height="50" style="display: none"></canvas>
+    <template id="elementTemplate">
+        <div class="element" data-name="">
+            <img class="element-img" alt="">
+            <span class="element-name"></span>
+        </div>
+    </template>
+    <template id="recipeTemplate">
+        <div class="recipe" data-id="" draggable="true">
+            <div class="element1 element">
+                <img class="element-img" draggable="false" alt="">
+                <span class="element-name"></span>
+            </div>+
+            <div class="element2 element">
+                <img class="element-img" draggable="false" alt="">
+                <span class="element-name"></span>
+            </div>=
+            <div class="result element">
+                <img class="element-img" draggable="false" alt="">
+                <span class="element-name"></span>
+            </div>
+        </div>
+    </template>
+    <script src="alchemy.js"></script>
+</body>
+
+</html>
