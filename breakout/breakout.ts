@@ -35,17 +35,17 @@ const levels = new Array<LevelData>(
     // level 1
     {
         ballSpeed: .15,
-        ballRadius: 1.25,
+        ballRadius: 1.0,
         paddleWidth: 6,
         brickRows: 3,
-        brickCols: 7,
+        brickCols: 5,
         borderColor: new geo.Vec4(.25, 0, 0, 1),
         floorColor: new geo.Vec4(.25, .25, .25, 1)
     },
     // level 2
     {
         ballSpeed: .15,
-        ballRadius: 1,
+        ballRadius: .85,
         paddleWidth: 6,
         brickRows: 3,
         brickCols: 7,
@@ -234,7 +234,7 @@ class App {
     private readonly ac = new AudioContext()
     private impactSounds = new Array<AudioBuffer>()
     private ballsRemaining = 3
-    private level = 9
+    private level = 1
     private state = GameState.Launch
     private continue = () => { }
 
@@ -536,6 +536,7 @@ class App {
 
     private nextLevel() {
         this.level++
+        this.ballsRemaining++
         this.initLevel()
     }
 
